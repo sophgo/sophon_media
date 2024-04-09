@@ -1,0 +1,1 @@
+sed -i "s/\/usr\/local/\/opt\/sophon\/sophon-ffmpeg-latest/g" /opt/sophon/sophon-ffmpeg-latest/lib/pkgconfig/*.pc

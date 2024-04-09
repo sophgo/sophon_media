@@ -1,0 +1,1 @@
+../../bm_opencv/apps/vidbasic/opencv_vidbasic.cpp

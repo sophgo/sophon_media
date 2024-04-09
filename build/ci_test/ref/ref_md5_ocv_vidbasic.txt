@@ -1,0 +1,10 @@
+8ea496abb213dd1e01631a3e6f5d65bd  ocv_vidbasic0.png
+d6f05cec9ee02fd0e5d7dd0307324cf9  ocv_vidbasic1.png
+040e9df3e1a0e31fcec1eab60bd286c2  ocv_vidbasic2.png
+289862d8b6aa33f6a195ca1c2097242a  ocv_vidbasic3.png
+3f144d34f0485cdf41f864a44ce9213f  ocv_vidbasic4.png
+6b523a07708fab33a8bac6be6e4bd686  ocv_vidbasic5.png
+316970a78fc97689c86b2bcf24158dfa  ocv_vidbasic6.png
+2c39a6b3c8d3488b1971bc2afeee3dc2  ocv_vidbasic7.png
+0d35e52610aad4f922f75c998ed28f36  ocv_vidbasic8.png
+69f47561a2129ea63f8991728d917af8  ocv_vidbasic9.png
