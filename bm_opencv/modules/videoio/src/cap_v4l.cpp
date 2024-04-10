@@ -2298,18 +2298,18 @@ bool CvCaptureCAM_V4L::streaming(bool startStream)
 static bool icvRetrieveArrayCAM_V4L(CvCaptureCAM_V4L* capture, cv::OutputArray image)
 {
 #ifdef HAVE_JPEG
-    if (capture->palette == V4L2_PIX_FMT_MJPEG || 
+    if (capture->palette == V4L2_PIX_FMT_MJPEG ||
         capture->palette == V4L2_PIX_FMT_JPEG )
     {
         if (!capture->convert_rgb ){
-            capture->jpgDecompressFrame = Mat(1, capture->buffers[capture->bufferIndex].memories[capture->bufferIndex].length, 
-                                              IPL_DEPTH_8U, capture->buffers[capture->bufferIndex].memories[capture->bufferIndex].start,
+            capture->jpgDecompressFrame = Mat(1, capture->buffers[capture->bufferIndex].memories[MEMORY_ORIG].length,
+                                              IPL_DEPTH_8U, capture->buffers[capture->bufferIndex].memories[MEMORY_ORIG].start,
                                               0);
         }
         else if (!mjpeg_to_rgb24(capture->form.fmt.pix.width,
                     capture->form.fmt.pix.height,
-                    (unsigned char*)(capture->buffers[capture->bufferIndex].memories[capture->bufferIndex].start),
-                    capture->buffers[capture->bufferIndex].memories[capture->bufferIndex].length,
+                    (unsigned char*)(capture->buffers[capture->bufferIndex].memories[MEMORY_ORIG].start),
+                    capture->buffers[capture->bufferIndex].memories[MEMORY_ORIG].length,
                     capture->out_yuv,
                     &capture->jpgDecompressFrame)) {
             capture->jpgDecompressFrame.release();
@@ -2319,13 +2319,13 @@ static bool icvRetrieveArrayCAM_V4L(CvCaptureCAM_V4L* capture, cv::OutputArray i
             capture->jpgDecompressFrame.release();
 
         image.assign(capture->jpgDecompressFrame);
-        return true;    
+        return true;
     }
 #endif
 
     if (capture->out_yuv == PROP_FALSE) return false;
 
-    //Copy yuv data to user 
+    //Copy yuv data to user
     switch (capture->user_palette) {
         case V4L2_PIX_FMT_NV12:
             capture->palette = AV_PIX_FMT_NV12;

@@ -469,7 +469,6 @@ int main(int argc, char* argv[])
 
     cout << "orig CAP_PROP_FRAME_HEIGHT: " << (int) cap.get(CAP_PROP_FRAME_HEIGHT) << endl;
     cout << "orig CAP_PROP_FRAME_WIDTH: " << (int) cap.get(CAP_PROP_FRAME_WIDTH) << endl;
-    cout << "orig Video Total Frame Number: " << (int) cap.get(cv::CAP_PROP_FRAME_COUNT) << endl;
 
     if(threadPara->startWrite)
     {
