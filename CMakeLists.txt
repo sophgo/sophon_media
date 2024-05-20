@@ -9,9 +9,7 @@ elseif("${PLATFORM}" STREQUAL "pcie")
     #include(cmake/x86_64-gnu.toolchain.cmake)
 endif()
 
-execute_process(
-    COMMAND bash -c "git describe --tags --match v* | sed -e 's/.*\\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\).*/\\1/'"
-    OUTPUT_VARIABLE GIT_VERSION)
+set(GIT_VERSION "1.6.0")
 STRING(REGEX REPLACE "[\n\t\r]" "" GIT_VERSION ${GIT_VERSION})
 STRING(REGEX REPLACE "([0-9][0-9]*)\\..*" "\\1" MAJOR_VERSION ${GIT_VERSION})
 STRING(REGEX REPLACE ".*\\.([0-9][0-9]*)\\..*" "\\1" MINOR_VERSION ${GIT_VERSION})
