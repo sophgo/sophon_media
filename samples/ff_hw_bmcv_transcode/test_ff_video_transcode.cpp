@@ -11,7 +11,6 @@ extern "C"{
 #include <sys/types.h>
 }
 
-#define BM1686 0x1686
 int g_enable_mosaic    = 0;    /* enable mosaic process (only bm1686 support) */
 int g_enable_watermark = 0;    /* enable watermark process (only bm1686 support) */
 
@@ -188,14 +187,14 @@ int main(int argc, char **argv)
     bm_get_chipid(g_bmHandle, &chipid);
     if (argc > 13){
         g_enable_mosaic = atoi(argv[++arg_index]);
-        if (g_enable_mosaic && chipid==BM1686)
+        if (g_enable_mosaic)
             g_enable_mosaic = 1;
         else
             g_enable_mosaic = 0;
     }
     if (argc > 14){
         g_enable_watermark = atoi(argv[++arg_index]);
-        if (g_enable_watermark && chipid==BM1686)
+        if (g_enable_watermark)
             g_enable_watermark = 1;
         else
             g_enable_watermark = 0;

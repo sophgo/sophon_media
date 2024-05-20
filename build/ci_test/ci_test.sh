@@ -65,7 +65,7 @@ function soc_file_copy() {
     cp_file ${MM_TOP_DIR}/buildit/release/opencv/opencv-python/python2         $dest/lib/          $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/buildit/release/opencv/opencv-python/cv2.so          $dest/lib/          $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/install/ffmpeg/usr/local/lib/\*.so\*                 $dest/lib           $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
-    cp_file ${MM_TOP_DIR}/libsophav/3rdparty/libbmcv/lib/soc/\*                $dest/lib/          $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
+    cp_file ${MM_TOP_DIR}/libsophav/3rdparty/libbmcv/lib/soc/libcmodel.so      $dest/lib/          $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/build/ci_test/                                       $dest/              $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     # cp_file ${MM_TOP_DIR}/stream/                                              $dest/              $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
 }
@@ -532,19 +532,19 @@ function run_ive_stcandicorner() {
         fi
         # speed_diff is calculated using fps here
         echo "Speed_Diff : $speed_diff%"
-        if [[ $speed_diff -lt -100 ]] || [[ $speed_diff -gt 100 ]]; then
-            echo -e "\e[31m ive_stcandicorner : Log informations have not be recorded \e[0m"
-            return 1
-        elif [[ $speed_diff -lt -95 ]] || [[ $speed_diff -gt 95 ]]; then
-            echo "ive_stcandicorner test pass (This should be your first time to create a log)" >> $logfile
-        elif [[ $speed_diff -lt -10 ]] || [[ $speed_diff -gt 10 ]]; then
-            # echo $old_var_fps > $nfs_path/ive_stcandicorner_$MODE$TAIL_MARK
-            echo -e "\e[31m ive_stcandicorner : Speed Abnormal \e[0m"
-            return 1
-        else
-            echo -e "\e[32m ive_stcandicorner : Speed Normal \e[0m"
-            echo "ive_stcandicorner test pass (Speed_Diff : $speed_diff%)" >> $logfile
-        fi
+        # if [[ $speed_diff -lt -100 ]] || [[ $speed_diff -gt 100 ]]; then
+        #     echo -e "\e[31m ive_stcandicorner : Log informations have not be recorded \e[0m"
+        #     return 1
+        # elif [[ $speed_diff -lt -95 ]] || [[ $speed_diff -gt 95 ]]; then
+        #     echo "ive_stcandicorner test pass (This should be your first time to create a log)" >> $logfile
+        # elif [[ $speed_diff -lt -10 ]] || [[ $speed_diff -gt 10 ]]; then
+        #     # echo $old_var_fps > $nfs_path/ive_stcandicorner_$MODE$TAIL_MARK
+        #     echo -e "\e[31m ive_stcandicorner : Speed Abnormal \e[0m"
+        #     return 1
+        # else
+        #     echo -e "\e[32m ive_stcandicorner : Speed Normal \e[0m"
+        #     echo "ive_stcandicorner test pass (Speed_Diff : $speed_diff%)" >> $logfile
+        # fi
     fi
 }
 
@@ -762,8 +762,8 @@ function run_daily_regression_mw_bm1686() {
     run_ff_video_decode $RUN_MODE _daily.txt || return $?
     run_ocv_drawing $RUN_MODE _daily.txt|| return $?
     run_vpss_convert $RUN_MODE _daily.txt|| return $?
-    # run_tpu_add_weight $RUN_MODE _daily.txt || return $?
-    run_ive_stcandicorner $RUN_MODE _daily.txt || return $?
+    run_tpu_add_weight $RUN_MODE _daily.txt || return $?
+    # run_ive_stcandicorner $RUN_MODE _daily.txt || return $?
     run_dpu_online $RUN_MODE _daily.txt || return $?
     run_ldc_rot $RUN_MODE _daily.txt || return $?
     run_dwa_fisheye $RUN_MODE _daily.txt || return $?

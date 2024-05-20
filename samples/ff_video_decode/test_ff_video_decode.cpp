@@ -24,14 +24,15 @@ extern "C"
 #ifdef WIN32
 HANDLE thread_id[MAX_INST_NUM];
 HANDLE thread_stat;
+clock_t tv1[MAX_INST_NUM];
 #else
 pthread_t thread_id[MAX_INST_NUM];
 pthread_t thread_stat;
+struct timeval tv1[MAX_INST_NUM];
 #endif
 int quit_flag = 0;
 int g_thread_num = 0;
 unsigned int count_dec[MAX_INST_NUM];
-float fps_dec[MAX_INST_NUM];
 long  time_dec[MAX_INST_NUM];
 
 #define INTERVAL 1
@@ -79,8 +80,19 @@ void *stat_pthread(void *arg)
     THREAD_ARG *thread_arg      = (THREAD_ARG *)arg;
     int thread_num = thread_arg->thread_num;
 
+    float fps_dec[MAX_INST_NUM] = {0};
     uint64_t last_count_dec[MAX_INST_NUM] = {0};
     uint64_t last_count_sum = 0;
+
+#if _WIN32
+    clock_t tv2;
+    long time;
+    long count;
+#else
+    struct timeval tv2;
+    unsigned int time;
+    unsigned int count;
+#endif
 
     int dis_mode = 0;
     char *display = getenv("DISPLAY_FRAMERATE_DETAIL");
@@ -94,6 +106,18 @@ void *stat_pthread(void *arg)
 #endif
         if (dis_mode == 1) {
             for (int i = 0; i < thread_num; i++) {
+                if ((count_dec[i] + 1) % 100 == 0 || count % 10 == 0)
+                {
+#ifdef WIN32
+                    tv2 = clock();
+                    time = (tv2 - tv1[i]);
+#else
+                    gettimeofday(&tv2, NULL);
+                    time = (tv2.tv_sec - tv1[i].tv_sec) * 1000 + (tv2.tv_usec - tv1[i].tv_usec) / 1000 + time_dec[i];
+#endif
+                    fps_dec[i] = (count_dec[i] * 1000.0) / (float)time;
+                }
+
                 printf("thread_ID[%d] ,DEC_FRM[%10lld], DEC_FPS update_per_second[%5.2f], update_per_100frames[%5.2f]\n", \
                     i, \
                     (long long)count_dec[i], \
@@ -111,6 +135,7 @@ void *stat_pthread(void *arg)
         }
         printf("\r");
         fflush(stdout);
+        count++;
     }
     fflush(stdout);
     g_thread_num--;
@@ -155,11 +180,11 @@ void *startOneInst(void *arg)
     int ret = 0;
     int api_version = thread_arg->api_version;
 #ifdef WIN32
-    clock_t tv1, tv2;
+    clock_t tv2;
     long time;
 
 #else
-    struct timeval tv1, tv2;
+    struct timeval tv2;
     unsigned int time;
 #endif
     unsigned int reconnet_times = 0;
@@ -186,9 +211,9 @@ void *startOneInst(void *arg)
         AVFrame *frame = NULL;
 
 #ifdef WIN32
-        tv1 = clock();
+        tv1[index] = clock();
 #else
-        gettimeofday(&tv1, NULL);
+        gettimeofday(&tv1[index], NULL);
 #endif
         while (!quit_flag)
         {
@@ -206,25 +231,14 @@ void *startOneInst(void *arg)
                 printf("no frame!\n");
                 break;
             }
-            if ((count_dec[index] + 1) % 100 == 0)
-            {
-#ifdef WIN32
-                tv2 = clock();
-                time = (tv2 - tv1);
-#else
-                gettimeofday(&tv2, NULL);
-                time = (tv2.tv_sec - tv1.tv_sec) * 1000 + (tv2.tv_usec - tv1.tv_usec) / 1000 + time_dec[index];
-#endif
-                fps_dec[index] = (count_dec[index] * 1000.0) / (float)time;
-            }
             count_dec[index]++;
         }
 #ifdef WIN32
         tv2 = clock();
-        time = (tv2 - tv1);
+        time = (tv2 - tv1[index]);
 #else
         gettimeofday(&tv2, NULL);
-        time = (tv2.tv_sec - tv1.tv_sec) * 1000 + (tv2.tv_usec - tv1.tv_usec) / 1000;
+        time = (tv2.tv_sec - tv1[index].tv_sec) * 1000 + (tv2.tv_usec - tv1[index].tv_usec) / 1000;
 #endif
         time_dec[index] += time;
 

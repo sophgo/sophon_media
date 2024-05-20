@@ -12,8 +12,6 @@ extern "C"{
 #include <sys/types.h>
 }
 
-#define BM1686 0x1686
-#define BM1688 0x1686a200
 int g_enable_mosaic    = 0;  /* control mosaic process    (only bm1686 bm1688 support) */
 int g_enable_watermark = 0;  /* control watermark process (only bm1686 bm1688 support) */
 
@@ -190,14 +188,14 @@ int main(int argc, char **argv)
 
     if (argc > 13){
         g_enable_mosaic = atoi(argv[++arg_index]);
-        if (thread_arg->encode_pixel_format == AV_PIX_FMT_YUV420P && g_enable_mosaic && (chipid==BM1686 || chipid==BM1688))
+        if (thread_arg->encode_pixel_format == AV_PIX_FMT_YUV420P && g_enable_mosaic)
             g_enable_mosaic = 1;
         else
             g_enable_mosaic = 0;
     }
     if (argc > 14){
         g_enable_watermark = atoi(argv[++arg_index]);
-        if (thread_arg->encode_pixel_format == AV_PIX_FMT_YUV420P && g_enable_watermark && (chipid==BM1686 || chipid==BM1688))
+        if (thread_arg->encode_pixel_format == AV_PIX_FMT_YUV420P && g_enable_watermark)
             g_enable_watermark = 1;
         else
             g_enable_watermark = 0;

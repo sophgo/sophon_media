@@ -12,8 +12,6 @@ extern "C"{
 #include <sys/types.h>
 }
 
-#define BM1686 0x1686
-
 #define PCIE_MODE_ARG_NUM 5
 #define SOC_MODE_ARG_NUM 3
 #define PCIE_CARD_NUM 1

@@ -12,7 +12,6 @@ extern "C" {
 #include "libavutil/pixdesc.h"
 #include <stdio.h>
 #include <unistd.h>
-#include "bmcv_internal.h"
 #include "bmcv_api_ext.h"
 #include <sys/time.h>   
 }

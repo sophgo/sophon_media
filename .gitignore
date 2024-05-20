@@ -27,3 +27,11 @@ bm_ffmpeg/ffprobe
 bm_ffmpeg/ffprobe_g
 
 bm_ffmpeg/doc/**
+*.yuv
+*.jpg
+*.jpeg
+*.265
+*.h265
+*.264
+*.h264
+stream/

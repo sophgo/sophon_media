@@ -46,7 +46,6 @@
 #include "timefilter.h"
 #include "v4l2-common.h"
 #include <dirent.h>
-
 #if CONFIG_LIBV4L2
 #include <libv4l2.h>
 #endif
@@ -510,11 +509,16 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
     };
     struct timeval buf_ts;
     int res;
-
+    int timeout_count = 0;
     pkt->size = 0;
 
     /* FIXME: Some special treatment might be needed in case of loss of signal... */
-    while ((res = v4l2_ioctl(s->fd, VIDIOC_DQBUF, &buf)) < 0 && (errno == EINTR));
+    while ((res = v4l2_ioctl(s->fd, VIDIOC_DQBUF, &buf)) < 0 && ((errno == EINTR) || (res == -1))) {
+        av_usleep(2000);
+        if(timeout_count > 1000)
+            return res;
+        timeout_count++;
+    }
     if (res < 0) {
         if (errno == EAGAIN)
             return AVERROR(EAGAIN);
@@ -612,6 +616,7 @@ static int mmap_start(AVFormatContext *ctx)
     struct video_data *s = ctx->priv_data;
     enum v4l2_buf_type type;
     int i, res;
+    static int isp_init_time = 0;
 
     for (i = 0; i < s->buffers; i++) {
         struct v4l2_buffer buf = {

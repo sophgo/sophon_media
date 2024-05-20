@@ -17,12 +17,14 @@ function writeTpuAddWeight(){
 		    if [ \$cmd_status -ne 0 ]; then
 		        exit \$cmd_status
 		    fi
-		    awk '/add_weighted TPU using time/ {split(\$6, a, "("); print a[1]}' cv_add_weight_log.txt >> tmp_n_time.txt
+		    if [ \$i -ne 1 ]; then
+		        awk '/add_weighted TPU using time/ {split(\$6, a, "("); print a[1]}' cv_add_weight_log.txt >> tmp_n_time.txt
+		    fi
 		    rm -f cv_add_weight_log.txt
 		done
 		md5sum out_add_weight.bin > md5_tpu_add_weight.txt
 		rm -f out_add_weight.bin
-		cat tmp_n_time.txt | awk '{sum+=\$1; mean=sum/$try_n_times} END {printf "%d\n", mean}' > tpu_add_weight_$MODE$TAIL_MARK
+		cat tmp_n_time.txt | awk '{sum+=\$1; mean=sum/($try_n_times - 1)} END {printf "%d\n", mean}' > tpu_add_weight_$MODE$TAIL_MARK
 		rm -f tmp_n_time.txt
 		EOF
     fi
