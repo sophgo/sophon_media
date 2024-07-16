@@ -1,0 +1,10 @@
+# prefix is according to cmake binary path when building gst plugin
+prefix=../../../../prebuilt
+includedir=${prefix}/include/gst
+libdir=${prefix}/lib/gst
+
+Name: GLib
+Description: C Utility Library
+Version: 2.60.7
+Libs: -L${libdir} -lglib-2.0 -pthread
+Cflags: -I${includedir}/glib-2.0 -pthread -I${libdir}/glib-2.0/include

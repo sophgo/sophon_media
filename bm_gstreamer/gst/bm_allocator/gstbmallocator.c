@@ -112,7 +112,7 @@ static void gst_bm_allocator_init(GstBmAllocator *bm_allocator)
 	allocator->mem_is_span    = GST_DEBUG_FUNCPTR(gst_bm_allocator_is_span);
 }
 
-static GQuark
+/*static GQuark
 gst_bm_framebuffer_quark (void)
 {
 	static GQuark quark = 0;
@@ -120,7 +120,7 @@ gst_bm_framebuffer_quark (void)
 	quark = g_quark_from_string ("bm-framebuf");
 
 	return quark;
-}
+}*/
 
 
 static void gst_bm_allocator_dispose(GObject *object)
@@ -158,13 +158,13 @@ BmDeviceMem* gst_bm_allocator_get_bm_buffer(GstMemory *memory)
 	return &dma_memory->dmabuffer;
 }
 
-static void
+/*static void
 gst_bm_mem_import_destroy (gpointer G_GNUC_UNUSED ptr) {
 	g_print("gst_bm_mem_import_destroy \n");
 	//to be done
 	//GstMemory *mem;
 	//mem = GST_MEMORY_CAST(ptr);
-}
+}*/
 
 GstMemory *
 gst_bm_allocator_import_bmvidbuf(GstAllocator * allocator, BMVidFrame *bmFrame)
@@ -172,7 +172,7 @@ gst_bm_allocator_import_bmvidbuf(GstAllocator * allocator, BMVidFrame *bmFrame)
 	GstMemory *mem;
 	GstBmDmaMemory *bm_dma_memory;
 	BmDeviceMem *dev_mem;
-	GQuark quark;
+//	GQuark quark;
 	guint size;
 
 	size = bmFrame->size;
@@ -195,6 +195,33 @@ gst_bm_allocator_import_bmvidbuf(GstAllocator * allocator, BMVidFrame *bmFrame)
 
 	return mem;
 }
+
+GstMemory *
+gst_bm_allocator_import_bmjpg_buf(GstAllocator * allocator, unsigned long long phy_addr, int size)
+{
+	GstMemory *mem;
+	GstBmDmaMemory *bm_dma_memory;
+	BmDeviceMem *dev_mem;
+
+	bm_dma_memory = g_slice_alloc0(sizeof(GstBmDmaMemory));
+
+	gst_memory_init(GST_MEMORY_CAST(bm_dma_memory), GST_MEMORY_FLAG_PHYSICALLY_CONTIGUOUS,
+                  allocator, NULL, size , 0, 0, size);
+	dev_mem = &bm_dma_memory->dmabuffer;
+	dev_mem->u.device.dmabuf_fd = 1;
+	dev_mem->u.device.device_addr = phy_addr;
+	dev_mem->flags.u.mem_type = BM_MEM_TYPE_DEVICE;
+	dev_mem->size = size;
+
+	mem = GST_MEMORY_CAST(bm_dma_memory);
+	///quark = gst_bm_framebuffer_quark();
+	bm_dma_memory->import_flag = 1;
+	//gst_mini_object_set_qdata (GST_MINI_OBJECT(mem), quark, bm_dma_memory,
+	//	gst_bm_mem_import_destroy);
+
+	return mem;
+}
+
 GstMemory * gst_bm_allocator_import_gst_memory (GstAllocator G_GNUC_UNUSED *allocator, GstMemory *memory)
 {
 	if(!g_type_is_a(G_OBJECT_TYPE(memory->allocator), GST_TYPE_BM_ALLOCATOR)) {
@@ -429,12 +456,13 @@ GstAllocator* gst_bm_allocator_new(void)
 		gst_object_unref(GST_OBJECT(bm_allocator));
 		return NULL;
 	}
-	GST_DEBUG_OBJECT(bm_allocator, "created new BM allocator %s", GST_OBJECT_NAME(bm_allocator));
+	GST_DEBUG_OBJECT(bm_allocator, "created new BM allocator %s\n", GST_OBJECT_NAME(bm_allocator));
 
 	gst_object_ref_sink(GST_OBJECT(bm_allocator));
 
 	return GST_ALLOCATOR_CAST(bm_allocator);
 }
+
 #if 0
 int main(int argc, char *argv[]) {
 	gst_init(&argc, &argv);

@@ -12,7 +12,7 @@ public:
     ~VideoDec_FFMPEG();
 
     int openDec(const char* filename, int extra_frame_buffer_num = 5, int sophon_idx = 0, int v4l2_buf_num = 8,
-                int use_isp_chn_num = 1, int wdr_on = 0, int is_yuv_sensor = 0);
+                int use_isp_chn_num = 1, int wdr_on = 0, int is_yuv_sensor = 0, int dev_num = 1);
     void closeDec();
     int grabFrame(AVFrame *frame);
     int flushFrame(AVFrame *frame);
@@ -58,13 +58,14 @@ VideoDec_FFMPEG::~VideoDec_FFMPEG() {
 }
 
 int VideoDec_FFMPEG::openDec(const char* filename, int extra_frame_buffer_num, int sophon_idx,
-                            int v4l2_buf_num, int use_isp_chn_num, int wdr_on, int is_yuv_sensor) {
+                            int v4l2_buf_num, int use_isp_chn_num, int wdr_on, int is_yuv_sensor, int dev_num) {
     int ret = 0;
     AVDictionary *opts = NULL;
     av_dict_set_int(&opts, "v4l2_buffer_num", v4l2_buf_num, 0);
     av_dict_set_int(&opts, "use_isp_chn_num", use_isp_chn_num, 0);
     //only support frist dev
     av_dict_set_int(&opts, "wdr_on", wdr_on, 0);
+    av_dict_set_int(&opts, "dev_num", dev_num, 0);
     if (is_yuv_sensor)
         av_dict_set(&opts, "pixel_format", "yuyv422", 0);
 

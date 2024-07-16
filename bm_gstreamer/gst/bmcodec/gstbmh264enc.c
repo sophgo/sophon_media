@@ -55,7 +55,6 @@ struct _GstBmH264Enc
   guint qp_max;
   guint qp_min_i;
   guint qp_max_i;
-  gint qp_ip;
 };
 
 #define parent_class gst_bm_h264_enc_parent_class
@@ -64,11 +63,11 @@ G_DEFINE_TYPE (GstBmH264Enc, gst_bm_h264_enc, GST_TYPE_BM_ENC);
 #define DEFAULT_PROP_LEVEL 40   /* 1080p@30fps */
 #define DEFAULT_PROP_PROFILE GST_BM_H264_PROFILE_HIGH
 #define DEFAULT_PROP_QP_INIT 26
-#define DEFAULT_PROP_QP_MIN 0   /* Auto */
-#define DEFAULT_PROP_QP_MAX 0   /* Auto */
-#define DEFAULT_PROP_QP_MIN_I 0 /* Auto */
-#define DEFAULT_PROP_QP_MAX_I 0 /* Auto */
-#define DEFAULT_PROP_QP_IP -2   /* Auto */
+#define DEFAULT_PROP_QP_MIN 1
+#define DEFAULT_PROP_QP_MAX 51
+#define DEFAULT_PROP_QP_MIN_I 1
+#define DEFAULT_PROP_QP_MAX_I 51
+#define DEFAULT_PROP_QP_IP -2
 
 enum
 {
@@ -80,7 +79,6 @@ enum
   PROP_QP_MAX,
   PROP_QP_MIN_I,
   PROP_QP_MAX_I,
-  PROP_QP_IP,
   PROP_LAST,
 };
 
@@ -223,14 +221,6 @@ gst_bm_h264_enc_set_property (GObject * object,
       self->qp_max_i = qp_max_i;
       break;
     }
-    case PROP_QP_IP:{
-      gint qp_ip = g_value_get_int (value);
-      if (self->qp_ip == qp_ip)
-        return;
-
-      self->qp_ip = qp_ip;
-      break;
-    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       return;
@@ -267,9 +257,6 @@ gst_bm_h264_enc_get_property (GObject * object,
       break;
     case PROP_QP_MAX_I:
       g_value_set_uint (value, self->qp_max_i);
-      break;
-    case PROP_QP_IP:
-      g_value_set_int (value, self->qp_ip);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -311,10 +298,8 @@ gst_bm_h264_enc_apply_properties (GstVideoEncoder * encoder)
 
   if (G_LIKELY (!bmenc->prop_dirty))
     return TRUE;
-  bmenc->params.cqp = self->qp_init;
   bmenc->params.min_qp =  self->qp_min;
   bmenc->params.max_qp =  self->qp_max;
-  bmenc->params.delta_qp =  self->qp_ip;
   bmenc->params.h264_params.enable_transform8x8 =
                 (self->profile == GST_BM_H264_PROFILE_HIGH);
 
@@ -361,7 +346,6 @@ gst_bm_h264_enc_init (GstBmH264Enc * self)
   self->qp_max = DEFAULT_PROP_QP_MAX;
   self->qp_min_i = DEFAULT_PROP_QP_MIN_I;
   self->qp_max_i = DEFAULT_PROP_QP_MAX_I;
-  self->qp_ip = DEFAULT_PROP_QP_IP;
 }
 
 static void
@@ -404,14 +388,14 @@ gst_bm_h264_enc_class_init (GstBmH264EncClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_QP_MIN,
       g_param_spec_uint ("qp-min", "Min QP",
-          "Min QP (0 = default)", 0, 51, DEFAULT_PROP_QP_MIN,
+          "Min QP (1= default)", 0, 51, DEFAULT_PROP_QP_MIN,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_QP_MAX,
       g_param_spec_uint ("qp-max", "Max QP",
-          "Max QP (0 = default)", 0, 51, DEFAULT_PROP_QP_MAX,
+          "Max QP (51 = default)", 0, 51, DEFAULT_PROP_QP_MAX,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
+#if 0
   g_object_class_install_property (gobject_class, PROP_QP_MIN_I,
       g_param_spec_uint ("qp-min-i", "Min Intra QP",
           "Min Intra QP (0 = default)", 0, 51, DEFAULT_PROP_QP_MIN_I,
@@ -421,12 +405,7 @@ gst_bm_h264_enc_class_init (GstBmH264EncClass * klass)
       g_param_spec_uint ("qp-max-i", "Max Intra QP",
           "Max Intra QP (0 = default)", 0, 51, DEFAULT_PROP_QP_MAX_I,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_QP_IP,
-      g_param_spec_int ("qp-delta-ip", "Delta QP between I and P",
-          "Delta QP between I and P (-2 = default)", -8, 8, DEFAULT_PROP_QP_IP,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
+#endif
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&gst_bm_h264_enc_src_template));
 

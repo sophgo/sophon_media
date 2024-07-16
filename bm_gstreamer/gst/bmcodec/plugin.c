@@ -20,10 +20,10 @@ plugin_init (GstPlugin * plugin)
 
   sink_template = gst_bm_video_codec_get_all_sink_caps ();
   // TODO: support more format for src
-  src_template = gst_caps_from_string (GST_VIDEO_CAPS_MAKE ("NV12"));
+  src_template = gst_caps_from_string (GST_VIDEO_CAPS_MAKE ("{ NV12, I420, NV21, NV16, YUV400, Y42B, Y444 }"));
 
   GST_INFO ("BM video decoder, sink template %" GST_PTR_FORMAT
-      "src template %" GST_PTR_FORMAT, sink_template, src_template);
+      "\n\t src template %" GST_PTR_FORMAT, sink_template, src_template);
 
   // TODO: register decoder on all chips?
   gst_bm_decoder_register (plugin, 0, sink_template, src_template);

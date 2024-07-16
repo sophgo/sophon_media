@@ -49,6 +49,9 @@ GstMemory *
 gst_bm_allocator_import_bmvidbuf(GstAllocator * allocator, BMVidFrame *bmFrame);
 
 GstMemory *
+gst_bm_allocator_import_bmjpg_buf(GstAllocator * allocator, unsigned long long phy_addr, int size);
+
+GstMemory *
 gst_bm_allocator_import_gst_memory (GstAllocator * allocator, GstMemory *memory);
 
 BmDeviceMem*

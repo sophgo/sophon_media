@@ -1083,7 +1083,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
             }
             else{
                 src_fmt = FORMAT_YUV420P;
-                src_stride[1] = src_stride[0]/2;
+                src_stride[1] = info.cbcr_stride;
                 src_stride[2] = src_stride[1];
               }
 
@@ -1137,7 +1137,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
             bm_mem_unmap_device_mem(handle, p_virt_addr,(info.framebuffer)->dma_buffer->size);
         #endif
             src_fmt = FORMAT_YUV420P;
-            src_stride[1] = src_stride[0]/2;
+            src_stride[1] = info.cbcr_stride;
             src_stride[2] = src_stride[1];
         }
         else if(info.color_format == BM_JPU_COLOR_FORMAT_YUV444)

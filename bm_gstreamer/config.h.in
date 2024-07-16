@@ -1,0 +1,14 @@
+#ifndef __CONFIG_H__
+#define __CONFIG_H__
+
+#pragma once
+
+#define VERSION "@VERSION@"
+
+#define PACKAGE "@PACKAGE@"
+
+#define GST_PACKAGE_NAME "@GST_PACKAGE_NAME@"
+
+#define GST_PACKAGE_ORIGIN "@GST_PACKAGE_ORIGIN@"
+
+#endif /* __CONFIG_H__ */

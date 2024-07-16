@@ -532,19 +532,19 @@ function run_ive_stcandicorner() {
         fi
         # speed_diff is calculated using fps here
         echo "Speed_Diff : $speed_diff%"
-        # if [[ $speed_diff -lt -100 ]] || [[ $speed_diff -gt 100 ]]; then
-        #     echo -e "\e[31m ive_stcandicorner : Log informations have not be recorded \e[0m"
-        #     return 1
-        # elif [[ $speed_diff -lt -95 ]] || [[ $speed_diff -gt 95 ]]; then
-        #     echo "ive_stcandicorner test pass (This should be your first time to create a log)" >> $logfile
-        # elif [[ $speed_diff -lt -10 ]] || [[ $speed_diff -gt 10 ]]; then
-        #     # echo $old_var_fps > $nfs_path/ive_stcandicorner_$MODE$TAIL_MARK
-        #     echo -e "\e[31m ive_stcandicorner : Speed Abnormal \e[0m"
-        #     return 1
-        # else
-        #     echo -e "\e[32m ive_stcandicorner : Speed Normal \e[0m"
-        #     echo "ive_stcandicorner test pass (Speed_Diff : $speed_diff%)" >> $logfile
-        # fi
+        if [[ $speed_diff -lt -100 ]] || [[ $speed_diff -gt 100 ]]; then
+            echo -e "\e[31m ive_stcandicorner : Log informations have not be recorded \e[0m"
+            return 1
+        elif [[ $speed_diff -lt -95 ]] || [[ $speed_diff -gt 95 ]]; then
+            echo "ive_stcandicorner test pass (This should be your first time to create a log)" >> $logfile
+        elif [[ $speed_diff -lt -10 ]] || [[ $speed_diff -gt 10 ]]; then
+            # echo $old_var_fps > $nfs_path/ive_stcandicorner_$MODE$TAIL_MARK
+            echo -e "\e[31m ive_stcandicorner : Speed Abnormal \e[0m"
+            return 1
+        else
+            echo -e "\e[32m ive_stcandicorner : Speed Normal \e[0m"
+            echo "ive_stcandicorner test pass (Speed_Diff : $speed_diff%)" >> $logfile
+        fi
     fi
 }
 

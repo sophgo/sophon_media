@@ -1481,6 +1481,7 @@ FLUSH_FRAME:
     }
 
 GET_FRAME:
+    memset(bmframe, 0, sizeof(BMVidFrame));
     get_frame_state = bmvpu_dec_get_output(handle, bmframe);
     if(get_frame_state == BM_SUCCESS) {
         if(bmctx->first_frame_get == 0) {
@@ -1670,7 +1671,7 @@ static av_cold void bm_flush_dec(AVCodecContext *avctx)
     BMDecContext* bmctx = (BMDecContext*)(avctx->priv_data);
     BMVidCodHandle handle = bmctx->handle;
 
-    bmvpu_dec_flush(handle);
+    bmvpu_dec_get_all_frame_in_buffer(handle);
 }
 
 static av_cold int bm_close(AVCodecContext *avctx)

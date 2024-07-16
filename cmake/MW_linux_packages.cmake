@@ -38,11 +38,15 @@ SET(FFMPEG_VER_PATCH    ${PATCH_VERSION})
 SET(OPENCV_VER_MAJOR    ${MAJOR_VERSION})
 SET(OPENCV_VER_MINOR    ${MINOR_VERSION})
 SET(OPENCV_VER_PATCH    ${PATCH_VERSION})
+SET(GSTREAMER_VER_MAJOR ${MAJOR_VERSION})
+SET(GSTREAMER_VER_MINOR ${MINOR_VERSION})
+SET(GSTREAMER_VER_PATCH ${PATCH_VERSION})
 SET(SAMPLE_VER_MAJOR    ${MAJOR_VERSION})
 SET(SAMPLE_VER_MINOR    ${MINOR_VERSION})
 SET(SAMPLE_VER_PATCH    ${PATCH_VERSION})
 SET(FFMPEG_VERSION      ${FFMPEG_VER_MAJOR}.${FFMPEG_VER_MINOR}.${FFMPEG_VER_PATCH})
 SET(OPENCV_VERSION      ${OPENCV_VER_MAJOR}.${OPENCV_VER_MINOR}.${OPENCV_VER_PATCH})
+SET(GSTREAMER_VERSION   ${GSTREAMER_VER_MAJOR}.${GSTREAMER_VER_MINOR}.${GSTREAMER_VER_PATCH})
 SET(SAMPLE_VERSION      ${SAMPLE_VER_MAJOR}.${SAMPLE_VER_MINOR}.${SAMPLE_VER_PATCH})
 SET(COMPATIBLE_VERSION  0.4.4)
 
@@ -59,7 +63,7 @@ SET(CPACK_PACKAGE_VERSION_PATCH         ${OPENCV_VER_PATCH})
 #SET(CPACK_RESOURCE_FILE_LICENSE         ${PROJECT_SOURCE_DIR}/LICENSE )
 SET(CPACK_PACKAGE_NAME                  ${PROJECT_NAME})
 SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY   "Sophon multimedia library" )
-SET(CPACK_PACKAGE_DESCRIPTION           "Sophon multimedia library: sophon-ffmpeg sophon-opencv" )
+SET(CPACK_PACKAGE_DESCRIPTION           "Sophon multimedia library: sophon-ffmpeg sophon-opencv sophon-gstreamer" )
 SET(CPACK_PACKAGE_FILE_NAME             ${PROJECT_NAME}${MW_POSTFIX}_${OPENCV_VERSION}_${CMAKE_SYSTEM_PROCESSOR})
 SET(CPACK_PACKAGING_INSTALL_PREFIX      "/opt/sophon")
 #message(STATUS "CPACK_PACKAGE_FILE_NAME............... " ${CPACK_PACKAGE_FILE_NAME})
@@ -126,7 +130,9 @@ else()
     SET(CPACK_DEBIAN_SOPHON-FFMPEG_PACKAGE_DEPENDS          "sophon${MW_POSTFIX}-libsophon (>= ${COMPATIBLE_VERSION}), libc6 (>= 2.19)")
     SET(CPACK_DEBIAN_SOPHON-FFMPEG-DEV_PACKAGE_DEPENDS      "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (= ${CPACK_DEBIAN_PACKAGE_VERSION})")
     SET(CPACK_DEBIAN_SOPHON-OPENCV_PACKAGE_DEPENDS          "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (>= ${CPACK_DEBIAN_PACKAGE_VERSION}), libatomic1(>= 4.8), libc6 (>= 2.23), libstdc++6 (>= 5.4.0-6), zlib1g (>= 1:1.1.4)")
-    #SET(CPACK_DEBIAN_SOPHON-OPENCV-DEV_PACKAGE_DEPENDS      "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-opencv (= ${CPACK_DEBIAN_PACKAGE_VERSION})")
+    SET(CPACK_DEBIAN_SOPHON-OPENCV-DEV_PACKAGE_DEPENDS      "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-opencv (= ${CPACK_DEBIAN_PACKAGE_VERSION})")
+    SET(CPACK_DEBIAN_SOPHON-GSTREAMER_PACKAGE_DEPENDS       "sophon${MW_POSTFIX}-libsophon (>= ${COMPATIBLE_VERSION})")
+    SET(CPACK_DEBIAN_SOPHON-GSTREAMER-DEV_PACKAGE_DEPENDS   "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-gstreamer (= ${CPACK_DEBIAN_PACKAGE_VERSION})")
     SET(CPACK_DEBIAN_SOPHON-SAMPLE_PACKAGE_DEPENDS          "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (>= ${CPACK_DEBIAN_PACKAGE_VERSION}), ${CPACK_DEBIAN_PACKAGE_NAME}-sophon-opencv (>= ${CPACK_DEBIAN_PACKAGE_VERSION})")
 
     SET(CPACK_DEBIAN_SOPHON-FFMPEG_PACKAGE_CONTROL_EXTRA
@@ -144,6 +150,14 @@ else()
 
     SET(CPACK_DEBIAN_SOPHON-OPENCV-DEV_PACKAGE_CONTROL_EXTRA
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script/sophon-opencv-devel/postinst)
+
+    SET(CPACK_DEBIAN_SOPHON-GSTREAMER_PACKAGE_CONTROL_EXTRA
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script/sophon-gstreamer/postinst
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script/sophon-gstreamer/prerm
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script/sophon-gstreamer/postrm)
+
+    #SET(CPACK_DEBIAN_SOPHON-GSTREAMER-DEV_PACKAGE_CONTROL_EXTRA
+    #    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script/sophon-gstreamer-devel/postinst)
 
     SET(CPACK_DEBIAN_SOPHON-SAMPLE_PACKAGE_CONTROL_EXTRA
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script/sophon-sample/postinst
@@ -230,6 +244,28 @@ add_custom_target(OPENCV_DEB_SCRIPTS ALL
 #    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script
 #)
 #endif()
+
+add_custom_target(GSTREAMER_DEB_SCRIPTS ALL
+    COMMAND mkdir -p sophon-gstreamer sophon-gstreamer-devel
+    # post-install
+    COMMAND echo "rm -f ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest" > sophon-gstreamer/postinst
+    COMMAND echo "ln -s ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer_${GSTREAMER_VERSION} ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest" >> sophon-gstreamer/postinst
+    COMMAND echo >> sophon-gstreamer/postinst
+    COMMAND echo "cp -f ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest/data/03_sophon-gstreamer.conf /etc/ld.so.conf.d/" >> sophon-gstreamer/postinst
+    COMMAND echo "ldconfig" >> sophon-gstreamer/postinst
+    COMMAND echo "cp -f ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest/data/sophon-gstreamer-autoconf.sh /etc/profile.d/" >> sophon-gstreamer/postinst
+    # pre-remove
+    COMMAND echo "rm -f /etc/ld.so.conf.d/03_sophon-gstreamer.conf" > sophon-gstreamer/prerm
+    COMMAND echo "ldconfig" >> sophon-gstreamer/prerm
+    COMMAND echo "rm -f /etc/profile.d/sophon-gstreamer-autoconf.sh" >> sophon-gstreamer/prerm
+    # post-remove
+    COMMAND echo "rm -f ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest" > sophon-gstreamer/postrm
+    COMMAND echo "latest=\$(ls -dr ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-* 2>/dev/null | head -n 1)" >> sophon-gstreamer/postrm VERBATIM
+    COMMAND echo "if [-n \"\${latest}\" ]; then ln -s \${latest} ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest; fi" >> sophon-gstreamer/postrm
+    # devel-post-install
+    #COMMAND echo "sed -i \"s/\\\/usr\\\/local/${REPLACE_CPACK_INSTALL_PREFIX}\\\/sophon-gstreamer-latest/g\" ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest/lib/pkgconfig/*.pc" > sophon-gstreamer-devel/postinst
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script
+)
 
 get_cmake_property(CPACK_COMPONENTS_ALL                 COMPONENTS)
 list(REMOVE_ITEM CPACK_COMPONENTS_ALL                   "Unspecified" "libsophon" "libsophon-dev" "bmcpu" "bmcpu-dev" "driver")

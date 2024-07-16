@@ -38,6 +38,8 @@ set(SAMPLE_TARGETS test_bm_restart test_ff_video_encode
                 test_ocv_video_xcode
                 test_ocv_vidmulti
                 test_ff_sns_xcode
+		test_gst_vcmulti
+		test_gst_transcode
                 )
 
 
@@ -57,6 +59,10 @@ add_subdirectory(ocv_jpumulti)
 add_subdirectory(ocv_vidbasic)
 add_subdirectory(ocv_video_xcode)
 add_subdirectory(ocv_vidmulti)
+add_subdirectory(gst/gst_bm_vcmulti)
+add_subdirectory(gst/gst_bm_transcode)
+
+
 
 
 
@@ -88,7 +94,10 @@ set(BMMW_SAMPLES_SOURCE
     ff_bmcv_transcode
     ff_video_xcode
     ff_sns_xcode
-    ff_scale_transcode)
+    ff_scale_transcode
+    gst/gst_bm_vcmulti
+    gst/gst_bm_transcode
+    )
 
 set(BMMW_SAMPLES_SOURCE_DIR ${BMMW_SAMPLES_SOURCE})
 list(TRANSFORM BMMW_SAMPLES_SOURCE_DIR PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)

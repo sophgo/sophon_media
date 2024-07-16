@@ -45,7 +45,7 @@
 #include "avdevice.h"
 #include "timefilter.h"
 #include "v4l2-common.h"
-#include "linux/vi_uapi.h"
+#include "linux/vi_v4l2_uapi.h"
 #include "cvi_isp_v4l2.h"
 #include <dirent.h>
 #include "bmlib_runtime.h"
@@ -108,6 +108,7 @@ struct video_data {
     int use_isp_chn_num;
     int wdr_on;
     int v4l2_buffer_num;
+    int dev_num;
     bm_handle_t bm_handle;
 
     int use_libv4l2;
@@ -790,7 +791,6 @@ static int mmap_start(AVFormatContext *ctx)
     enum v4l2_buf_type type;
     int i, res;
 	static int isp_init_time;
-	static int set_wdr_on_time;
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
@@ -810,28 +810,6 @@ static int mmap_start(AVFormatContext *ctx)
         }
     }
     atomic_store(&s->buffers_queued, s->buffers);
-
-    //set hdr on or off,only supprot first dev now
-	if (s->wdr_on) {
-		if (s->channel == 0) {
-			set_wdr_on(s->fd, 1);
-		} else {
-			set_wdr_on(s->fd, 0);
-		}
-		pthread_mutex_lock(&wdr_mutex);
-
-		set_wdr_on_time++;
-		if (set_wdr_on_time == s->use_isp_chn_num) {
-			pthread_cond_broadcast(&wdr_cond);
-		} else {
-			int wait_res = pthread_cond_timedwait(&wdr_cond, &wdr_mutex, &ts);
-			if (wait_res == ETIMEDOUT) {
-				av_log(ctx, AV_LOG_ERROR, "WDR set init timeout!\n");
-			}
-		}
-		pthread_mutex_unlock(&wdr_mutex);
-	}
-
 
     if(s->use_isp_chn_num) {
         CVI_ISP_V4L2_Init(s->channel,s->fd);
@@ -894,6 +872,10 @@ static int v4l2_set_parameters(AVFormatContext *ctx)
     struct v4l2_streamparm streamparm = { 0 };
     struct v4l2_fract *tpf;
     AVRational framerate_q = { 0 };
+    static int set_wdr_on_time;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 5;
     int i, ret;
 
     if (s->framerate &&
@@ -902,6 +884,23 @@ static int v4l2_set_parameters(AVFormatContext *ctx)
                s->framerate);
         return ret;
     }
+
+    if (s->wdr_on) {
+        set_wdr_on(s->fd, 1);
+    } else {
+        set_wdr_on(s->fd, 0);
+    }
+    pthread_mutex_lock(&wdr_mutex);
+    set_wdr_on_time++;
+    if (set_wdr_on_time == s->dev_num) {
+        pthread_cond_broadcast(&wdr_cond);
+    } else {
+        int wait_res = pthread_cond_timedwait(&wdr_cond, &wdr_mutex, &ts);
+        if (wait_res == ETIMEDOUT) {
+            av_log(ctx, AV_LOG_ERROR, "WDR set init timeout!\n");
+        }
+    }
+    pthread_mutex_unlock(&wdr_mutex);
 
     if (s->standard) {
         if (s->std_id) {
@@ -966,33 +965,15 @@ static int v4l2_set_parameters(AVFormatContext *ctx)
     if (v4l2_ioctl(s->fd, VIDIOC_G_PARM, &streamparm) < 0) {
         ret = AVERROR(errno);
         av_log(ctx, AV_LOG_WARNING, "ioctl(VIDIOC_G_PARM): %s\n", av_err2str(ret));
-    } else if (framerate_q.num && framerate_q.den) {
+    } else { //VIDIOC_S_PARM is not support now
         if (streamparm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME) {
             tpf = &streamparm.parm.capture.timeperframe;
 
-            av_log(ctx, AV_LOG_DEBUG, "Setting time per frame to %d/%d\n",
+            framerate_q.den  = tpf->numerator;
+            framerate_q.num  = tpf->denominator;
+
+            av_log(ctx, AV_LOG_DEBUG, "Reading time per frame to %d/%d\n",
                    framerate_q.den, framerate_q.num);
-            tpf->numerator   = framerate_q.den;
-            tpf->denominator = framerate_q.num;
-
-            if (v4l2_ioctl(s->fd, VIDIOC_S_PARM, &streamparm) < 0) {
-                ret = AVERROR(errno);
-                av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_S_PARM): %s\n",
-                       av_err2str(ret));
-                return ret;
-            }
-
-            if (framerate_q.num != tpf->denominator ||
-                framerate_q.den != tpf->numerator) {
-                av_log(ctx, AV_LOG_INFO,
-                       "The driver changed the time per frame from "
-                       "%d/%d to %d/%d\n",
-                       framerate_q.den, framerate_q.num,
-                       tpf->numerator, tpf->denominator);
-            }
-        } else {
-            av_log(ctx, AV_LOG_WARNING,
-                   "The driver does not permit changing the time per frame\n");
         }
     }
     if (tpf->denominator > 0 && tpf->numerator > 0) {
@@ -1355,8 +1336,9 @@ static const AVOption options[] = {
     { "mono2abs",     "force conversion from monotonic to absolute timestamps",   OFFSET(ts_mode),      AV_OPT_TYPE_CONST,  {.i64 = V4L_TS_MONO2ABS }, 0, 2, DEC, "timestamps" },
     { "use_libv4l2",  "use libv4l2 (v4l-utils) conversion functions",             OFFSET(use_libv4l2),  AV_OPT_TYPE_BOOL,   {.i64 = 0}, 0, 1, DEC },
     { "use_isp_chn_num", "use isp channel number",                                OFFSET(use_isp_chn_num), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 6, DEC },
-    { "wdr_on",        "set sensor wdr mode",                                     OFFSET(wdr_on),       AV_OPT_TYPE_INT,    {.i64 = 0}, 0, 1, DEC },
+    { "wdr_on",        "set sensor wdr mode",                                     OFFSET(wdr_on),          AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC },
     { "v4l2_buffer_num", "video buffer num",                                      OFFSET(v4l2_buffer_num), AV_OPT_TYPE_INT, {.i64 = 8}, 0, 32, DEC },
+    { "dev_num",       "device number",                                           OFFSET(dev_num),         AV_OPT_TYPE_INT, {.i64 = 1}, 0, 6, DEC },
     { NULL },
 };
 

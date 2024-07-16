@@ -2791,7 +2791,11 @@ double CvCapture_FFMPEG::getProperty( int property_id ) const
             return (double)((rotation_auto && ((rotation_angle%180) != 0)) ? picture_height : picture_width);
         }
     case CAP_PROP_FRAME_HEIGHT:
-        return (double)((rotation_auto && ((rotation_angle%180) != 0)) ? frame.width : frame.height);
+        if (picture_height == -1) {
+            return (double)((rotation_auto && ((rotation_angle%180) != 0)) ? frame.width : frame.height);
+        } else {
+            return (double)((rotation_auto && ((rotation_angle%180) != 0)) ? picture_width : picture_height);
+        }
     case CAP_PROP_FRAME_TYPE:
         return (double)av_get_picture_type_char(picture->pict_type);
     case CAP_PROP_FPS:
@@ -3116,10 +3120,10 @@ bool CvCapture_FFMPEG::setProperty( int property_id, double value )
     case cv::CAP_PROP_OUTPUT_SRC:
         sampler_step = value;
         break;
-    case CV_FFMPEG_CAP_PROP_FRAME_WIDTH:
+    case CAP_PROP_FRAME_WIDTH:
         picture_width = (int)value;
         break;
-    case CV_FFMPEG_CAP_PROP_FRAME_HEIGHT:
+    case CAP_PROP_FRAME_HEIGHT:
         picture_height = (int)value;
         break;
     default:

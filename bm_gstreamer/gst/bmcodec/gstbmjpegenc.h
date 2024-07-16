@@ -33,7 +33,6 @@ G_DECLARE_FINAL_TYPE (GstBmJpegEnc, gst_bm_jpeg_enc, GST, BM_JPEG_ENC, GstVideoE
 #define GST_BM_JPEG_ENC(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
     GST_TYPE_BM_JPEG_ENC, GstBmJpegEnc))
 
-#define BM_PENDING_MAX 32      /* Max number of BMVPU pending frame */
 gboolean gst_bm_jpeg_enc_register (GstPlugin * plugin, guint rank);
 
 G_END_DECLS

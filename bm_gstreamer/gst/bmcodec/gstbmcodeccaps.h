@@ -6,6 +6,7 @@
 typedef enum BmVideoCodecID_enum {
   BmVideoCodecID_H264 = 0,
   BmVideoCodecID_HEVC,
+  BmVideoCodecID_JPEG,
   BmVideoCodecID_NumCodecs  /* Max num of codecs */,
 } BmVideoCodecID;
 

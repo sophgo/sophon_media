@@ -7,6 +7,7 @@
 #include "gstbmallocator.h"
 
 #include "bm_vpudec_interface.h"
+#include "bm_jpeg_interface.h"
 
 G_BEGIN_DECLS
 
@@ -38,8 +39,12 @@ struct _GstBmDecoder
 {
   GstVideoDecoder parent;
   BMVidCodHandle handle;
+  BmJpuJPEGDecoder *jpeg_decoder;
+  BmVideoCodecID codec_id;
 
   gboolean configured;
+
+  GMutex mutex;
 
   guint8 *bitstream_buffer;
   gsize bitstream_buffer_alloc_size;
@@ -63,8 +68,10 @@ struct _GstBmDecoder
   /* flow return from pad task */
   GstFlowReturn task_ret;
 
-  GList *frames;
   guint pending_frames;
+  guint frame_mode;
+  guint extraFrameBufferNum;
+  GList *frames;
 
   GArray *ref_list;
 

@@ -217,8 +217,6 @@ enum VideoCaptureProperties {
        CAP_PROP_STATUS,
        CAP_PROP_TIMESTAMP,
        CAP_PROP_POS_PTS,
-       CV_FFMPEG_CAP_PROP_FRAME_WIDTH,
-       CV_FFMPEG_CAP_PROP_FRAME_HEIGHT,
 #ifndef CV_DOXYGEN
        CV__CAP_PROP_LATEST
 #endif

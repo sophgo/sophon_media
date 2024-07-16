@@ -1,0 +1,13 @@
+prefix=prefix=../../../../prebuilt
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib/gst
+sharedlibdir=${libdir}
+includedir=${prefix}/include/gst
+
+Name: zlib
+Description: zlib compression library
+Version: 1.2.8
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lz
+Cflags: -I${includedir}

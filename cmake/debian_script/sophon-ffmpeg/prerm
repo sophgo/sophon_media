@@ -1,3 +1,0 @@
-rm -f /etc/ld.so.conf.d/01_sophon-ffmpeg.conf
-ldconfig
-rm -f /etc/profile.d/sophon-ffmpeg-autoconf.sh

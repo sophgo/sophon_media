@@ -1,5 +1,6 @@
 option('bm_allocator', type : 'feature', value : 'auto', description : 'hardware accelerated video en/decoding elements using the SOPHGO')
 option('bmcodec', type : 'feature', value : 'auto', description : 'SOPHGO codec plugin')
+option('bmvpss', type : 'feature', value : 'auto', description : 'SOPHGO vpss plugin')
 
 option('package-name', type : 'string', yield : true,
        description : 'package name to use in plugins')

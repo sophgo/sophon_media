@@ -1,9 +1,9 @@
-project('gstreamer-bm', 'c',
+project('gstreamer-bm', ['c', 'cpp'],
   version : '1.14.4',
   license : 'LGPL',
   meson_version : '>= 0.47',
   default_options : [ 'warning_level=2',
-                      'buildtype=debug','c_std=c99'])
+                      'buildtype=debug','c_std=c99', 'cpp_std=c++14'])
 
 gst_version = meson.project_version()
 version_arr = gst_version.split('.')
@@ -79,10 +79,13 @@ bmlib_dep = cc.find_library('bmlib', required: true)
 vd_dep = cc.find_library('bmvd', required: true)
 venc_dep = cc.find_library('bmvenc', required: true)
 jpg_dep = cc.find_library('bmjpeg', required: true)
+cv_dep = cc.find_library('bmcv', required: true)
 
 gst_sophgo_args = ['-DHAVE_CONFIG_H']
 configinc = include_directories('.')
 
 subdir('gst')
+subdir('tests')
+subdir('samples')
 
 configure_file(output : 'config.h', configuration : cdata)

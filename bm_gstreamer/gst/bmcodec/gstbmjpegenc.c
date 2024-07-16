@@ -25,6 +25,7 @@
 #include <string.h>
 #include "gstbmjpegenc.h"
 #include "gstbmallocator.h"
+#include <stdio.h>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
@@ -111,8 +112,9 @@ G_DEFINE_TYPE (GstBmJpegEnc, gst_bm_jpeg_enc, GST_TYPE_VIDEO_ENCODER);
 
 
 
-#define GST_BM_ALIGNMENT 16
-#define GST_BM_ALIGN(v) GST_ROUND_UP_N (v, GST_BM_ALIGNMENT)
+#define GST_BM_ALIGN16 16
+#define GST_BM_ALIGN8 8
+#define GST_BM_ALIGN(v, align) GST_ROUND_UP_N (v, align)
 
 #define DEFAULT_PROP_GOP -1     /* Same as FPS */
 #define DEFAULT_PROP_MAX_REENC 1
@@ -136,8 +138,8 @@ enum
 };
 
 #define BM_JPEG_ENC_FORMATS \
-    "NV12, I420, N21, NV16, " \
-    "YUV400, YUV422, YUV444"
+    "NV12, I420, NV21, NV16, " \
+    "YUV400, Y42B, Y444"
 
 #define GST_BM_JPEG_ENC_SIZE_CAPS \
     "width  = (int) [ 16, MAX ], height = (int) [ 16, MAX ]"
@@ -177,11 +179,14 @@ gst_bm_jpeg_enc_video_info_align (GstVideoInfo * info)
   gint hstride = 0, vstride = 0;
   guint i;
 
-  if (!hstride)
-    hstride = GST_BM_ALIGN (GST_BM_JPEG_VIDEO_INFO_HSTRIDE (info));
+  GstVideoFormat gst_format = GST_VIDEO_INFO_FORMAT (info);
+  if(gst_format == GST_VIDEO_FORMAT_I420 || gst_format == GST_VIDEO_FORMAT_Y42B) {
+    hstride = GST_BM_ALIGN(GST_BM_JPEG_VIDEO_INFO_HSTRIDE (info), GST_BM_ALIGN16);
+  } else {
+    hstride = GST_BM_ALIGN(GST_BM_JPEG_VIDEO_INFO_HSTRIDE (info), GST_BM_ALIGN8);
+  }
 
-  if (!vstride)
-    vstride = GST_BM_ALIGN (GST_BM_JPEG_VIDEO_INFO_VSTRIDE (info));
+  vstride = GST_BM_JPEG_VIDEO_INFO_VSTRIDE (info);
 
   if (hstride == GST_BM_JPEG_VIDEO_INFO_HSTRIDE (info) &&
       vstride == GST_BM_JPEG_VIDEO_INFO_VSTRIDE (info))
@@ -421,7 +426,8 @@ gst_bm_jpeg_enc_stop (GstVideoEncoder * encoder)
 
   g_mutex_clear (&self->mutex);
 
-  bm_jpu_jpeg_enc_close(self->bm_jpeg_enc);
+  if (self->bm_jpeg_enc)
+    bm_jpu_jpeg_enc_close(self->bm_jpeg_enc);
 
   gst_object_unref (self->allocator);
 
@@ -468,8 +474,10 @@ gst_bm_jpeg_gst_format_bm_format(GstBmJpegEnc *self)
   BmJpuColorFormat format;
   gint hstride, vstride;
   gint interleave;
+
   hstride = GST_BM_JPEG_VIDEO_INFO_HSTRIDE (info);
   vstride = GST_BM_JPEG_VIDEO_INFO_VSTRIDE (info);
+
   switch (GST_VIDEO_INFO_FORMAT (info))
   {
       case GST_VIDEO_FORMAT_I420:
@@ -477,7 +485,7 @@ gst_bm_jpeg_gst_format_bm_format(GstBmJpegEnc *self)
           self->cbcr_stride = hstride / 2;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
-          self->cr_offset = hstride * vstride;
+          self->cr_offset = self->cb_offset + hstride * vstride / 4;
           interleave = 0;
           break;
       case GST_VIDEO_FORMAT_NV12:
@@ -498,10 +506,10 @@ gst_bm_jpeg_gst_format_bm_format(GstBmJpegEnc *self)
           break;
       case GST_VIDEO_FORMAT_Y42B:
           format = BM_JPU_COLOR_FORMAT_YUV422_HORIZONTAL;
-          self->cbcr_stride = hstride;
+          self->cbcr_stride = hstride / 2;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
-          self->cr_offset = self->cb_offset + hstride * vstride / 2;
+          self->cr_offset = self->cb_offset + self->cbcr_stride * vstride;
           interleave = 0;
           break;
       case GST_VIDEO_FORMAT_NV16 :
@@ -666,13 +674,31 @@ gst_bm_jpeg_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
 
   gst_buffer_pool_set_config (pool, config);
 
-  gst_query_add_allocation_pool (query, pool, size, BM_PENDING_MAX, 0);
+  gst_query_add_allocation_pool (query, pool, size, 3, 0);
   gst_query_add_allocation_param (query, self->allocator, NULL);
 
   gst_object_unref (pool);
 
   return GST_VIDEO_ENCODER_CLASS (parent_class)->propose_allocation (encoder,
       query);
+}
+
+static void
+gst_bm_jpegenc_info_set(GstBmJpegEnc *self, GstVideoInfo *info) {
+  gint plan_num = GST_VIDEO_INFO_N_PLANES (info);
+
+  self->y_stride =  GST_VIDEO_INFO_PLANE_STRIDE (info, 0);
+
+  if (plan_num >= 2)
+    self->cbcr_stride = GST_VIDEO_INFO_PLANE_STRIDE (info, 1);
+
+  self->y_offset =  GST_VIDEO_INFO_PLANE_OFFSET (info, 0);
+
+  if (plan_num >= 2)
+    self->cb_offset = GST_VIDEO_INFO_PLANE_OFFSET (info, 1);
+
+  if(plan_num >= 3)
+    self->cr_offset = GST_VIDEO_INFO_PLANE_OFFSET (info, 2);
 }
 
 static GstBuffer *
@@ -690,7 +716,6 @@ gst_bm_jpeg_enc_convert (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
   guint i;
 
   inbuf = frame->input_buffer;
-
   meta = gst_buffer_get_video_meta (inbuf);
   if (meta) {
     for (i = 0; i < meta->n_planes; i++) {
@@ -715,26 +740,27 @@ gst_bm_jpeg_enc_convert (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
 
   in_mem = gst_buffer_peek_memory (inbuf, 0);
   out_mem = gst_bm_allocator_import_gst_memory (self->allocator, in_mem);
+
   if (!out_mem)
     goto convert;
 
-  //src_hstride = GST_BM_VIDEO_INFO_HSTRIDE (&src_info);
-  //src_vstride = GST_BM_VIDEO_INFO_VSTRIDE (&src_info);
 
-  //!gst_video_info_align (&dst_info, src_hstride, src_vstride) ||
+  GST_DEBUG ("src_hstride %d , src_vstride %d",
+            GST_BM_JPEG_VIDEO_INFO_HSTRIDE (&src_info),
+            GST_BM_JPEG_VIDEO_INFO_VSTRIDE (&src_info));
+
   if (!gst_bm_jpeg_enc_video_info_align (&dst_info)) {
     GST_DEBUG_OBJECT (self,"align fail \n");
     goto convert;
   }
 
- // gst_bm_enc_apply_strides (encoder, src_hstride, src_vstride);
   if (!gst_bm_jpeg_enc_apply_properties (encoder)) {
     GST_DEBUG_OBJECT (self,"apply fail \n");
     goto err;
   }
 
   gst_buffer_append_memory (outbuf, out_mem);
-
+  dst_info = src_info;
   GST_DEBUG_OBJECT (self, "using imported buffer");
   goto out;
 
@@ -748,7 +774,6 @@ convert:
     goto err;
 
   gst_buffer_append_memory (outbuf, out_mem);
-
   if (gst_video_frame_map (&src_frame, &src_info, inbuf, GST_MAP_READ)) {
     if (gst_video_frame_map (&dst_frame, &dst_info, outbuf, GST_MAP_WRITE)) {
       GST_VIDEO_ENCODER_STREAM_UNLOCK (encoder);
@@ -763,18 +788,18 @@ convert:
     }
     gst_video_frame_unmap (&src_frame);
   }
-
+  dst_info = self->info;
   GST_DEBUG_OBJECT (self, "using software converted buffer");
 
 out:
   gst_buffer_copy_into (outbuf, inbuf,
       GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS, 0, 0);
-
-  dst_info = self->info;
   gst_buffer_add_video_meta_full (outbuf, GST_VIDEO_FRAME_FLAG_NONE,
       GST_VIDEO_INFO_FORMAT (&dst_info),
       GST_VIDEO_INFO_WIDTH (&dst_info), GST_VIDEO_INFO_HEIGHT (&dst_info),
       GST_VIDEO_INFO_N_PLANES (&dst_info), dst_info.offset, dst_info.stride);
+
+  gst_bm_jpegenc_info_set(self, &dst_info);
 
   return outbuf;
 err:
@@ -853,11 +878,39 @@ gst_bm_jpeg_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * fr
   if (G_UNLIKELY (!buffer))
     goto not_negotiated;
 
+#ifdef DUMP_YUV
+  {
+    GstBuffer *in_buffer;
+    GstMapInfo map_info = GST_MAP_INFO_INIT;
+    char yuv_filename[256] = {0};
+
+    in_buffer = gst_buffer_ref (buffer);
+    if (!gst_buffer_map (in_buffer, &map_info, GST_MAP_READ)) {
+      GST_ERROR_OBJECT (self, "failed to map input buffer");
+      gst_buffer_unref (in_buffer);
+      return GST_FLOW_ERROR;
+    }
+
+    FILE *fp = NULL;
+    sprintf(yuv_filename, "dump_%d.yuv", frame->system_frame_number);
+    fp = fopen (yuv_filename, "wb+");
+    if (fp != NULL) {
+      fwrite (map_info.data, map_info.size, 1, fp);
+      fclose (fp);
+    } else {
+      GST_DEBUG_OBJECT (self, "can't open file %s", yuv_filename);
+    }
+    gst_buffer_unmap (in_buffer, &map_info);
+    gst_buffer_unref (in_buffer);
+
+  }
+#endif
   frame->output_buffer = buffer;
   mem = gst_buffer_peek_memory (frame->output_buffer, 0);
   fb_dma_buffer = gst_bm_allocator_get_bm_buffer (mem);
   if (!fb_dma_buffer) {
-    GST_ERROR_OBJECT (self,"gst_bm_allocator get_bm_buffer fail \n");
+    GST_ERROR_OBJECT (self, "gst_bm_allocator get_bm_buffer fail\n");
+    GST_BM_JPEG_ENC_UNLOCK (encoder);
     return GST_FLOW_ERROR;
   }
 
@@ -868,11 +921,9 @@ gst_bm_jpeg_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * fr
   framebuffer.y_offset = self->y_offset;
   framebuffer.cb_offset = self->cb_offset;
   framebuffer.cr_offset = self->cr_offset;
-
   self->params.packed_format  = 0;
   self->params.output_buffer_context = (void*)encoder;
   self->params.write_output_data = gst_bm_jpu_write_output_data;
-
   jpeg_ret = bm_jpu_jpeg_enc_encode(self->bm_jpeg_enc,
                                      &framebuffer,
                                      &self->params,

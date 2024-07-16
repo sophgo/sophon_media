@@ -1,5 +1,9 @@
 #include "gstbmcodeccaps.h"
 
+
+// sink_caps_string need be less than upstream,
+// otherwise will get "Internal data stream error"
+
 const GstBmVideoCodecCapsMap bm_video_codec_caps_map_list[] = {
   {BmVideoCodecID_H264, "h264",
       "video/x-h264, stream-format = (string) byte-stream"
@@ -7,12 +11,13 @@ const GstBmVideoCodecCapsMap bm_video_codec_caps_map_list[] = {
       ", profile = (string) { baseline, main, high }"},
   {BmVideoCodecID_HEVC, "h265",
       "video/x-h265, stream-format = (string) byte-stream"
-      ", alignment = (string) au, profile = (string) { main }"}
+      ", alignment = (string) au, profile = (string) { main }"},
+  {BmVideoCodecID_JPEG, "jpeg", "image/jpeg"}
 };
 
 const gchar * gst_bm_video_codec_to_string (BmVideoCodecID codec_id)
 {
-  gint i;
+  guint i;
 
   for (i = 0; i < G_N_ELEMENTS (bm_video_codec_caps_map_list); i++) {
     if (bm_video_codec_caps_map_list[i].codec_id == codec_id)

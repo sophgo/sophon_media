@@ -1,6 +1,0 @@
-rm -f /opt/sophon/sophon-ffmpeg-latest
-ln -s /opt/sophon/sophon-ffmpeg_1.0.0 /opt/sophon/sophon-ffmpeg-latest
-
-cp -f /opt/sophon/sophon-ffmpeg-latest/data/01_sophon-ffmpeg.conf /etc/ld.so.conf.d/
-ldconfig
-cp -f /opt/sophon/sophon-ffmpeg-latest/data/sophon-ffmpeg-autoconf.sh /etc/profile.d/

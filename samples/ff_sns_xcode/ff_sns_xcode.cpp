@@ -19,6 +19,7 @@ extern "C" {
 
 #define MAX_THREAD_NUM 6
 #define MAX_QUEUE_FRAME 3
+#define PARAM_SET_INDEP 4
 int quit_flag = 0;
 unsigned int count_dec[MAX_THREAD_NUM];
 unsigned int count_enc[MAX_THREAD_NUM];
@@ -35,16 +36,15 @@ VideoEnc_FFMPEG g_writer[MAX_THREAD_NUM];
 VideoDec_FFMPEG g_reader[MAX_THREAD_NUM];
 
 static void usage(char *program_name) {
-    av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s devnum <input dev> <output file> encoder framerate bitrate(kbps) use_isp_chn_num v4l2_buf_num framenum loopflag wdr_on is_yuv_sensor\n", program_name);
+    av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s devnum <input dev> <output file> <wdr_on> <is_yuv_sensor> ... encoder framerate bitrate(kbps) use_isp_chn_num v4l2_buf_num framenum loopflag\n", program_name);
     av_log(NULL, AV_LOG_ERROR, "\tencoder: H264 or H265, H264 is default.\n");
     av_log(NULL, AV_LOG_ERROR, "\tdevnum: must be set to [1,6].\n");
-    av_log(NULL, AV_LOG_ERROR, "\tuse_isp_chn_num: if tuse_isp_chn_num is not 0, it must be the same as devnum for all to have color.\n");
+    av_log(NULL, AV_LOG_ERROR, "\tuse_isp_chn_num: if use_isp_chn_num is not 0, it must be the same as devnum for all to have color.\n");
     av_log(NULL, AV_LOG_ERROR, "\tloopflag: If it is 0, it will encode and decode based on the number of frames; if it is 1, it will continuously encode and decode without generating valid videoes.\n");
     av_log(NULL, AV_LOG_ERROR, "\twdr_on: open the wdr mode or not\n");
     av_log(NULL, AV_LOG_ERROR, "\tis_yuv_sensor: is yuv sensor or not\n");
     av_log(NULL, AV_LOG_ERROR, "Examples:\n");
-    av_log(NULL, AV_LOG_ERROR, "\t%s 2 /dev/video0 /dev/video1 /mnt/video0.264 /mnt/video1.264 H264 30 3000 2 8 100 0 0 0\n", program_name);
-    av_log(NULL, AV_LOG_ERROR, "\t%s 1 /dev/video0 /mnt/video0.264 H264 30 3000 1 10 100 0 0 0\n", program_name);
+    av_log(NULL, AV_LOG_ERROR, "\t%s 6 /dev/video0 /mnt/video0.264 0 0 /dev/video1 /mnt/video1.264 0 0 /dev/video2 /mnt/video2.264 0 0 /dev/video3 /mnt/video3.264 0 0 /dev/video4 /mnt/video4.264 0 0 /dev/video5 /mnt/video5.264 0 0 H264 30 3000 6 10 901 0\n", program_name);
 }
 
 void handler(int sig) {
@@ -53,7 +53,7 @@ void handler(int sig) {
 }
 
 int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, int v4l2_buf_num,
-                        int use_isp_chn_num, int wdr_on, int is_yuv_sensor, int index);
+                        int use_isp_chn_num, int wdr_on, int is_yuv_sensor, int outputCount, int index);
 int video_encoder_pthread(const char* output_file, int enccodec_id, int framerate, int bitrate, int index);
 
 int main(int argc, char **argv) {
@@ -66,8 +66,6 @@ int main(int argc, char **argv) {
     int v4l2_buf_num = 8;
     int use_isp_chn_num = 1;
     int enccodec_id = AV_CODEC_ID_H264;
-    int wdr_on = 0;
-    int is_yuv_sensor = 0;
     std::thread threads[MAX_THREAD_NUM];
     signal(SIGINT,handler);
     signal(SIGTERM,handler);
@@ -83,18 +81,22 @@ int main(int argc, char **argv) {
     }
     std::string outputFiles[outputCount];
     std::string inputFiles[outputCount];
+    int wdr_off_on[outputCount];
+    int yuv_sensor[outputCount];
     for (int i = 0; i < outputCount; i++) {
-        inputFiles[i] = argv[i + 2];
-        outputFiles[i] = argv[i + outputCount + 2];
+        inputFiles[i] = argv[i*PARAM_SET_INDEP + 2];
+        outputFiles[i] = argv[i*PARAM_SET_INDEP  + 3];
+        wdr_off_on[i] = atoi(argv[i*PARAM_SET_INDEP + 4]);
+        yuv_sensor[i] = atoi(argv[i*PARAM_SET_INDEP + 5]);
     }
 
-    if (argc > 2*outputCount+2) {
-        if (strstr(argv[2*outputCount+2],"H265") != NULL) {
+    if (argc > outputCount*PARAM_SET_INDEP + 2) {
+        if (strstr(argv[outputCount*PARAM_SET_INDEP + 2],"H265") != NULL) {
            enccodec_id = AV_CODEC_ID_H265;
         }
     }
-    if (argc > 2*outputCount+3) {
-        int temp = atoi(argv[2*outputCount+3]);
+    if (argc > outputCount*PARAM_SET_INDEP + 3) {
+        int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 3]);
         if (temp >10 && temp <= 60) {
              framerate = temp;
         } else {
@@ -103,8 +105,8 @@ int main(int argc, char **argv) {
         }
         av_log(NULL, AV_LOG_INFO, "framerate = %d \n",framerate);
     }
-    if (argc > 2*outputCount+4) {
-        int temp = atoi(argv[2*outputCount+4]);
+    if (argc > outputCount*PARAM_SET_INDEP + 4) {
+        int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 4]);
         if (temp >500 && temp < 10000) {
              bitrate = temp*1000;
         } else {
@@ -113,8 +115,8 @@ int main(int argc, char **argv) {
         }
         av_log(NULL, AV_LOG_INFO, "bitrate = %d \n", bitrate);
     }
-    if (argc > 2*outputCount+5) {
-        int temp = atoi(argv[2*outputCount+5]);
+    if (argc > outputCount*PARAM_SET_INDEP + 5) {
+        int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 5]);
         if (temp >= 0 && temp <= 6) {
             use_isp_chn_num = temp;
         } else {
@@ -123,8 +125,8 @@ int main(int argc, char **argv) {
         }
         av_log(NULL, AV_LOG_INFO, "use_isp_chn_num = %d \n", use_isp_chn_num);
     }
-    if (argc > 2*outputCount+6) {
-        int temp = atoi(argv[2*outputCount+6]);
+    if (argc > outputCount*PARAM_SET_INDEP + 6) {
+        int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 6]);
         if (temp > 0 && temp < 32) {
             v4l2_buf_num = temp;
         } else {
@@ -133,8 +135,8 @@ int main(int argc, char **argv) {
         }
         av_log(NULL, AV_LOG_INFO, "v4l2_buf_num = %d \n", v4l2_buf_num);
     }
-    if (argc > 2*outputCount+7) {
-        int temp = atoi(argv[2*outputCount+7]);
+    if (argc > outputCount*PARAM_SET_INDEP + 7) {
+        int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 7]);
         if (temp >= 1) {
             framenum = temp;
         } else {
@@ -143,29 +145,13 @@ int main(int argc, char **argv) {
         }
         av_log(NULL, AV_LOG_INFO, "framenum = %d \n", framenum);
     }
-    if (argc > 2*outputCount+8) {
-        int temp = atoi(argv[2*outputCount+8]);
+    if (argc > outputCount*PARAM_SET_INDEP + 8) {
+        int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 8]);
         if (temp == 1) {
             loopflag = temp;
             av_log(NULL, AV_LOG_WARNING, "endless loop is opening , video isn't saved ");
         }
         av_log(NULL, AV_LOG_INFO, "loopflag = %d \n", loopflag);
-    }
-
-    if (argc > 2*outputCount + 9) {
-        int temp = atoi(argv[2*outputCount + 9]);
-        if (temp == 1) {
-            wdr_on = temp;
-        }
-        av_log(NULL, AV_LOG_INFO, "wdr_on = %d \n", wdr_on);
-    }
-
-    if (argc > 2*outputCount + 10) {
-        int temp = atoi(argv[2*outputCount + 10]);
-        if (temp == 1) {
-            is_yuv_sensor = temp;
-        }
-        av_log(NULL, AV_LOG_INFO, "is_yuv_sensor = %d \n", is_yuv_sensor);
     }
 
     ret = bm_dev_request(&g_bmHandle, 0);
@@ -176,7 +162,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < outputCount; i++) {
         dec_thread[i] = std::thread(video_decoder_pthread, inputFiles[i].c_str(), sophon_idx, framenum, v4l2_buf_num,
-                                    use_isp_chn_num, wdr_on, is_yuv_sensor, i);
+                                    use_isp_chn_num, wdr_off_on[i], yuv_sensor[i], outputCount, i);
         enc_thread[i] = std::thread(video_encoder_pthread, outputFiles[i].c_str(), enccodec_id, framerate, bitrate, i);
         usleep(10000);
     }
@@ -202,20 +188,21 @@ int main(int argc, char **argv) {
 }
 
 int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, int v4l2_buf_num,
-                        int use_isp_chn_num, int wdr_on, int is_yuv_sensor, int index) {
+                        int use_isp_chn_num, int wdr_on, int is_yuv_sensor, int outputCount, int index) {
     VideoDec_FFMPEG* reader = &g_reader[index];
     pthread_t tid = pthread_self();
     std::shared_ptr<AVFrame> frame;
-    struct timeval tv1, tv2;
+    auto startTime = std::chrono::steady_clock::now();
+    auto currentTime = std::chrono::steady_clock::now();
+    std::chrono::milliseconds::rep elapsedTime;
     int ret = 0, cur = 0;
     float time = 0;
-    ret = reader->openDec(input_file, 9, sophon_idx, v4l2_buf_num, use_isp_chn_num, wdr_on, is_yuv_sensor);
+    ret = reader->openDec(input_file, 9, sophon_idx, v4l2_buf_num, use_isp_chn_num, wdr_on, is_yuv_sensor, outputCount);
     if (ret < 0) {
         av_log(NULL, AV_LOG_INFO, "#################open input media failed  ##########\n");
         return -1;
     }
 
-    gettimeofday(&tv1, NULL);
     while (!quit_flag && cur++ <= framenum) {
         frame = std::shared_ptr<AVFrame>(av_frame_alloc(), [](AVFrame* p){av_frame_unref(p); av_frame_free(&p);});
         ret = reader->grabFrame(frame.get());
@@ -232,11 +219,15 @@ int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, 
         count_dec[index]++;
         g_enc_queue_lock[index].unlock();
 
-        if ((count_dec[index]+1) % 300 == 0) {
-            gettimeofday(&tv2, NULL);
-            time = (tv2.tv_sec - tv1.tv_sec)*1000 + (tv2.tv_usec - tv1.tv_usec)/1000;
-            fps_dec[index] = (float)count_dec[index]*1000/time;
+        if (count_dec[index] == 300) {
+            currentTime = std::chrono::steady_clock::now();
+            elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count();
+
+            fps_dec[index] = static_cast<float>(count_dec[index]) / (elapsedTime / 1000.0f);
             av_log(NULL, AV_LOG_INFO, "current decoder process %lu is %f fps!\n", (unsigned long)tid, fps_dec[index]);
+
+            count_dec[index] = 0;
+            startTime = currentTime;
         }
         if (loopflag) cur = 0;
     }
@@ -269,10 +260,11 @@ int video_encoder_pthread(const char* output_file, int enccodec_id, int framerat
     pthread_t tid = pthread_self();
     std::shared_ptr<AVFrame> frame;
     std::shared_ptr<AVFrame> out_frame;
-    struct timeval tv1, tv2;
+    auto startTime = std::chrono::steady_clock::now();
+    auto currentTime = std::chrono::steady_clock::now();
+    std::chrono::milliseconds::rep elapsedTime;
     int ret = 0;
     float time = 0;
-    gettimeofday(&tv1, NULL);
 
     while (!quit_flag) {
 
@@ -320,11 +312,15 @@ int video_encoder_pthread(const char* output_file, int enccodec_id, int framerat
 
         count_enc[index]++;
 
-        if ((count_enc[index]+1) % 300 == 0) {
-            gettimeofday(&tv2, NULL);
-            time = (tv2.tv_sec - tv1.tv_sec)*1000 + (tv2.tv_usec - tv1.tv_usec)/1000;
-            fps_enc[index] = (float)count_enc[index]*1000/time;
+        if (count_enc[index] == 300) {
+            currentTime = std::chrono::steady_clock::now();
+            elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count();
+
+            fps_enc[index] = static_cast<float>(count_enc[index]) / (elapsedTime / 1000.0f);
             av_log(NULL, AV_LOG_INFO, "current encoder process %lu is %f fps!\n", (unsigned long)tid, fps_enc[index]);
+
+            count_enc[index] = 0;
+            startTime = currentTime;
         }
 
     }

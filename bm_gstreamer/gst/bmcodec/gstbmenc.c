@@ -25,6 +25,7 @@
 #include <string.h>
 #include "gstbmenc.h"
 #include "gstbmallocator.h"
+#include <stdio.h>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
@@ -84,13 +85,21 @@ G_DEFINE_ABSTRACT_TYPE (GstBmEnc, gst_bm_enc, GST_TYPE_VIDEO_ENCODER);
 #define DEFAULT_PROP_HEIGHT 0   /* Original */
 #define DEFAULT_FPS 30
 #define DEFAULT_PROP_GOP_PRESET 2
+#define DEFAULT_PROP_PRESET 2
+#define DEFAULT_PROP_DEALT_QP 2
+#define DEFAULT_PROP_CQP -1
+#define DEFAULT_PROP_MB_RC 1
 enum
 {
   PROP_0,
   PROP_GOP,
   PROP_GOP_PRESET,
+  PROP_PRESET,
   PROP_BPS,
   PROP_BPS_CHANGE_POS,
+  PROP_DEALT_QP,
+  PROP_CQP,
+  PROP_MB_RC,
   PROP_WIDTH,
   PROP_HEIGHT,
   PROP_LAST,
@@ -112,6 +121,7 @@ struct gst_bm_format gst_bm_formats[] = {
   GST_BM_FORMAT (NV12, NV12, 1, 1),
   GST_BM_FORMAT (NV21, NV21, 1, 1),
   GST_BM_FORMAT (NV16, NV16, 1, 1),
+  GST_BM_FORMAT (Y42B, YUV422, 1, 1),
   GST_BM_FORMAT (Y444, YUV444, 1, 1),
 };
 
@@ -122,6 +132,69 @@ struct gst_bm_format gst_bm_formats[] = {
     if (_tmp->type ## _format == (format)) break;\
   }; _tmp; \
 })
+
+static const char * const bm_preset_names[] = { "slow", "medium", "fast", 0 };
+#define GST_BM_ENC_PRESET_TYPE (gst_bm_enc_preset_get_type())
+static GType
+gst_bm_enc_preset_get_type (void)
+{
+  static GType speed_preset = 0;
+  static GEnumValue *speed_presets;
+  int n, i;
+
+  if (speed_preset != 0)
+    return speed_preset;
+
+  n = 0;
+  while (bm_preset_names[n] != NULL)
+    n++;
+
+  speed_presets = g_new0 (GEnumValue, n + 2);
+
+  for (i = 0; i < n; i++) {
+    speed_presets[i].value = i;
+    speed_presets[i].value_name = bm_preset_names[i];
+    speed_presets[i].value_nick = bm_preset_names[i];
+  }
+
+  speed_preset = g_enum_register_static ("GstBmSpeedPreset", speed_presets);
+
+  return speed_preset;
+}
+
+static const char * const bm_gop_preset_names[] = { "all-I", "I-P-P", "I-B-B-B",
+"I-B-P-B-P","I-B-B-B-P","I-P-P-P-P", "I-B-B-B-B-B-B-B-B", 0 };
+#define GST_BM_ENC_GOP_PRESET_TYPE (gst_bm_enc_gop_preset_get_type())
+static GType
+gst_bm_enc_gop_preset_get_type (void)
+{
+  static GType gop_preset = 0;
+  static GEnumValue *gop_preset_values;
+  int n, i;
+
+  if (gop_preset != 0)
+    return gop_preset;
+
+  n = 0;
+  while (bm_gop_preset_names[n] != NULL)
+    n++;
+
+  gop_preset_values = g_new0 (GEnumValue, n + 2);
+
+  gop_preset_values[0].value = 0;
+  gop_preset_values[0].value_name = "No set";
+  gop_preset_values[0].value_nick = "No set";
+
+  for (i = 0; i < n; i++) {
+    gop_preset_values[i + 1].value = i + 1;
+    gop_preset_values[i + 1].value_name = bm_gop_preset_names[i];
+    gop_preset_values[i + 1].value_nick = bm_gop_preset_names[i];
+  }
+
+  gop_preset = g_enum_register_static ("GstBmGopPreset", gop_preset_values);
+
+  return gop_preset;
+}
 
 
 guint
@@ -165,7 +238,7 @@ gst_bm_enc_video_info_align (GstVideoInfo * info)
     hstride = GST_BM_ALIGN (GST_BM_VIDEO_INFO_HSTRIDE (info));
 
   if (!vstride)
-    vstride = GST_BM_ALIGN (GST_BM_VIDEO_INFO_VSTRIDE (info));
+    vstride = GST_BM_VIDEO_INFO_VSTRIDE (info);
 
   if (hstride == GST_BM_VIDEO_INFO_HSTRIDE (info) &&
       vstride == GST_BM_VIDEO_INFO_VSTRIDE (info))
@@ -230,7 +303,7 @@ gst_bm_enc_set_property (GObject * object,
       break;
     }
     case PROP_GOP_PRESET: {
-      guint gop_preset = g_value_get_uint (value);
+      gint gop_preset = g_value_get_enum (value);
       if (self->gop_preset == gop_preset)
         return;
       self->gop_preset = gop_preset;
@@ -266,6 +339,37 @@ gst_bm_enc_set_property (GObject * object,
         self->height = g_value_get_uint (value);
       return;
     }
+    case PROP_PRESET:{
+      gint preset = g_value_get_enum (value);
+      if (self->preset == preset)
+        return;
+      self->preset = preset;
+      break;
+    }
+    case PROP_DEALT_QP:{
+      gint dealt_qp = g_value_get_int (value);
+      if (self->dealt_qp == dealt_qp)
+        return;
+
+      self->dealt_qp = dealt_qp;
+      break;
+    }
+    case PROP_CQP:{
+      gint cqp = g_value_get_int (value);
+      if (self->cqp == cqp)
+        return;
+
+      self->cqp = cqp;
+      break;
+    }
+    case PROP_MB_RC:{
+      guint mb_rc = g_value_get_uint (value);
+      if (self->mb_rc == mb_rc)
+        return;
+
+      self->mb_rc = mb_rc;
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       return;
@@ -286,7 +390,7 @@ gst_bm_enc_get_property (GObject * object,
       g_value_set_int (value, self->gop);
       break;
     case PROP_GOP_PRESET:
-      g_value_set_uint (value, self->gop_preset);
+      g_value_set_enum (value, self->gop_preset);
       break;
     case PROP_BPS:
       g_value_set_uint (value, self->bps);
@@ -300,6 +404,20 @@ gst_bm_enc_get_property (GObject * object,
     case PROP_HEIGHT:
       g_value_set_uint (value, self->height);
       break;
+     case PROP_PRESET:
+      g_value_set_enum (value, self->preset);
+      break;
+    case PROP_DEALT_QP:
+      g_value_set_int (value, self->dealt_qp);
+      break;
+    case PROP_CQP:{
+      g_value_set_int (value, self->cqp);
+      break;
+    }
+    case PROP_MB_RC:{
+      g_value_set_uint (value, self->mb_rc);
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       return;
@@ -322,12 +440,17 @@ gst_bm_enc_apply_properties (GstVideoEncoder * encoder)
   self->params.intra_period = self->gop < 0 ? fps : self->gop;
 
   if (!self->bps)
-    self->bps =
-        GST_VIDEO_INFO_WIDTH (info) * GST_VIDEO_INFO_HEIGHT (info) / 8 * fps;
+    self->bps = GST_VIDEO_INFO_WIDTH (info) * GST_VIDEO_INFO_HEIGHT (info) / 8 * fps;
+
   self->params.bitrate = self->bps;
+  self->params.intra_period = self->gop;
   self->params.fps_num = fps_num;
   self->params.fps_den = fps_denorm;
   self->params.gop_preset = self->gop_preset;
+  self->params.enc_mode = self->preset;
+  self->params.delta_qp = self->dealt_qp;
+  self->params.cqp = self->cqp;
+  self->params.mb_rc = self->mb_rc;
   return TRUE;
 }
 
@@ -473,8 +596,10 @@ gst_bm_enc_stop (GstVideoEncoder * encoder)
   g_mutex_clear (&self->mutex);
 
   bmvpu_enc_close(self->bmVenc);
-
-  gst_object_unref (self->allocator);
+  if (self->allocator) {
+    gst_object_unref (self->allocator);
+    self->allocator= NULL;
+  }
 
   if (self->input_state)
     gst_video_codec_state_unref (self->input_state);
@@ -511,12 +636,69 @@ gst_bm_enc_finish (GstVideoEncoder * encoder)
   return GST_FLOW_OK;
 }
 
+static void
+gst_bm_enc_format_info_set(GstBmEnc *self, GstVideoInfo *info) {
+  gint hstride, vstride, cstride, c_size = 0;
+  BmVpuColorFormat format;
+
+  hstride = GST_VIDEO_INFO_PLANE_STRIDE (info, 0);
+  cstride = GST_VIDEO_INFO_PLANE_STRIDE (info, 1);
+  vstride = GST_BM_VIDEO_INFO_VSTRIDE (info);
+
+  switch (GST_VIDEO_INFO_FORMAT (info))
+  {
+      case GST_VIDEO_FORMAT_I420:
+          format = BM_VPU_COLOR_FORMAT_YUV420;
+          self->params.chroma_interleave = 0;
+          c_size = cstride * vstride >> 1;
+          break;
+      case GST_VIDEO_FORMAT_NV12:
+          format = BM_VPU_COLOR_FORMAT_NV12;
+          self->params.chroma_interleave = 1;
+          c_size = cstride * vstride >> 1;
+          break;
+      case GST_VIDEO_FORMAT_NV21:
+          format = BM_VPU_COLOR_FORMAT_NV21;
+          self->params.chroma_interleave = 2;
+          c_size = cstride * vstride >> 1;
+          break;
+      case GST_VIDEO_FORMAT_Y42B:
+          format = BM_VPU_COLOR_FORMAT_YUV422;
+          self->params.chroma_interleave = 0;
+          c_size = cstride * vstride;
+          break;
+      case GST_VIDEO_FORMAT_NV16 :
+          format = BM_VPU_COLOR_FORMAT_NV16;
+          self->params.chroma_interleave = 1;
+          c_size = cstride * vstride;
+          break;
+      case GST_VIDEO_FORMAT_Y444 :
+          format = BM_VPU_COLOR_FORMAT_YUV444;
+          self->params.chroma_interleave = 0;
+          c_size = cstride * vstride;
+          break;
+      default:
+          format = BM_VPU_COLOR_FORMAT_YUV400 + 1;
+          break;
+  }
+
+  self->params.color_format = format;
+  self->fb_info.width = GST_VIDEO_INFO_WIDTH (info);
+  self->fb_info.height = GST_VIDEO_INFO_HEIGHT (info);
+  self->fb_info.y_stride = hstride;
+  self->fb_info.c_stride = cstride;
+  self->fb_info.h_stride = vstride;
+  self->fb_info.y_size = self->fb_info.y_stride * GST_BM_VIDEO_INFO_VSTRIDE (info);
+  self->fb_info.c_size = c_size;
+  self->fb_info.size = self->fb_info.y_size + self->fb_info.c_size *
+                      (self->params.chroma_interleave ? 1 : 2);
+}
+
 static gboolean
 gst_bm_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
 {
   GstBmEnc *self = GST_BM_ENC (encoder);
   GstVideoInfo *info = &self->info;
-  BmVpuColorFormat format;
   gint width, height;
 
   GST_DEBUG_OBJECT (self, "setting format: %" GST_PTR_FORMAT, state->caps);
@@ -552,49 +734,18 @@ gst_bm_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
    * NOTE: Not checking the strides here, since they might not be the actual
    * ones (could be overrided by video-meta)
    */
-  switch (GST_VIDEO_INFO_FORMAT (info))
-  {
-      case GST_VIDEO_FORMAT_I420:
-          format = BM_VPU_COLOR_FORMAT_YUV420;
-          self->params.chroma_interleave = 0;
-          break;
-      case GST_VIDEO_FORMAT_NV12:
-          format = BM_VPU_COLOR_FORMAT_NV12;
-          self->params.chroma_interleave = 1;
-          break;
-      case GST_VIDEO_FORMAT_NV21:
-          format = BM_VPU_COLOR_FORMAT_NV21;
-          self->params.chroma_interleave = 2;
-          break;
-      case GST_VIDEO_FORMAT_Y42B:
-          format = BM_VPU_COLOR_FORMAT_YUV422;
-          self->params.chroma_interleave = 0;
-          break;
-      case GST_VIDEO_FORMAT_NV16 :
-          format = BM_VPU_COLOR_FORMAT_NV16;
-          self->params.chroma_interleave = 1;
-          break;
-      case GST_VIDEO_FORMAT_Y444 :
-          format = BM_VPU_COLOR_FORMAT_YUV444;
-          self->params.chroma_interleave = 0;
-          break;
-      default:
-          format = BM_VPU_COLOR_FORMAT_YUV400 + 1;
-          break;
-  }
-  if (self->rotation || format > BM_VPU_COLOR_FORMAT_YUV400  ||
+
+  gst_bm_enc_format_info_set(self, info);
+  self->params.frame_width = width;
+  self->params.frame_height = height;
+  if (self->rotation || self->params.color_format > BM_VPU_COLOR_FORMAT_YUV400  ||
       width != GST_VIDEO_INFO_WIDTH (info) ||
       height != GST_VIDEO_INFO_HEIGHT (info)) {
       return FALSE;
-
     /*todo*/
     /* Prefer NV12 when using vpss conversion */
   }
-  g_print("bm enc format = %d \n", format);
-  self->params.color_format = format;
-  self->params.frame_width = width;
-  self->params.frame_height = height;
-  self->params.chroma_interleave = 0;
+
 
   if (!GST_VIDEO_INFO_FPS_N (info) || GST_VIDEO_INFO_FPS_N (info) > 240) {
     GST_WARNING_OBJECT (self, "framerate (%d/%d) is insane!",
@@ -603,18 +754,6 @@ gst_bm_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
   }
   self->params.fps_num = GST_VIDEO_INFO_FPS_N (info);
   self->params.fps_den = GST_VIDEO_INFO_FPS_D (info);
-
-  if (bmvpu_enc_open(&self->bmVenc, &self->params)) {
-     GST_ERROR_OBJECT(self, "bmvpu_enc_open open failed!\n");
-    return FALSE;
-  }
-
-  if (bmvpu_enc_get_initial_info(self->bmVenc, &(self->initial_info))) {
-      GST_ERROR_OBJECT(self, "bmvpu_enc_get_initial_info failed!\n");
-      bmvpu_enc_close(self->bmVenc);
-      return FALSE;
-  }
-  self->fb_info = self->initial_info.src_fb;
   return TRUE;
 }
 
@@ -630,7 +769,6 @@ gst_bm_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
   guint size;
 
   GST_DEBUG_OBJECT (self, "propose allocation");
-
   gst_query_parse_allocation (query, &caps, NULL);
   if (caps == NULL)
     return FALSE;
@@ -655,7 +793,6 @@ gst_bm_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
       "padding-right", G_TYPE_UINT, align.padding_right, NULL);
   gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, params);
   gst_structure_free (params);
-
   pool = gst_video_buffer_pool_new ();
 
   config = gst_buffer_pool_get_config (pool);
@@ -739,7 +876,7 @@ gst_bm_enc_convert (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
   }
 
   gst_buffer_append_memory (outbuf, out_mem);
-
+  dst_info = src_info;
   GST_DEBUG_OBJECT (self, "using imported buffer");
   goto out;
 
@@ -753,10 +890,6 @@ convert:
     goto err;
 
   gst_buffer_append_memory (outbuf, out_mem);
-
- /* if (self->rotation ||
-      GST_VIDEO_INFO_FORMAT (&src_info) != GST_VIDEO_INFO_FORMAT (&dst_info))
-    goto err;*/
 
   if (gst_video_frame_map (&src_frame, &src_info, inbuf, GST_MAP_READ)) {
     if (gst_video_frame_map (&dst_frame, &dst_info, outbuf, GST_MAP_WRITE)) {
@@ -772,18 +905,20 @@ convert:
     }
     gst_video_frame_unmap (&src_frame);
   }
-
+  dst_info = self->info;
   GST_DEBUG_OBJECT (self, "using software converted buffer");
 
 out:
   gst_buffer_copy_into (outbuf, inbuf,
       GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS, 0, 0);
 
-  dst_info = self->info;
+
   gst_buffer_add_video_meta_full (outbuf, GST_VIDEO_FRAME_FLAG_NONE,
       GST_VIDEO_INFO_FORMAT (&dst_info),
       GST_VIDEO_INFO_WIDTH (&dst_info), GST_VIDEO_INFO_HEIGHT (&dst_info),
       GST_VIDEO_INFO_N_PLANES (&dst_info), dst_info.offset, dst_info.stride);
+
+  gst_bm_enc_format_info_set(self, &dst_info);
 
   return outbuf;
 err:
@@ -831,8 +966,10 @@ gst_bm_enc_send_frame (GstVideoEncoder * encoder)
         memset(&self->input_frame, 0, sizeof(BmVpuRawFrame));
         ret = bmvpu_enc_send_frame(self->bmVenc, &(self->input_frame), true);
         if (!ret){
+          g_print("enc eos_send ok \n");
           self->eos_send = TRUE;
         }
+
     }
     return FALSE;
   }
@@ -852,8 +989,13 @@ gst_bm_enc_send_frame (GstVideoEncoder * encoder)
   fb_dma_buffer = gst_bm_allocator_get_bm_buffer (mem);
   if (!fb_dma_buffer) {
     GST_ERROR_OBJECT (self,"gst_bm_allocator get_bm_buffer fail \n");
+    gst_video_codec_frame_unref (frame);
     return FALSE;
   }
+  GST_DEBUG_OBJECT(self, "width %d, height %d, ", self->fb_info.width, self->fb_info.height);
+  GST_DEBUG_OBJECT(self, "y_stride %d, c_stride %d, ", self->fb_info.y_stride, self->fb_info.c_stride);
+  GST_DEBUG_OBJECT(self, "h_stride %d, y_size %d, ", self->fb_info.h_stride, self->fb_info.y_size);
+  GST_DEBUG_OBJECT(self, "c_size %d \n", self->fb_info.c_size);
   bmvpu_fill_framebuffer_params(&framebuffer, &self->fb_info, fb_dma_buffer,
                                frame_idx, NULL);
 
@@ -864,9 +1006,12 @@ gst_bm_enc_send_frame (GstVideoEncoder * encoder)
 	self->input_frame.dts = frame->dts;
 
   ret = bmvpu_enc_send_frame(self->bmVenc, &(self->input_frame), false);
+  gst_video_codec_frame_unref (frame);
   if (ret){  //send frame may fail,so need resend
+    g_usleep (1000);
     return FALSE;
   }
+
   GST_DEBUG_OBJECT (self, "encoding frame %d", frame_number);
   self->frames = g_list_delete_link (self->frames, self->frames);
   return TRUE;
@@ -884,20 +1029,19 @@ gst_bm_enc_get_stream(GstVideoEncoder * encoder)
 
   memset(&encoded_frame, 0, sizeof(BmVpuEncodedFrame));
   bmvpu_enc_get_stream(self->bmVenc, &encoded_frame);
-  if (!encoded_frame.data_len)
+  if (!encoded_frame.data_size)
     return FALSE;
 
   /* Wake up the frame producer */
   self->pending_frames--;
   GST_BM_ENC_BROADCAST (encoder);
 
-  /* This encoded frame must be the oldest one */
-
-  //frame = gst_video_encoder_get_oldest_frame (encoder);
   g_assert(encoded_frame.src_idx < BM_PENDING_MAX);
   frame_number =  self->frame_idx[encoded_frame.src_idx];
-  GST_DEBUG_OBJECT(self,"get stream frame_number %d \n", frame_number);
+  GST_DEBUG_OBJECT(self, "get stream frame_number %d \n", frame_number);
+
   frame = gst_video_encoder_get_frame (encoder, frame_number);
+
   if (self->flushing && !self->draining)
     goto drop;
 
@@ -907,7 +1051,7 @@ gst_bm_enc_get_stream(GstVideoEncoder * encoder)
     self->required_keyframe_number = 0;
   }
 
-  pkt_size = encoded_frame.data_len;
+  pkt_size = encoded_frame.data_size;
   {
     buffer = gst_video_encoder_allocate_output_buffer (encoder, pkt_size);
     if (!buffer)
@@ -922,8 +1066,11 @@ gst_bm_enc_get_stream(GstVideoEncoder * encoder)
   GST_DEBUG_OBJECT (self, "finish frame ts=%" GST_TIME_FORMAT,
       GST_TIME_ARGS (frame->pts));
 
-  gst_video_codec_frame_unref (frame);
   gst_video_encoder_finish_frame (encoder, frame);
+
+  if (encoded_frame.data) {
+    free(encoded_frame.data);
+  }
 
 out:
   return TRUE;
@@ -979,6 +1126,22 @@ gst_bm_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
   GST_DEBUG_OBJECT (self, "handling frame %d", frame->system_frame_number);
 
   GST_BM_ENC_LOCK (encoder);
+  if (!self->is_enc_open) {
+    if (bmvpu_enc_open(&self->bmVenc, &self->params)) {
+      g_print("bmvpu_enc_open open failed!\n");
+      GST_BM_ENC_UNLOCK (encoder);
+      return GST_FLOW_ERROR;
+    }
+
+    if (bmvpu_enc_get_initial_info(self->bmVenc, &(self->initial_info))) {
+        GST_ERROR_OBJECT(self, "bmvpu_enc_get_initial_info failed!\n");
+        bmvpu_enc_close(self->bmVenc);
+        GST_BM_ENC_UNLOCK (encoder);
+        return GST_FLOW_ERROR;
+    }
+   // self->fb_info = self->initial_info.src_fb;
+    self->is_enc_open = true;
+  }
 
   if (G_UNLIKELY (self->flushing))
     goto flushing;
@@ -989,7 +1152,6 @@ gst_bm_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
     gst_pad_start_task (encoder->srcpad,
         (GstTaskFunction) gst_bm_enc_thread, encoder, NULL);
   }
-
   buffer = gst_bm_enc_convert (encoder, frame);
   if (G_UNLIKELY (!buffer))
     goto not_negotiated;
@@ -1055,7 +1217,10 @@ gst_bm_enc_init (GstBmEnc * self)
   self->bps = DEFAULT_PROP_BPS;
   self->change_pos = DEFAULT_PROP_BPS_CHANGE_POS;
   self->prop_dirty = TRUE;
+  self->gop_preset = DEFAULT_PROP_GOP_PRESET;
+  self->cqp = DEFAULT_PROP_CQP;
   self->soc_idx = -1;
+  self->is_enc_open = false;
 }
 
 static void
@@ -1086,9 +1251,9 @@ gst_bm_enc_class_init (GstBmEncClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_GOP_PRESET,
-      g_param_spec_uint ("gop-preset", "Group of pictures preset",
-          "A GOP structure preset option",
-          1, 8, DEFAULT_PROP_GOP_PRESET,
+      g_param_spec_enum ("gop-preset", "Group of pictures preset",
+          "A GOP structure preset option (2 = default)",
+          GST_BM_ENC_GOP_PRESET_TYPE, DEFAULT_PROP_GOP_PRESET,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_BPS,
@@ -1096,13 +1261,37 @@ gst_bm_enc_class_init (GstBmEncClass * klass)
           "Target BPS (0 = auto calculate)",
           0, G_MAXINT, DEFAULT_PROP_BPS,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
+#if 0
   g_object_class_install_property (gobject_class, PROP_BPS_CHANGE_POS,
       g_param_spec_uint ("bps-change-pos", "bps change pos",
           "bps change pos (20 = auto calculate)",
           20, 100, DEFAULT_PROP_BPS_CHANGE_POS,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+#endif
+  g_object_class_install_property (gobject_class, PROP_PRESET,
+      g_param_spec_enum ("speed-preset", "Speed preset",
+          "Preset name for speed/quality tradeoff options",
+          GST_BM_ENC_PRESET_TYPE, DEFAULT_PROP_PRESET,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_DEALT_QP,
+      g_param_spec_int ("dealt-qp", "Delta QP between I and P",
+          "Delta QP between I and P (-2 = default)",
+          -4, 8, DEFAULT_PROP_DEALT_QP,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_CQP,
+      g_param_spec_int ("cqp", "quantization parameter for constant quality mode",
+          "constant quality mode (-1 = default)",
+          -1, 51, DEFAULT_PROP_CQP,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+#if 0
+  g_object_class_install_property (gobject_class, PROP_MB_RC,
+      g_param_spec_uint ("mb-rc", "MB-level/CU-level rate control",
+          "Enable MB-level/CU-level rate control (1 = default)",
+          0, 1, DEFAULT_PROP_MB_RC,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+#endif
   element_class->change_state = GST_DEBUG_FUNCPTR (gst_bm_enc_change_state);
 }
 

@@ -1,0 +1,13 @@
+# prefix is according to cmake binary path when building gst plugin
+prefix=../../../../prebuilt
+libdir=${prefix}/lib/gst
+includedir=${prefix}/include/gst/gstreamer-1.0
+
+Name: GStreamer Tag Library
+Description: Tag base classes and helper functions
+Requires: gstreamer-1.0
+Version: 1.16.3
+Libs: -L${libdir} -lgsttag-1.0
+Libs.private: -lz
+Cflags: -I${includedir}
+

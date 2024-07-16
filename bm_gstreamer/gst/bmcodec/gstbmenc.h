@@ -79,8 +79,12 @@ struct _GstBmEnc
   gint frame_idx[BM_PENDING_MAX];
 
   gint gop;
-  guint gop_preset;
+  gint gop_preset;
   guint max_reenc;
+  gint preset;
+  gint dealt_qp;
+  gint cqp;
+  guint mb_rc;
 
   guint bps;
   guint change_pos;
@@ -88,14 +92,14 @@ struct _GstBmEnc
   guint bps_max;
 
   gboolean prop_dirty;
-
+  gboolean is_enc_open;
   BmVpuCodecFormat codec_type;
   BmVpuRawFrame  input_frame;
   BmVpuEncoder  *bmVenc;
 };
 
 #define BM_ENC_IN_FORMATS \
-    "NV12, I420, N21, NV16, YUV422, YUV444" \
+    "NV12, I420, NV21" \
 
 #ifdef HAVE_VPSS
 #define BM_ENC_FORMATS BM_ENC_IN_FORMATS
