@@ -1,0 +1,11 @@
+module:daily_build(master)
+commit: b0bfcc4b54117b301bcb34bfd740c3eac0ff7910
+
+module:sophon_media(release)
+commit: e0ac2667aa37c7f3279a731aa3c9c7176340c85c
+
+module:libsophav(release)
+commit: 1b2f3093f56d23a254d230a44206c1684f0642f5
+
+module:sophgo-develop-docs(master)
+commit: 9f3e22c13521a760bdcc9096f3b6a05ee169da86
