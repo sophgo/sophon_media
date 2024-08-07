@@ -1,0 +1,11 @@
+sophon-media-soc-sophon-gstreamer_1.7.0_arm64.deb filter=lfs diff=lfs merge=lfs -text
+sophon-media-soc-sophon-opencv_1.7.0_arm64.deb filter=lfs diff=lfs merge=lfs -text
+sophon-media-soc-sophon-sample_1.7.0_arm64.deb filter=lfs diff=lfs merge=lfs -text
+sophon-media-soc_1.7.0_aarch64.tar.gz filter=lfs diff=lfs merge=lfs -text
+sophon_media.MD5 filter=lfs diff=lfs merge=lfs -text
+doc filter=lfs diff=lfs merge=lfs -text
+release_version.txt filter=lfs diff=lfs merge=lfs -text
+sophon-media-soc-sophon-ffmpeg-dev_1.7.0_arm64.deb filter=lfs diff=lfs merge=lfs -text
+sophon-media-soc-sophon-ffmpeg_1.7.0_arm64.deb filter=lfs diff=lfs merge=lfs -text
+sophon-media-soc-sophon-gstreamer-dev_1.7.0_arm64.deb filter=lfs diff=lfs merge=lfs -text
+sophon-media-soc-sophon-opencv-dev_1.7.0_arm64.deb filter=lfs diff=lfs merge=lfs -text
