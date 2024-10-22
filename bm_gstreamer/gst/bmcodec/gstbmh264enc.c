@@ -30,8 +30,8 @@
 #define GST_BM_H264_ENC(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
     GST_TYPE_BM_H264_ENC, GstBmH264Enc))
 
+GST_DEBUG_CATEGORY (bm_h264_enc_debug);
 #define GST_CAT_DEFAULT bm_h264_enc_debug
-GST_DEBUG_CATEGORY (GST_CAT_DEFAULT);
 
 typedef enum
 {
@@ -356,7 +356,7 @@ gst_bm_h264_enc_class_init (GstBmH264EncClass * klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
 
-  GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "bmh264enc", 0,
+  GST_DEBUG_CATEGORY_INIT (bm_h264_enc_debug, "bmh264enc", 0,
       "BM H264 ex");
 
   encoder_class->set_format = GST_DEBUG_FUNCPTR (gst_bm_h264_enc_set_format);

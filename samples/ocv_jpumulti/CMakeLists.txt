@@ -5,9 +5,13 @@ PROJECT(ocv_jpumulti)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../bm_ffmpeg)
 
-# libmbcv
+# libbmcv
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/include)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+if("${GCC_VERSION}" STREQUAL "930")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib930/${PLATFORM})
+else()
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+endif()
 
 #jpeg
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/jpeg/inc)
@@ -46,5 +50,9 @@ SET(SRCS
 )
 
 add_executable(test_ocv_jpumulti EXCLUDE_FROM_ALL ${SRCS})
-target_link_libraries(test_ocv_jpumulti opencv_core opencv_imgcodecs ${SYSTEM_LIB})
-
+if("${GCC_VERSION}" STREQUAL "930")
+    set(EXTRA_LIB yuv bmlib bmjpeg bmcv avutil opencv_imgproc)
+    target_link_libraries(test_ocv_jpumulti opencv_core opencv_imgcodecs ${SYSTEM_LIB} ${EXTRA_LIB})
+else()
+    target_link_libraries(test_ocv_jpumulti opencv_core opencv_imgcodecs ${SYSTEM_LIB})
+endif()

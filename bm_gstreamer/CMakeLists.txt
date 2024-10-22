@@ -28,7 +28,11 @@ endif()
 
 # check gstreamer framework and core plugins
 find_package(PkgConfig REQUIRED)
-set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${CMAKE_CURRENT_SOURCE_DIR}/../prebuilt/lib/pkgconfig/gst")
+if("${GCC_VERSION}" STREQUAL "930")
+    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${CMAKE_CURRENT_SOURCE_DIR}/../prebuilt/lib930/pkgconfig/gst")
+else()
+    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${CMAKE_CURRENT_SOURCE_DIR}/../prebuilt/lib/pkgconfig/gst")
+endif()
 
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 pkg_check_modules(GMODULE REQUIRED gmodule-no-export-2.0)
@@ -65,8 +69,14 @@ set(GST_LOCATION_PREFIX ${GST_COMPONENT}_${PROJECT_VERSION})
 add_subdirectory(gst/bm_allocator)
 add_subdirectory(gst/bmcodec)
 add_subdirectory(gst/bmvpss)
+add_subdirectory(gst/bmv4l2src)
+add_subdirectory(gst/bmive)
+add_subdirectory(gst/bmdpu)
+add_subdirectory(gst/bmdwa)
+add_subdirectory(gst/bmstitch2way)
+add_subdirectory(gst/bmstitch4way)
 
-add_custom_target(bm_gstreamer_all ALL DEPENDS bm_allocator_all bmcodec_all bmvpss_all)
+add_custom_target(bm_gstreamer_all ALL DEPENDS bm_allocator_all bmcodec_all bmvpss_all bmive_all)
 
 # install runtime config files
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/debian_script/03_sophon-gstreamer.conf

@@ -15,6 +15,22 @@
 GST_DEBUG_CATEGORY (gst_bm_vpss_debug);
 #define GST_CAT_DEFAULT gst_bm_vpss_debug
 
+enum
+{
+  PROP_0,
+  PROP_LEFT,
+  PROP_RIGHT,
+  PROP_TOP,
+  PROP_BOTTOM,
+  PROP_PADDING_STX,
+  PROP_PADDING_STY,
+  PROP_PADDING_W,
+  PROP_PADDING_H,
+  PROP_PADDING_R,
+  PROP_PADDING_G,
+  PROP_PADDING_B
+};
+
 static gboolean gst_bm_vpss_start (GstBaseTransform * trans);
 static gboolean gst_bm_vpss_stop (GstBaseTransform * trans);
 static GstCaps *gst_bmvpss_transform_caps(GstBaseTransform *trans,
@@ -30,16 +46,161 @@ static int map_gstformat_to_bmformat(GstVideoFormat gst_format);
 G_DEFINE_TYPE(GstBmVPSS, gst_bm_vpss, GST_TYPE_VIDEO_FILTER);
 
 static void
+gst_bm_vpss_set_property(GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstBmVPSS *self = GST_BM_VPSS (object);
+
+  switch (prop_id) {
+    case PROP_LEFT:
+      self->crop_left = g_value_get_int(value);
+      break;
+    case PROP_RIGHT:
+      self->crop_right = g_value_get_int(value);
+      break;
+    case PROP_TOP:
+      self->crop_top = g_value_get_int(value);
+      break;
+    case PROP_BOTTOM:
+      self->crop_bottom = g_value_get_int(value);
+      break;
+    case PROP_PADDING_STX:
+      self->padding_dst_stx = g_value_get_int(value);
+      break;
+    case PROP_PADDING_STY:
+      self->padding_dst_sty = g_value_get_int(value);
+      break;
+    case PROP_PADDING_W:
+      self->padding_dst_w = g_value_get_int(value);
+      break;
+    case PROP_PADDING_H:
+      self->padding_dst_h = g_value_get_int(value);
+      break;
+    case PROP_PADDING_R:
+      self->padding_r = g_value_get_uint(value);
+      self->padding_if_memset = 1;
+      break;
+    case PROP_PADDING_G:
+      self->padding_g = g_value_get_uint(value);
+      break;
+    case PROP_PADDING_B:
+      self->padding_b = g_value_get_uint(value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+  if (self->crop_bottom > 0 && self->crop_right > 0) {
+    self->crop_enable = TRUE;
+    GST_DEBUG_OBJECT(
+        self, "Current crop settings - Left: %d, Right: %d, Top: %d, Bottom: %d",
+        self->crop_left, self->crop_right, self->crop_top, self->crop_bottom);
+  }
+  if (self->padding_dst_w > 0 && self->padding_dst_h > 0) {
+    self->padding_enable = TRUE;
+    GST_DEBUG_OBJECT(self,
+                     "Current padding settings - STX:%d, STY: %d, W: %d, H: "
+                     "%d, R: %d, G: %d, B: %d, if_memset: %d",
+                     self->padding_dst_stx, self->padding_dst_sty,
+                     self->padding_dst_w, self->padding_dst_h, self->padding_r,
+                     self->padding_g, self->padding_b, self->padding_if_memset);
+  }
+}
+
+static void
+gst_bm_vpss_get_property (GObject * object, guint prop_id, GValue * value,
+    GParamSpec * pspec)
+{
+  GstBmVPSS *self = GST_BM_VPSS (object);
+  switch (prop_id) {
+    case PROP_LEFT:
+      g_value_set_int (value, self->crop_left);
+      break;
+    case PROP_RIGHT:
+      g_value_set_int (value, self->crop_right);
+      break;
+    case PROP_TOP:
+      g_value_set_int (value, self->crop_top);
+      break;
+    case PROP_BOTTOM:
+      g_value_set_int (value, self->crop_bottom);
+      break;
+    case PROP_PADDING_STX:
+      g_value_set_int (value, self->padding_dst_stx);
+      break;
+    case PROP_PADDING_STY:
+      g_value_set_int (value, self->padding_dst_sty);
+      break;
+    case PROP_PADDING_W:
+      g_value_set_int (value, self->padding_dst_w);
+      break;
+    case PROP_PADDING_H:
+      g_value_set_int (value, self->padding_dst_h);
+      break;
+    case PROP_PADDING_R:
+      g_value_set_int (value, self->padding_r);
+      break;
+    case PROP_PADDING_G:
+      g_value_set_int (value, self->padding_g);
+      break;
+    case PROP_PADDING_B:
+      g_value_set_int (value, self->padding_b);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
 gst_bm_vpss_class_init (GstBmVPSSClass * klass)
 {
+  GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
   GstBaseTransformClass *base_transform_class = GST_BASE_TRANSFORM_CLASS(klass);
   GstVideoFilterClass *video_filter_class = GST_VIDEO_FILTER_CLASS(klass);
+
+  gobject_class->set_property = GST_DEBUG_FUNCPTR(gst_bm_vpss_set_property);
+  gobject_class->get_property = GST_DEBUG_FUNCPTR(gst_bm_vpss_get_property);
 
   base_transform_class->start = GST_DEBUG_FUNCPTR(gst_bm_vpss_start);
   base_transform_class->stop = GST_DEBUG_FUNCPTR(gst_bm_vpss_stop);
   base_transform_class->transform_caps = GST_DEBUG_FUNCPTR(gst_bmvpss_transform_caps);
 
   video_filter_class->transform_frame = GST_DEBUG_FUNCPTR(gst_bm_vpss_transform_frame);
+
+  g_object_class_install_property (gobject_class, PROP_LEFT,
+      g_param_spec_int ("left", "Left","Pixels to crop at left ", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_RIGHT,
+      g_param_spec_int ("right", "Right","Pixels to crop at right ", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_TOP,
+      g_param_spec_int ("top", "Top", "Pixels to crop at top ",0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_BOTTOM,
+      g_param_spec_int ("bottom", "Bottom","Pixels to crop at bottom ", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_PADDING_STX,
+      g_param_spec_int ("paddingstx", "Padding STX", "Padding start_x", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_PADDING_STY,
+      g_param_spec_int ("paddingsty", "Padding STY", "Padding start_y", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_PADDING_W,
+      g_param_spec_int ("paddingw", "Padding Width", "Padding Width", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_PADDING_H,
+      g_param_spec_int ("paddingh", "Padding Height", "Padding Height", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_PADDING_R,
+      g_param_spec_uint ("paddingR", "Padding R", "R value", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_PADDING_G,
+      g_param_spec_uint ("paddingG", "Padding G", "G value", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_PADDING_B,
+      g_param_spec_uint ("paddingB", "Padding B", "B value", 0, G_MAXINT, 0,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -75,6 +236,9 @@ gst_bm_vpss_init(GstBmVPSS *self)
 {
   /* initialization logic */
   self->allocator = gst_bm_allocator_new();
+  self->crop_enable = FALSE;
+  self->padding_enable = FALSE;
+  self->padding_if_memset = 0;
   GST_DEBUG_OBJECT (self, "bmvpss initial");
 }
 
@@ -149,6 +313,7 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
     GstVideoFrame * outframe)
 {
   GstFlowReturn ret = GST_FLOW_OK;
+  bm_status_t bm_ret = 0;
   GstBmVPSS *self = GST_BM_VPSS (filter);
 
   bm_handle_t bm_handle = NULL;
@@ -165,26 +330,15 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
     return GST_FLOW_ERROR;
   }
 
-  bm_image_format_ext bmInFormat =
-      (bm_image_format_ext)map_gstformat_to_bmformat(inframe->info.finfo->format);
   int in_height = inframe->info.height;
   int in_width = inframe->info.width;
+  bm_image_format_ext bmInFormat =
+      (bm_image_format_ext)map_gstformat_to_bmformat(inframe->info.finfo->format);
 
-  bm_image_format_ext bmOutFormat =
-      (bm_image_format_ext)map_gstformat_to_bmformat(outframe->info.finfo->format);
   int out_height = outframe->info.height;
   int out_width = outframe->info.width;
-
-  int in_stride[4] = {0};
-  for (guint i = 0; i < GST_VIDEO_FRAME_N_PLANES(inframe); i++) {
-    in_stride[i] = GST_VIDEO_FRAME_PLANE_STRIDE(inframe, i);
-  }
-
-  GST_DEBUG_OBJECT(self, "in_stride = %d, %d, %d, %d\n",
-      in_stride[0], in_stride[1], in_stride[2], in_stride[3]);
-
-  bm_image_create(bm_handle, in_height, in_width, bmInFormat, DATA_TYPE_EXT_1N_BYTE, src, in_stride);
-  bm_image_create(bm_handle, out_height, out_width, bmOutFormat, DATA_TYPE_EXT_1N_BYTE, dst, NULL);
+  bm_image_format_ext bmOutFormat =
+      (bm_image_format_ext)map_gstformat_to_bmformat(outframe->info.finfo->format);
 
   GstBuffer *inbuf, *outbuf;
   GstMemory *inmem, *outmem;
@@ -192,14 +346,30 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
 
   inbuf = inframe->buffer;
   inmem = gst_buffer_peek_memory(inbuf, 0);
-  if (gst_buffer_n_memory(inbuf) == 1 &&
-      g_type_is_a(G_OBJECT_TYPE(inmem->allocator), GST_TYPE_BM_ALLOCATOR)) {
-    GST_DEBUG_OBJECT(self, "buffer_num = %d", gst_buffer_n_memory(inbuf));
-    GST_DEBUG_OBJECT(self, "info inframe: Importing GstMemory to bm_image");
+  outbuf = outframe->buffer;
+  outmem = gst_buffer_peek_memory(outbuf, 0);
+
+  if (gst_is_dmabuf_memory(outmem)) {
+    GST_DEBUG_OBJECT(self, "outmem is dmabuf");
+    if (bmOutFormat == FORMAT_RGB_PACKED) {
+      bmOutFormat = FORMAT_BGR_PACKED;
+    } else if (bmOutFormat == FORMAT_BGR_PACKED) {
+      bmOutFormat = FORMAT_RGB_PACKED;
+    }
+  }
+
+  int in_stride[4] = {0};
+  for (guint i = 0; i < GST_VIDEO_FRAME_N_PLANES(inframe); i++) {
+    in_stride[i] = GST_VIDEO_FRAME_PLANE_STRIDE(inframe, i);
+  }
+
+  bm_image_create(bm_handle, in_height, in_width, bmInFormat, DATA_TYPE_EXT_1N_BYTE, src, in_stride);
+  bm_image_create(bm_handle, out_height, out_width, bmOutFormat, DATA_TYPE_EXT_1N_BYTE, dst, NULL);
+
+  if (g_type_is_a(G_OBJECT_TYPE(inmem->allocator), GST_TYPE_BM_ALLOCATOR)) {
     fb_dma_buffer = gst_bm_allocator_get_bm_buffer(inmem);
     unsigned long long base_addr = bm_mem_get_device_addr(*fb_dma_buffer);
     int plane_num = GST_VIDEO_FRAME_N_PLANES(inframe);
-
     int plane_size[3] = {0};
     unsigned long long input_addr_phy[3] = {0};
     bm_device_mem_t input_addr[3] = {0};
@@ -207,18 +377,12 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
     for (int i = 0; i < plane_num; i++) {
       plane_size[i] = GST_VIDEO_FRAME_COMP_STRIDE(inframe, i) *
                       GST_VIDEO_FRAME_COMP_HEIGHT(inframe, i);
-      input_addr_phy[i] = base_addr + GST_VIDEO_FRAME_COMP_OFFSET(inframe, i);
+      input_addr_phy[i] = base_addr + GST_VIDEO_FRAME_PLANE_OFFSET(inframe, i);
       input_addr[i] = bm_mem_from_device(input_addr_phy[i], plane_size[i]);
     }
     bm_image_attach(*src, input_addr);
   } else {
-    GST_DEBUG_OBJECT(self, "buffer_num = %d", gst_buffer_n_memory(inbuf));
-    GST_DEBUG_OBJECT(self, "info inframe: Allocating bm_image from host memory");
-    if(gst_is_dmabuf_memory(inmem)) {
-      GST_DEBUG_OBJECT(self, "inframe->buffer is dmabuffer");
-    } else {
-      GST_DEBUG_OBJECT(self, "inframe->buffer isn't dmabuffer");
-    }
+    GST_DEBUG_OBJECT(self, "inframe->buffer isn't bm_allocator");
     bm_image_alloc_dev_mem(*src, BMCV_HEAP_ANY);
     guint8 *src_in_ptr[4];
     for (guint i = 0; i < GST_VIDEO_FRAME_N_PLANES(inframe); i++) {
@@ -227,17 +391,10 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
     bm_image_copy_host_to_device(*src, (void **)src_in_ptr);
   }
 
-
-  outbuf = outframe->buffer;
-  outmem = gst_buffer_peek_memory(outbuf, 0);
-  if (gst_buffer_n_memory(outbuf) == 1 &&
-      g_type_is_a(G_OBJECT_TYPE(outmem->allocator), GST_TYPE_BM_ALLOCATOR)) {
-    GST_DEBUG_OBJECT(self, "buffer_num = %d", gst_buffer_n_memory(outbuf));
-    GST_DEBUG_OBJECT(self, "info outframe: Importing GstMemory to bm_image");
+  if (g_type_is_a(G_OBJECT_TYPE(outmem->allocator), GST_TYPE_BM_ALLOCATOR)) {
     fb_dma_buffer = gst_bm_allocator_get_bm_buffer(outmem);
     unsigned long long base_addr = bm_mem_get_device_addr(*fb_dma_buffer);
     int plane_num = GST_VIDEO_FRAME_N_PLANES(outframe);
-
     int plane_size[3] = {0};
     unsigned long long output_addr_phy[3] = {0};
     bm_device_mem_t output_addr[3] = {0};
@@ -245,44 +402,38 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
     for (int i = 0; i < plane_num; i++) {
       plane_size[i] = GST_VIDEO_FRAME_COMP_STRIDE(outframe, i) *
                       GST_VIDEO_FRAME_COMP_HEIGHT(outframe, i);
-      output_addr_phy[i] = base_addr + GST_VIDEO_FRAME_COMP_OFFSET(outframe, i);
+      output_addr_phy[i] = base_addr + GST_VIDEO_FRAME_PLANE_OFFSET(outframe, i);
       output_addr[i] = bm_mem_from_device(output_addr_phy[i], plane_size[i]);
     }
     bm_image_attach(*dst, output_addr);
-  } else {
-    GST_DEBUG_OBJECT(self, "buffer_num = %d", gst_buffer_n_memory(outbuf));
-    GST_DEBUG_OBJECT(self,
-                     "info outframe: Allocating bm_image from host memory");
-    if (gst_is_dmabuf_memory(outmem)) {
-      GST_DEBUG_OBJECT(self, "outframe->buffer is dmabuffer");
-      GST_DEBUG_OBJECT(self, "buffer_num = %d", gst_buffer_n_memory(outbuf));
+  } else if (gst_is_dmabuf_memory(outmem)) {
+    gint fd = gst_dmabuf_memory_get_fd(outmem);
+    GST_DEBUG_OBJECT(self, "outmem fd: %d", fd);
+    int plane_num = GST_VIDEO_FRAME_N_PLANES(outframe);
+    int plane_size[3] = {0};
+    bm_device_mem_t output_addr[3] = {0};
 
-    //   gint fd = gst_dmabuf_memory_get_fd(outmem);
-    //   GST_DEBUG_OBJECT(self, "outmem fd: %d", fd);
-    //   int plane_num = GST_VIDEO_FRAME_N_PLANES(outframe);
-    //   int plane_size[3] = {0};
-
-    //   bm_device_mem_t output_addr[3] = {0};
-    //   for (int i = 0; i < plane_num; i++) {
-    //     plane_size[i] = GST_VIDEO_FRAME_COMP_STRIDE(outframe, i) *
-    //                     GST_VIDEO_FRAME_COMP_HEIGHT(outframe, i);
-    //     if (i == 0) {
-    //     output_addr[i] = bm_mem_from_device(fd, plane_size[i]);
-    //     } else {
-    //     output_addr[i] = bm_mem_from_device(0, plane_size[i]);
-    //     }
-    // }
-
-    //   bm_image_attach(*dst, output_addr);
-      bm_image_alloc_dev_mem(*dst, BMCV_HEAP_ANY);
-    } else {
-      GST_DEBUG_OBJECT(self, "outframe->buffer isn't dmabuffer");
-      bm_image_alloc_dev_mem(*dst, BMCV_HEAP_ANY);
+    for (int i = 0; i < plane_num; i++) {
+      plane_size[i] = GST_VIDEO_FRAME_COMP_STRIDE(outframe, i) *
+                      GST_VIDEO_FRAME_COMP_HEIGHT(outframe, i);
+      output_addr[i] = bm_mem_from_device(fd, plane_size[i]);
     }
+    bm_image_attach(*dst, output_addr);
+  } else {
+    GST_DEBUG_OBJECT(self, "outframe->buffer isn't dmabuffer");
+    bm_image_alloc_dev_mem(*dst, BMCV_HEAP_ANY);
   }
 
   bmcv_rect_t crop_rect = {0, 0, inframe->info.width, inframe->info.height};
 
+  if (self->crop_enable) {
+    crop_rect.start_x = self->crop_left;
+    crop_rect.start_y = self->crop_top;
+    crop_rect.crop_w = self->crop_right - self->crop_left;
+    crop_rect.crop_h = self->crop_bottom - self->crop_top;
+  }
+  GST_DEBUG_OBJECT(self, "crop_rect: %d %d %d %d", crop_rect.start_x,
+                   crop_rect.start_y, crop_rect.crop_w, crop_rect.crop_h);
 
 #if 0
   GST_DEBUG_OBJECT(self, "inframe: %d x %d, %s, %d planes", inframe->info.width,
@@ -314,6 +465,7 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
 
 #if 0
   static gint count = 0;
+  guint8 *src_in_ptr[4];
   if (count == 0) {
     const char *file_name = "src.bin";
     FILE *fp_image = fopen(file_name, "wb+");
@@ -340,24 +492,37 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
   }
 #endif
 
+  if(self->padding_enable) {
+    bmcv_padding_attr_t padding_attr = {
+        .dst_crop_stx  = self->padding_dst_stx,
+        .dst_crop_sty  = self->padding_dst_sty,
+        .dst_crop_w    = self->padding_dst_w,
+        .dst_crop_h    = self->padding_dst_h,
+        .padding_r     = self->padding_r,
+        .padding_g     = self->padding_g,
+        .padding_b     = self->padding_b,
+        .if_memset     = self->padding_if_memset
+    };
+    bm_ret = bmcv_image_vpp_convert_padding(bm_handle, 1, *src, dst, &padding_attr, &crop_rect, BMCV_INTER_LINEAR);
+  } else {
+    bm_ret = bmcv_image_vpp_convert(bm_handle, 1, *src, dst, &crop_rect, BMCV_INTER_LINEAR);
+  }
+  if(bm_ret != BM_SUCCESS) {
+    GST_ERROR_OBJECT(self, "Failed to convert image, error code: %d", bm_ret);
+    ret = GST_FLOW_ERROR;
+    goto error;
+  }
 
-  bmcv_image_vpp_convert(bm_handle, 1, *src, dst, &crop_rect, BMCV_INTER_LINEAR);
-
-  if (gst_buffer_n_memory(outbuf) > 1 ||
-      !g_type_is_a(G_OBJECT_TYPE(outmem->allocator), GST_TYPE_BM_ALLOCATOR)) {
-    if (!gst_is_dmabuf_memory(outmem)) {
-      guint8 *dst_in_ptr[4];
-      for (guint i = 0; i < GST_VIDEO_FRAME_N_PLANES(outframe); i++) {
-        dst_in_ptr[i] = GST_VIDEO_FRAME_PLANE_DATA(outframe, i);
-      }
-      bm_image_copy_device_to_host(*dst, (void **)dst_in_ptr);
-    } else {
-      guint8 *dst_in_ptr[4];
-      for (guint i = 0; i < GST_VIDEO_FRAME_N_PLANES(outframe); i++) {
-        dst_in_ptr[i] = GST_VIDEO_FRAME_PLANE_DATA(outframe, i);
-      }
-      bm_image_copy_device_to_host(*dst, (void **)dst_in_ptr);
+  if (!g_type_is_a(G_OBJECT_TYPE(outmem->allocator), GST_TYPE_BM_ALLOCATOR) &&
+      !gst_is_dmabuf_memory(outmem)) {
+    GST_DEBUG_OBJECT(self, "outframe is copy");
+    guint8 *dst_in_ptr[4];
+    for (guint i = 0; i < GST_VIDEO_FRAME_N_PLANES(outframe); i++) {
+      dst_in_ptr[i] = GST_VIDEO_FRAME_PLANE_DATA(outframe, i);
     }
+    bm_image_copy_device_to_host(*dst, (void **)dst_in_ptr);
+  } else {
+    GST_DEBUG_OBJECT(self, "outframe is zerocopy");
   }
 
 #if 0
@@ -373,6 +538,7 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
   }
 #endif
 
+error:
   bm_image_destroy(src);
   bm_image_destroy(dst);
   free(src);

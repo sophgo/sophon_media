@@ -7,6 +7,7 @@ VideoDec_FFMPEG::VideoDec_FFMPEG()
     video_dec_ctx = NULL;
     video_dec_par = NULL;
     decoder = NULL;
+    fflush_flag = 0;
 
     width   = 0;
     height  = 0;

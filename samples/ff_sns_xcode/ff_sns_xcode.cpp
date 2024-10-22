@@ -18,8 +18,7 @@ extern "C" {
 }
 
 #define MAX_THREAD_NUM 6
-#define MAX_QUEUE_FRAME 3
-#define PARAM_SET_INDEP 4
+#define PARAM_SET_INDEP 3
 int quit_flag = 0;
 unsigned int count_dec[MAX_THREAD_NUM];
 unsigned int count_enc[MAX_THREAD_NUM];
@@ -36,15 +35,15 @@ VideoEnc_FFMPEG g_writer[MAX_THREAD_NUM];
 VideoDec_FFMPEG g_reader[MAX_THREAD_NUM];
 
 static void usage(char *program_name) {
-    av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s devnum <input dev> <output file> <wdr_on> <is_yuv_sensor> ... encoder framerate bitrate(kbps) use_isp_chn_num v4l2_buf_num framenum loopflag\n", program_name);
+    av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s devnum <input dev> <output file> <wdr_on> ... encoder framerate bitrate(kbps) use_isp v4l2_buf_num framenum loopflag\n", program_name);
+
     av_log(NULL, AV_LOG_ERROR, "\tencoder: H264 or H265, H264 is default.\n");
     av_log(NULL, AV_LOG_ERROR, "\tdevnum: must be set to [1,6].\n");
-    av_log(NULL, AV_LOG_ERROR, "\tuse_isp_chn_num: if use_isp_chn_num is not 0, it must be the same as devnum for all to have color.\n");
+    av_log(NULL, AV_LOG_ERROR, "\tuse_isp:  use isp or not\n");
     av_log(NULL, AV_LOG_ERROR, "\tloopflag: If it is 0, it will encode and decode based on the number of frames; if it is 1, it will continuously encode and decode without generating valid videoes.\n");
     av_log(NULL, AV_LOG_ERROR, "\twdr_on: open the wdr mode or not\n");
-    av_log(NULL, AV_LOG_ERROR, "\tis_yuv_sensor: is yuv sensor or not\n");
     av_log(NULL, AV_LOG_ERROR, "Examples:\n");
-    av_log(NULL, AV_LOG_ERROR, "\t%s 6 /dev/video0 /mnt/video0.264 0 0 /dev/video1 /mnt/video1.264 0 0 /dev/video2 /mnt/video2.264 0 0 /dev/video3 /mnt/video3.264 0 0 /dev/video4 /mnt/video4.264 0 0 /dev/video5 /mnt/video5.264 0 0 H264 30 3000 6 10 901 0\n", program_name);
+    av_log(NULL, AV_LOG_ERROR, "\t%s 6 /dev/video0 /mnt/video0.264 0 /dev/video1 /mnt/video1.264 0 /dev/video2 /mnt/video2.264 0 /dev/video3 /mnt/video3.264 0 /dev/video4 /mnt/video4.264 0 /dev/video5 /mnt/video5.264 0 H264 30 3000 1 10 901 0\n", program_name);
 }
 
 void handler(int sig) {
@@ -53,7 +52,7 @@ void handler(int sig) {
 }
 
 int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, int v4l2_buf_num,
-                        int use_isp_chn_num, int wdr_on, int is_yuv_sensor, int outputCount, int index);
+                         int use_isp, int wdr_on, int outputCount, int index);
 int video_encoder_pthread(const char* output_file, int enccodec_id, int framerate, int bitrate, int index);
 
 int main(int argc, char **argv) {
@@ -64,7 +63,7 @@ int main(int argc, char **argv) {
     int sophon_idx = 0;
     int framenum = 400;
     int v4l2_buf_num = 8;
-    int use_isp_chn_num = 1;
+    int use_isp = 1;
     int enccodec_id = AV_CODEC_ID_H264;
     std::thread threads[MAX_THREAD_NUM];
     signal(SIGINT,handler);
@@ -82,12 +81,10 @@ int main(int argc, char **argv) {
     std::string outputFiles[outputCount];
     std::string inputFiles[outputCount];
     int wdr_off_on[outputCount];
-    int yuv_sensor[outputCount];
     for (int i = 0; i < outputCount; i++) {
         inputFiles[i] = argv[i*PARAM_SET_INDEP + 2];
         outputFiles[i] = argv[i*PARAM_SET_INDEP  + 3];
         wdr_off_on[i] = atoi(argv[i*PARAM_SET_INDEP + 4]);
-        yuv_sensor[i] = atoi(argv[i*PARAM_SET_INDEP + 5]);
     }
 
     if (argc > outputCount*PARAM_SET_INDEP + 2) {
@@ -117,13 +114,13 @@ int main(int argc, char **argv) {
     }
     if (argc > outputCount*PARAM_SET_INDEP + 5) {
         int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 5]);
-        if (temp >= 0 && temp <= 6) {
-            use_isp_chn_num = temp;
+        if (temp >= 0 && temp <= 1) {
+            use_isp = temp;
         } else {
-            av_log(NULL, AV_LOG_WARNING, "use_isp_chn_num must be set to [0,6]\n");
+            av_log(NULL, AV_LOG_WARNING, "use_isp must be set to [0,1]\n");
             return 1;
         }
-        av_log(NULL, AV_LOG_INFO, "use_isp_chn_num = %d \n", use_isp_chn_num);
+        av_log(NULL, AV_LOG_INFO, "use_isp = %d \n", use_isp);
     }
     if (argc > outputCount*PARAM_SET_INDEP + 6) {
         int temp = atoi(argv[outputCount*PARAM_SET_INDEP + 6]);
@@ -162,7 +159,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < outputCount; i++) {
         dec_thread[i] = std::thread(video_decoder_pthread, inputFiles[i].c_str(), sophon_idx, framenum, v4l2_buf_num,
-                                    use_isp_chn_num, wdr_off_on[i], yuv_sensor[i], outputCount, i);
+                                    use_isp, wdr_off_on[i], outputCount, i);
         enc_thread[i] = std::thread(video_encoder_pthread, outputFiles[i].c_str(), enccodec_id, framerate, bitrate, i);
         usleep(10000);
     }
@@ -188,7 +185,7 @@ int main(int argc, char **argv) {
 }
 
 int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, int v4l2_buf_num,
-                        int use_isp_chn_num, int wdr_on, int is_yuv_sensor, int outputCount, int index) {
+                        int use_isp, int wdr_on, int outputCount, int index) {
     VideoDec_FFMPEG* reader = &g_reader[index];
     pthread_t tid = pthread_self();
     std::shared_ptr<AVFrame> frame;
@@ -197,7 +194,7 @@ int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, 
     std::chrono::milliseconds::rep elapsedTime;
     int ret = 0, cur = 0;
     float time = 0;
-    ret = reader->openDec(input_file, 9, sophon_idx, v4l2_buf_num, use_isp_chn_num, wdr_on, is_yuv_sensor, outputCount);
+    ret = reader->openDec(input_file, 9, sophon_idx, v4l2_buf_num, use_isp, wdr_on, outputCount);
     if (ret < 0) {
         av_log(NULL, AV_LOG_INFO, "#################open input media failed  ##########\n");
         return -1;
@@ -210,7 +207,7 @@ int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, 
             break;
         }
 
-        while ((g_image_enc_queue[index].size() == MAX_QUEUE_FRAME) && (!quit_flag)) {
+        while ((g_image_enc_queue[index].size() == v4l2_buf_num / 4) && (!quit_flag)) {
             usleep(10);
         }
 
@@ -282,13 +279,8 @@ int video_encoder_pthread(const char* output_file, int enccodec_id, int framerat
         g_enc_queue_lock[index].unlock();
 
         if (writer->isClosed()) {
-        if (frame.get()->format == AV_PIX_FMT_YUYV422) {
             ret = writer->openEnc(output_file, enccodec_id, framerate, frame->width, frame->height,
-                         AV_PIX_FMT_YUV420P, bitrate);
-        } else {
-            ret = writer->openEnc(output_file, enccodec_id, framerate, frame->width, frame->height,
-                         frame.get()->format, bitrate);
-        }
+                frame.get()->format, bitrate);
             if (ret != 0) {
                 av_log(NULL, AV_LOG_INFO, "writer.openEnc failed \n ");
                 goto cleanup;

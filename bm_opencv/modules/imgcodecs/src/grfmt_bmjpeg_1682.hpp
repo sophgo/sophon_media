@@ -46,7 +46,7 @@
 #include "grfmt_base.hpp"
 #include "bitstrm.hpp"
 
-#include "bm_jpeg_logging.h"
+#include "bm_jpeg_internal.h"
 #include "bm_jpeg_interface.h"
 
 // JPU Jpeg codec

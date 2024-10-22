@@ -433,7 +433,7 @@ void *video_encoder_pthread(void * arg)
         if (count_enc[id] % 100 == 0)
             fps_enc[id] = (double)count_enc[id] * 1000.0 / t;
 
-        if (fps_enc[id] > 1000.0)
+        if (fps_enc[id] > 2000.0)
         {
             cout << "illegal fps happens";
             break;
@@ -604,7 +604,7 @@ void *video_download_pthread(void * arg)
         }
 
 
-        if (fps[id] > 1000.0)
+        if (fps[id] > 2000.0)
         {
             cout << "illegal fps happens";
             break;

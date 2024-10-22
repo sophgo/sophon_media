@@ -35,6 +35,20 @@
 #define SWAP(x, y) ({ x ^= y; y ^= x; x ^= y; })
 #endif
 
+static void* acquire_output_buffer(void *context, size_t size, void **acquired_handle)
+{
+    ((void)(context));
+    void *mem;
+
+    mem = malloc(size);
+    *acquired_handle = mem;
+    return mem;
+}
+static void finish_output_buffer(void *context, void *acquired_handle)
+{
+    ((void)(context));
+}
+
 GST_DEBUG_CATEGORY (gst_bm_enc_debug);
 #define GST_CAT_DEFAULT gst_bm_enc_debug
 
@@ -108,21 +122,21 @@ enum
 struct gst_bm_format
 {
   GstVideoFormat gst_format;
-  BmVpuColorFormat bm_format;
+  BmVpuEncPixFormat bm_format;
   gint pixel_stride0;
   gboolean is_yuv;
 };
 
 #define GST_BM_FORMAT(gst, bm, pixel_stride0, yuv) \
-  { GST_VIDEO_FORMAT_ ## gst, BM_VPU_COLOR_FORMAT_## bm, pixel_stride0, yuv}
+  { GST_VIDEO_FORMAT_ ## gst, BM_VPU_ENC_PIX_FORMAT_## bm, pixel_stride0, yuv}
 
 struct gst_bm_format gst_bm_formats[] = {
-  GST_BM_FORMAT (I420, YUV420, 1, 1),
+  GST_BM_FORMAT (I420, YUV420P, 1, 1),
   GST_BM_FORMAT (NV12, NV12, 1, 1),
   GST_BM_FORMAT (NV21, NV21, 1, 1),
   GST_BM_FORMAT (NV16, NV16, 1, 1),
-  GST_BM_FORMAT (Y42B, YUV422, 1, 1),
-  GST_BM_FORMAT (Y444, YUV444, 1, 1),
+  GST_BM_FORMAT (Y42B, YUV422P, 1, 1),
+  GST_BM_FORMAT (Y444, YUV444P, 1, 1),
 };
 
 #define GST_BM_GET_FORMAT(type, format) ({ \
@@ -215,15 +229,23 @@ gst_bm_enc_supported (BmVpuCodecFormat codec_type)
 {
   BmVpuEncoder  *bmVenc;
   BmVpuEncOpenParams open_params;
-
+  BmVpuEncInitialInfo initial_info;
   bmvpu_enc_set_default_open_params(&open_params, codec_type);
   open_params.frame_width = 352;
   open_params.frame_height = 288;
-  if(bmvpu_enc_open(&bmVenc, &open_params)) {
+  if(bmvpu_enc_open(&bmVenc, &open_params, NULL, &initial_info)) {
     return FALSE;
   }
   bmvpu_enc_close(bmVenc);
   return TRUE;
+}
+
+static void
+gst_bm_enc_convert_dma_buffer(bm_device_mem_t *bm_dma_buffer, BmVpuEncDMABuffer *bm_venc_dma_buffer)
+{
+  bm_venc_dma_buffer->size = bm_dma_buffer->size;
+  bm_venc_dma_buffer->phys_addr = bm_dma_buffer->u.device.device_addr;
+  bm_venc_dma_buffer->dmabuf_fd = bm_dma_buffer->u.device.dmabuf_fd;
 }
 
 gboolean
@@ -595,7 +617,12 @@ gst_bm_enc_stop (GstVideoEncoder * encoder)
 
   g_mutex_clear (&self->mutex);
 
-  bmvpu_enc_close(self->bmVenc);
+  if (self->bmVenc) {
+    bmvpu_enc_close (self->bmVenc);
+    self->bmVenc = NULL;
+    self->is_enc_open = false;
+  }
+
   if (self->allocator) {
     gst_object_unref (self->allocator);
     self->allocator= NULL;
@@ -638,8 +665,8 @@ gst_bm_enc_finish (GstVideoEncoder * encoder)
 
 static void
 gst_bm_enc_format_info_set(GstBmEnc *self, GstVideoInfo *info) {
-  gint hstride, vstride, cstride, c_size = 0;
-  BmVpuColorFormat format;
+  gint hstride, vstride, cstride, c_size = 0, uv_size = 0;
+  BmVpuEncPixFormat format;
 
   hstride = GST_VIDEO_INFO_PLANE_STRIDE (info, 0);
   cstride = GST_VIDEO_INFO_PLANE_STRIDE (info, 1);
@@ -648,50 +675,57 @@ gst_bm_enc_format_info_set(GstBmEnc *self, GstVideoInfo *info) {
   switch (GST_VIDEO_INFO_FORMAT (info))
   {
       case GST_VIDEO_FORMAT_I420:
-          format = BM_VPU_COLOR_FORMAT_YUV420;
-          self->params.chroma_interleave = 0;
+          format = BM_VPU_ENC_PIX_FORMAT_YUV420P;
+          // self->params.chroma_interleave = 0;
           c_size = cstride * vstride >> 1;
+          uv_size = c_size;
           break;
       case GST_VIDEO_FORMAT_NV12:
-          format = BM_VPU_COLOR_FORMAT_NV12;
-          self->params.chroma_interleave = 1;
+          format = BM_VPU_ENC_PIX_FORMAT_NV12;
+          // self->params.chroma_interleave = 1;
           c_size = cstride * vstride >> 1;
+          uv_size = c_size;
           break;
       case GST_VIDEO_FORMAT_NV21:
-          format = BM_VPU_COLOR_FORMAT_NV21;
-          self->params.chroma_interleave = 2;
+          format = BM_VPU_ENC_PIX_FORMAT_NV21;
+          // self->params.chroma_interleave = 2;
           c_size = cstride * vstride >> 1;
+          uv_size = c_size;
           break;
       case GST_VIDEO_FORMAT_Y42B:
-          format = BM_VPU_COLOR_FORMAT_YUV422;
-          self->params.chroma_interleave = 0;
+          format = BM_VPU_ENC_PIX_FORMAT_YUV422P;
+          // self->params.chroma_interleave = 0;
           c_size = cstride * vstride;
+          uv_size = c_size*2;
           break;
       case GST_VIDEO_FORMAT_NV16 :
-          format = BM_VPU_COLOR_FORMAT_NV16;
-          self->params.chroma_interleave = 1;
+          format = BM_VPU_ENC_PIX_FORMAT_NV16;
+          // self->params.chroma_interleave = 1;
           c_size = cstride * vstride;
+          uv_size = c_size;
           break;
       case GST_VIDEO_FORMAT_Y444 :
-          format = BM_VPU_COLOR_FORMAT_YUV444;
-          self->params.chroma_interleave = 0;
+          format = BM_VPU_ENC_PIX_FORMAT_YUV444P;
+          // self->params.chroma_interleave = 0;
           c_size = cstride * vstride;
+          uv_size = c_size*2;
           break;
       default:
-          format = BM_VPU_COLOR_FORMAT_YUV400 + 1;
+          format = BM_VPU_ENC_PIX_FORMAT_YUV400 + 1;
           break;
   }
 
-  self->params.color_format = format;
+  self->params.pix_format = format;
   self->fb_info.width = GST_VIDEO_INFO_WIDTH (info);
   self->fb_info.height = GST_VIDEO_INFO_HEIGHT (info);
   self->fb_info.y_stride = hstride;
   self->fb_info.c_stride = cstride;
-  self->fb_info.h_stride = vstride;
+  // self->fb_info.h_stride = vstride;
   self->fb_info.y_size = self->fb_info.y_stride * GST_BM_VIDEO_INFO_VSTRIDE (info);
   self->fb_info.c_size = c_size;
-  self->fb_info.size = self->fb_info.y_size + self->fb_info.c_size *
-                      (self->params.chroma_interleave ? 1 : 2);
+  self->fb_info.size = self->fb_info.y_size + uv_size;
+  // self->fb_info.size = self->fb_info.y_size + self->fb_info.c_size *
+  //                     (self->params.chroma_interleave ? 1 : 2);
 }
 
 static gboolean
@@ -738,7 +772,7 @@ gst_bm_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
   gst_bm_enc_format_info_set(self, info);
   self->params.frame_width = width;
   self->params.frame_height = height;
-  if (self->rotation || self->params.color_format > BM_VPU_COLOR_FORMAT_YUV400  ||
+  if (self->rotation || self->params.pix_format > BM_VPU_ENC_PIX_FORMAT_YUV400  ||
       width != GST_VIDEO_INFO_WIDTH (info) ||
       height != GST_VIDEO_INFO_HEIGHT (info)) {
       return FALSE;
@@ -960,11 +994,16 @@ gst_bm_enc_send_frame (GstVideoEncoder * encoder)
   guint32 frame_idx = 0;
   gint ret = 0;
   bm_device_mem_t *fb_dma_buffer;
+  BmVpuEncDMABuffer venc_dma_buffer;
+  BmVpuEncParams encoding_params;
+
+  memset(&encoding_params, 0, sizeof(BmVpuEncParams));
+  encoding_params.customMapOpt = NULL;
 
   if (!self->frames) {
     if (self->flushing && !self->eos_send) {
         memset(&self->input_frame, 0, sizeof(BmVpuRawFrame));
-        ret = bmvpu_enc_send_frame(self->bmVenc, &(self->input_frame), true);
+        ret = bmvpu_enc_send_frame(self->bmVenc, &(self->input_frame), &encoding_params);
         if (!ret){
           g_print("enc eos_send ok \n");
           self->eos_send = TRUE;
@@ -994,9 +1033,13 @@ gst_bm_enc_send_frame (GstVideoEncoder * encoder)
   }
   GST_DEBUG_OBJECT(self, "width %d, height %d, ", self->fb_info.width, self->fb_info.height);
   GST_DEBUG_OBJECT(self, "y_stride %d, c_stride %d, ", self->fb_info.y_stride, self->fb_info.c_stride);
-  GST_DEBUG_OBJECT(self, "h_stride %d, y_size %d, ", self->fb_info.h_stride, self->fb_info.y_size);
+  // GST_DEBUG_OBJECT(self, "h_stride %d, y_size %d, ", self->fb_info.h_stride, self->fb_info.y_size);
   GST_DEBUG_OBJECT(self, "c_size %d \n", self->fb_info.c_size);
-  bmvpu_fill_framebuffer_params(&framebuffer, &self->fb_info, fb_dma_buffer,
+
+  memset(&venc_dma_buffer, 0, sizeof(BmVpuEncDMABuffer));
+  gst_bm_enc_convert_dma_buffer(fb_dma_buffer, &venc_dma_buffer);
+
+  bmvpu_fill_framebuffer_params(&framebuffer, &self->fb_info, &venc_dma_buffer,
                                frame_idx, NULL);
 
   self->frame_idx[frame_idx] = frame_number;
@@ -1005,7 +1048,7 @@ gst_bm_enc_send_frame (GstVideoEncoder * encoder)
   self->input_frame.pts = frame->pts;
 	self->input_frame.dts = frame->dts;
 
-  ret = bmvpu_enc_send_frame(self->bmVenc, &(self->input_frame), false);
+  ret = bmvpu_enc_send_frame(self->bmVenc, &(self->input_frame), &encoding_params);
   gst_video_codec_frame_unref (frame);
   if (ret){  //send frame may fail,so need resend
     g_usleep (1000);
@@ -1023,12 +1066,20 @@ gst_bm_enc_get_stream(GstVideoEncoder * encoder)
   GstBmEnc *self = GST_BM_ENC (encoder);
   GstVideoCodecFrame *frame;
   BmVpuEncodedFrame encoded_frame;
+  BmVpuEncParams encoding_params;
   guint32 frame_number;
   GstBuffer *buffer;
   gint pkt_size;
 
   memset(&encoded_frame, 0, sizeof(BmVpuEncodedFrame));
-  bmvpu_enc_get_stream(self->bmVenc, &encoded_frame);
+
+  memset(&encoding_params, 0, sizeof(BmVpuEncParams));
+  encoding_params.acquire_output_buffer = acquire_output_buffer;
+  encoding_params.finish_output_buffer = finish_output_buffer;
+  encoding_params.output_buffer_context = NULL;
+  encoding_params.skip_frame = 0;
+
+  bmvpu_enc_get_stream(self->bmVenc, &encoded_frame, &encoding_params);
   if (!encoded_frame.data_size)
     return FALSE;
 
@@ -1127,19 +1178,19 @@ gst_bm_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
 
   GST_BM_ENC_LOCK (encoder);
   if (!self->is_enc_open) {
-    if (bmvpu_enc_open(&self->bmVenc, &self->params)) {
+    if (bmvpu_enc_open(&self->bmVenc, &self->params, NULL, &(self->initial_info))) {
       g_print("bmvpu_enc_open open failed!\n");
       GST_BM_ENC_UNLOCK (encoder);
       return GST_FLOW_ERROR;
     }
 
-    if (bmvpu_enc_get_initial_info(self->bmVenc, &(self->initial_info))) {
-        GST_ERROR_OBJECT(self, "bmvpu_enc_get_initial_info failed!\n");
-        bmvpu_enc_close(self->bmVenc);
-        GST_BM_ENC_UNLOCK (encoder);
-        return GST_FLOW_ERROR;
-    }
-   // self->fb_info = self->initial_info.src_fb;
+    // if (bmvpu_enc_get_initial_info(self->bmVenc, &(self->initial_info))) {
+    //     GST_ERROR_OBJECT(self, "bmvpu_enc_get_initial_info failed!\n");
+    //     bmvpu_enc_close(self->bmVenc);
+    //     GST_BM_ENC_UNLOCK (encoder);
+    //     return GST_FLOW_ERROR;
+    // }
+    // self->fb_info = self->initial_info.src_fb;
     self->is_enc_open = true;
   }
 
@@ -1230,7 +1281,7 @@ gst_bm_enc_class_init (GstBmEncClass * klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
 
-  GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "bmenc", 0, "sophon encoder");
+  GST_DEBUG_CATEGORY_INIT (gst_bm_enc_debug, "bmenc", 0, "sophon encoder");
 
   encoder_class->start = GST_DEBUG_FUNCPTR (gst_bm_enc_start);
   encoder_class->stop = GST_DEBUG_FUNCPTR (gst_bm_enc_stop);
@@ -1294,10 +1345,3 @@ gst_bm_enc_class_init (GstBmEncClass * klass)
 #endif
   element_class->change_state = GST_DEBUG_FUNCPTR (gst_bm_enc_change_state);
 }
-
-
-
-
-
-
-

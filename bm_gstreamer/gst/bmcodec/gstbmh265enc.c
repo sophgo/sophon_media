@@ -30,8 +30,8 @@
 #define GST_BM_H265_ENC(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
     GST_TYPE_BM_H265_ENC, GstBmH265Enc))
 
+GST_DEBUG_CATEGORY (bm_h265_enc_debug);
 #define GST_CAT_DEFAULT bm_h265_enc_debug
-GST_DEBUG_CATEGORY (GST_CAT_DEFAULT);
 
 struct _GstBmH265Enc
 {
@@ -250,7 +250,7 @@ gst_bm_h265_enc_class_init (GstBmH265EncClass * klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
 
-  GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "bmh265enc", 0,
+  GST_DEBUG_CATEGORY_INIT (bm_h265_enc_debug, "bmh265enc", 0,
       "BM H265 ex");
 
   encoder_class->set_format = GST_DEBUG_FUNCPTR (gst_bm_h265_enc_set_format);

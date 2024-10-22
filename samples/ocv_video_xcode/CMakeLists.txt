@@ -5,9 +5,13 @@ PROJECT(ocv_video_xcode)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../bm_ffmpeg)
 
-# libmbcv
+# libbmcv
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/include)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+if("${GCC_VERSION}" STREQUAL "930")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib930/${PLATFORM})
+else()
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+endif()
 
 #jpeg
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/jpeg/inc)
@@ -47,5 +51,9 @@ SET(SRCS
 
 add_executable(test_ocv_video_xcode EXCLUDE_FROM_ALL ${SRCS})
 target_compile_definitions(test_ocv_video_xcode PRIVATE USING_SOC=1)
-target_link_libraries(test_ocv_video_xcode opencv_core opencv_videoio opencv_highgui ${SYSTEM_LIB})
-
+if("${GCC_VERSION}" STREQUAL "930")
+    set(EXTRA_LIB yuv bmlib bmjpeg bmvd bmvenc bmcv avutil avcodec avformat swscale swresample opencv_imgcodecs opencv_imgproc)
+    target_link_libraries(test_ocv_video_xcode opencv_core opencv_videoio opencv_highgui ${SYSTEM_LIB} ${EXTRA_LIB})
+else()
+    target_link_libraries(test_ocv_video_xcode opencv_core opencv_videoio opencv_highgui ${SYSTEM_LIB})
+endif()

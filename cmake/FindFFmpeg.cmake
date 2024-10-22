@@ -40,7 +40,11 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
     #        set(EXTRA_LIBS -lz -lpthread -lharfbuzz -lbz2 -lpng16 -lfreetype -lssl)
     #    else()
     set(PKG_CONFIG_PATH ${CMAKE_SOURCE_DIR}/prebuilt/lib/pkgconfig)
-    set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+	set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+	if("${GCC_VERSION}" STREQUAL "930")
+		set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+	endif()
+
     set(EXTRA_LDFLAGS -L${CMAKE_SOURCE_DIR}/prebuilt/lib -Wl,-rpath=${CMAKE_SOURCE_DIR}/prebuilt/lib)
     #    endif()
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
@@ -63,13 +67,24 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         -L${CMAKE_SOURCE_DIR}/bmcv )
     #TODO change bmlib dir
     set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
-                        -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}
                         -L${LIBSOPHAV_OUT_PATH}/video/dec
                         -L${LIBSOPHAV_OUT_PATH}/video/enc
                         -L${LIBSOPHAV_OUT_PATH}/jpeg
                         -L${LIBSOPHAV_OUT_PATH}/bmcv
-                        -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib/soc
                         )
+
+    if("${GCC_VERSION}" STREQUAL "930")
+        set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
+                            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}
+                            -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib930/soc
+                            -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib930/${platform}
+                            )
+    else()
+        set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
+                            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}
+                            -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib/soc
+                            )
+    endif()
 
     if(CMAKE_SYSTEM_NAME MATCHES "Linux")
         set(EXTRA_LIBS      ${EXTRA_LIBS} -lpthread -lrt -lssl -lcrypto -ldl -lresolv -lstdc++ -lgb28181_sip -lm)
@@ -154,7 +169,7 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                     --enable-libfreetype
                     --enable-libmp3lame
                     ${EXTRA_OPTIONS}
-                    --extra_cflags="${EXTRA_CFLAGS}"
+                    --extra-cflags="${EXTRA_CFLAGS}"
                     --extra-ldflags="${EXTRA_LDFLAGS}"
                     --extra-libs="${EXTRA_LIBS}"
                     --extra-version="sophon-${FFMPEG_VERSION}"
@@ -165,7 +180,7 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
         COMMAND ${CMAKE_COMMAND} -E make_directory ${out_abs_path}
         COMMAND make -j`nproc` ${FFMPEG_BUILD_TARGETS} VERBOSE=1
         COMMAND make install DESTDIR=${out_abs_path}
-        COMMAND make distclean
+        #COMMAND make distclean
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bm_ffmpeg)
 
     add_custom_target(${target_name} ALL
@@ -248,8 +263,15 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
                                     "${vpu_abs_path}/video/dec"
                                     "${vpu_abs_path}/video/enc"
                                     "${yuv_abs_path}/libyuv/lib"
-                                    "${bmcv_abs_path}/bmcv"
-                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/soc/")
+                                    "${bmcv_abs_path}/bmcv")
+
+	if("${GCC_VERSION}" STREQUAL "930")
+        set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}")
+    else()
+        set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
+    endif()
 
     if (${platform} STREQUAL "pcie_sw64" OR ${platform} STREQUAL "pcie_loongarch64"  OR ${platform} STREQUAL "pcie_riscv64") 
         set(BUILD_JPEG                  ON)
@@ -299,6 +321,9 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
         set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
         set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
         set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain.cmake)
+		if("${GCC_VERSION}" STREQUAL "930")
+		    set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-930.cmake)
+		endif()
 
     elseif(${platform} STREQUAL "pcie")
 

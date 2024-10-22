@@ -25,12 +25,14 @@
  * @see_also: #GstMemory, #GstPhysMemoryAllocator, #GstBmDmaBufferAllocator
  */
 #include <string.h>
+#include <stdint.h>
 #include <gst/gst.h>
 #include <gst/allocators/allocators.h>
 #include "bmlib_runtime.h"
-#include "bmvpuapi_common.h"
 #include "gstbmallocator.h"
 #include <glib-object.h>
+
+#define HEAP_1_MASK 0x2
 
 GST_DEBUG_CATEGORY_STATIC(bm_allocator_debug);
 #define GST_CAT_DEFAULT bm_allocator_debug
@@ -246,7 +248,7 @@ static GstMemory* gst_bm_allocator_alloc(GstAllocator *allocator, gsize size, Gs
 
 	dmabuffer = &bm_dma_memory->dmabuffer;
 	bm_dma_memory->import_flag = 0;
-	error = bmvpu_malloc_device_byte_heap(bm_allocator->bmdev_allocator, dmabuffer, size + params->padding, 0x06, 0);
+	error = bm_malloc_device_byte_heap_mask(bm_allocator->bmdev_allocator, dmabuffer, HEAP_1_MASK, size + params->padding);
 	if (error)
 	{
 		g_slice_free1(sizeof(GstBmDmaMemory), bm_dma_memory);
@@ -342,7 +344,7 @@ static GstMemory * gst_bm_allocator_copy(GstMemory *memory, gssize offset, gssiz
 
 	gst_memory_init(GST_MEMORY_CAST(new_bm_dma_memory), GST_MEMORY_FLAG_PHYSICALLY_CONTIGUOUS, memory->allocator, NULL, size, memory->align, 0, size);
 
-	error = bmvpu_malloc_device_byte_heap(bm_allocator->bmdev_allocator, &new_bm_dma_memory->dmabuffer, size, 0x6, 1);
+	error = bm_malloc_device_byte_heap_mask(bm_allocator->bmdev_allocator, &new_bm_dma_memory->dmabuffer, HEAP_1_MASK, size);
 	if (error)
 	{
 		GST_ERROR_OBJECT(bm_allocator, "could not allocate bmdevmem buffer for copy: %s (%d)", strerror(error), error);

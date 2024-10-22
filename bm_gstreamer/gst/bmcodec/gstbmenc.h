@@ -24,7 +24,6 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include "bm_vpuenc_interface.h"
-#include "bmvpuapi_common.h"
 
 G_BEGIN_DECLS
 

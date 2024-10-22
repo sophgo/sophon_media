@@ -5,7 +5,11 @@ project(bm_allocator)
 add_compile_options(${GST_BASE_CFLAGS} ${GST_VIDEO_CFLAGS} ${GST_ALLOCATORS_CFLAGS})
 add_compile_options(${GST_BASE_LDFLAGS} ${GST_VIDEO_LDFLAGS} ${GST_ALLOCATORS_LDFLAGS})
 
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/gst)
+if("${GCC_VERSION}" STREQUAL "930")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib930/gst)
+else()
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/gst)
+endif()
 
 set(SRCS gstbmallocator.c)
 set(HEADERS gstbmallocator.h)

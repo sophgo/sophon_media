@@ -42,15 +42,25 @@ typedef enum {
 gboolean
 bus_call (GstBus G_GNUC_UNUSED *bus, GstMessage * msg, gpointer data)
 {
+  gchar *debug;
+  GError *error;
   GMainLoop *loop = reinterpret_cast < GMainLoop * >(data);
   switch (GST_MESSAGE_TYPE (msg)) {
     case GST_MESSAGE_EOS:
       GST_INFO ("End of stream\n");
       g_main_loop_quit (loop);
       break;
+    case GST_MESSAGE_WARNING:
+      gst_message_parse_warning(msg, &error, &debug);
+      // handle warning message from uridecodebin
+      if (g_str_equal(GST_OBJECT_NAME (msg->src), "src")) {
+        GST_ERROR ("WARNING from element %s: %s\n",
+            GST_OBJECT_NAME (msg->src), error->message);
+      }
+      g_error_free (error);
+      // g_main_loop_quit (loop);
+      break;
     case GST_MESSAGE_ERROR:
-      gchar * debug;
-      GError *error;
       gst_message_parse_error (msg, &error, &debug);
       GST_ERROR ("ERROR from element %s: %s\n",
           GST_OBJECT_NAME (msg->src), error->message);

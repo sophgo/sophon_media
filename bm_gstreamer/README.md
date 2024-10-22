@@ -15,6 +15,9 @@ export LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$LD_LIBRARY_PATH
 ```sh
 cp /opt/sophon/libsophon-current/lib/* /usr/local/lib/
 
+# bmv4l2src need isp-mw lib
+cp /opt/sophon/sophon-soc-libisp_1.0.0/lib/* /usr/local/lib/
+
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 ```
 

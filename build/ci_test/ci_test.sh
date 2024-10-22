@@ -763,7 +763,7 @@ function run_daily_regression_mw_bm1686() {
     run_ocv_drawing $RUN_MODE _daily.txt|| return $?
     run_vpss_convert $RUN_MODE _daily.txt|| return $?
     run_tpu_add_weight $RUN_MODE _daily.txt || return $?
-    # run_ive_stcandicorner $RUN_MODE _daily.txt || return $?
+    run_ive_stcandicorner $RUN_MODE _daily.txt || return $?
     run_dpu_online $RUN_MODE _daily.txt || return $?
     run_ldc_rot $RUN_MODE _daily.txt || return $?
     run_dwa_fisheye $RUN_MODE _daily.txt || return $?

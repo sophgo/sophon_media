@@ -83,7 +83,6 @@ struct _GstBmJpegEnc
 
   gboolean prop_dirty;
   BmJpuJPEGEncParams params;
-  BmJpuColorFormat color_format;
   BmJpuJPEGEncoder  *bm_jpeg_enc;
 };
 
@@ -164,7 +163,7 @@ gst_bm_jpeg_enc_supported (void)
 {
   BmJpuJPEGEncoder *bm_jpeg_enc = NULL;
   gint buf_size = 1024*1024;
-  if (bm_jpu_jpeg_enc_open(&bm_jpeg_enc, buf_size, 0)) {
+  if (bm_jpu_jpeg_enc_open(&bm_jpeg_enc, 0, buf_size, 0)) {
     return FALSE;
   }
   bm_jpu_jpeg_enc_close(bm_jpeg_enc);
@@ -471,9 +470,8 @@ static gboolean
 gst_bm_jpeg_gst_format_bm_format(GstBmJpegEnc *self)
 {
   GstVideoInfo *info = &self->info;
-  BmJpuColorFormat format;
+  int format;
   gint hstride, vstride;
-  gint interleave;
 
   hstride = GST_BM_JPEG_VIDEO_INFO_HSTRIDE (info);
   vstride = GST_BM_JPEG_VIDEO_INFO_VSTRIDE (info);
@@ -481,71 +479,62 @@ gst_bm_jpeg_gst_format_bm_format(GstBmJpegEnc *self)
   switch (GST_VIDEO_INFO_FORMAT (info))
   {
       case GST_VIDEO_FORMAT_I420:
-          format = BM_JPU_COLOR_FORMAT_YUV420;
+          format = BM_JPU_IMAGE_FORMAT_YUV420P;
           self->cbcr_stride = hstride / 2;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
           self->cr_offset = self->cb_offset + hstride * vstride / 4;
-          interleave = 0;
           break;
       case GST_VIDEO_FORMAT_NV12:
-          format = BM_JPU_COLOR_FORMAT_YUV420;
+          format = BM_JPU_IMAGE_FORMAT_NV12;
           self->cbcr_stride = hstride;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
           self->cr_offset = 0;
-          interleave = 1;
           break;
       case GST_VIDEO_FORMAT_NV21:
-          format = BM_JPU_COLOR_FORMAT_YUV420;
+          format = BM_JPU_IMAGE_FORMAT_NV21;
           self->cbcr_stride = hstride;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
           self->cr_offset = 0;
-          interleave = 2;
           break;
       case GST_VIDEO_FORMAT_Y42B:
-          format = BM_JPU_COLOR_FORMAT_YUV422_HORIZONTAL;
+          format = BM_JPU_IMAGE_FORMAT_YUV422P;
           self->cbcr_stride = hstride / 2;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
           self->cr_offset = self->cb_offset + self->cbcr_stride * vstride;
-          interleave = 0;
           break;
       case GST_VIDEO_FORMAT_NV16 :
-          format = BM_JPU_COLOR_FORMAT_YUV422_HORIZONTAL;
+          format = BM_JPU_IMAGE_FORMAT_NV16;
           self->cbcr_stride = hstride;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
           self->cr_offset = 0;
-          interleave = 1;
           break;
       case GST_VIDEO_FORMAT_NV61 :
-          format = BM_JPU_COLOR_FORMAT_YUV422_HORIZONTAL;
+          format = BM_JPU_IMAGE_FORMAT_NV16;
           self->cbcr_stride = hstride;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
           self->cr_offset = 0;
-          interleave = 2;
           break;
       case GST_VIDEO_FORMAT_Y444:
-          format = BM_JPU_COLOR_FORMAT_YUV444;
+          format = BM_JPU_IMAGE_FORMAT_YUV444P;
           self->cbcr_stride = hstride;
           self->y_offset = 0;
           self->cb_offset = hstride * vstride;
           self->cr_offset = self->cb_offset + hstride * vstride ;
-          interleave = 0;
           break;
       default:
-          format = BM_JPU_COLOR_FORMAT_BUTT;
+          format = -1;
           break;
   }
-  if (format == BM_JPU_COLOR_FORMAT_BUTT) {
+  if (format == -1) {
      return FALSE;
   }
-  self->params.color_format = format;
-  self->color_format = format;
-  self->params.chroma_interleave = interleave;
+  self->params.image_format = format;
   return TRUE;
 }
 
@@ -615,7 +604,7 @@ gst_bm_jpeg_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * stat
   //self->params.fps_num = GST_VIDEO_INFO_FPS_N (info);
   //self->params.fps_den = GST_VIDEO_INFO_FPS_D (info);
   gint buf_size = width * height;
-  if (bm_jpu_jpeg_enc_open(&self->bm_jpeg_enc, buf_size, self->soc_idx)) {
+  if (bm_jpu_jpeg_enc_open(&self->bm_jpeg_enc, 0, buf_size, self->soc_idx)) {
      GST_ERROR_OBJECT(self, "bm_jpu_jpeg_enc_open open failed!\n");
     return FALSE;
   }
@@ -921,7 +910,6 @@ gst_bm_jpeg_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * fr
   framebuffer.y_offset = self->y_offset;
   framebuffer.cb_offset = self->cb_offset;
   framebuffer.cr_offset = self->cr_offset;
-  self->params.packed_format  = 0;
   self->params.output_buffer_context = (void*)encoder;
   self->params.write_output_data = gst_bm_jpu_write_output_data;
   jpeg_ret = bm_jpu_jpeg_enc_encode(self->bm_jpeg_enc,
@@ -991,7 +979,7 @@ gst_bm_jpeg_enc_class_init (GstBmJpegEncClass * klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
 
-  GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "bmjpegenc", 0, "sophon encoder");
+  GST_DEBUG_CATEGORY_INIT (gst_bm_jpeg_enc_debug, "bmjpegenc", 0, "sophon encoder");
 
   encoder_class->start = GST_DEBUG_FUNCPTR (gst_bm_jpeg_enc_start);
   encoder_class->stop = GST_DEBUG_FUNCPTR (gst_bm_jpeg_enc_stop);

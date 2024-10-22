@@ -8,10 +8,16 @@ else
     CMAKE_BUILD_TYPE="Release"
 fi
 
+GCC_V="630"
+if [ $# -lt 1 ]; then
+    GCC_V=$1
+fi
+
+
 rm -rf buildit install
 mkdir buildit
 pushd buildit
-cmake -DPLATFORM=soc -DSUBTYPE=asic -DCMAKE_INSTALL_PREFIX=../install -DDEBUG=$DEBUG -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE ..
+cmake -DPLATFORM=soc -DGCC_VERSION=$1 -DSUBTYPE=asic -DCMAKE_INSTALL_PREFIX=../install -DDEBUG=$DEBUG -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE ..
 cmake --build . --target all -- -j`nproc`
 cmake --build . --target sophon_sample
 cmake --build . --target package

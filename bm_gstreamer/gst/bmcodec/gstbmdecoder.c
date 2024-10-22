@@ -191,17 +191,14 @@ static gboolean gst_bm_decoder_set_format(GstVideoDecoder *decoder, GstVideoCode
     {
     case GST_VIDEO_FORMAT_I420:
       /* code */
-      param.cbcrInterleave = 0;
-      param.nv21 = 0;
+      param.pixel_format = BM_VPU_DEC_PIX_FORMAT_YUV420P;
       break;
     case GST_VIDEO_FORMAT_NV12:
       /* code */
-      param.cbcrInterleave = 1;
-      param.nv21 = 0;
+      param.pixel_format = BM_VPU_DEC_PIX_FORMAT_NV12;
       break;
     case GST_VIDEO_FORMAT_NV21:
-      param.cbcrInterleave = 1;
-      param.nv21 = 1;
+      param.pixel_format = BM_VPU_DEC_PIX_FORMAT_NV21;
       break;
     default:
       GST_ERROR_OBJECT(self, "gst format no support %d \n", format);
@@ -434,6 +431,8 @@ static GstFlowReturn gst_bm_decoder_jpg_handle_frame(GstVideoDecoder * decoder, 
   GstMemory *mem_import = NULL;
   GstBuffer *buffer = NULL;
   GQuark quark;
+  int buf_size = 0;
+
   struct BmJpuFrameCtx *pJpuFrameCtx = NULL;
 
   in_buffer = gst_buffer_ref (frame->input_buffer);
@@ -443,7 +442,7 @@ static GstFlowReturn gst_bm_decoder_jpg_handle_frame(GstVideoDecoder * decoder, 
     gst_video_codec_frame_unref (frame);
     return GST_FLOW_ERROR;
   }
-  bm_jpu_jpeg_dec_decode(self->jpeg_decoder, map_info.data, map_info.size);
+  bm_jpu_jpeg_dec_decode(self->jpeg_decoder, map_info.data, map_info.size, 0, 0);
   bm_jpu_jpeg_dec_get_info(self->jpeg_decoder, &jpeg_dec_info);
   if (!gst_bm_decoder_check_jpg_info_change(decoder, &jpeg_dec_info)) {
     goto error;
@@ -454,21 +453,23 @@ static GstFlowReturn gst_bm_decoder_jpg_handle_frame(GstVideoDecoder * decoder, 
          "pixel Y/Cb/Cr stride: %u/%u/%u\n"
          "pixel Y/Cb/Cr size: %u/%u/%u\n"
          "pixel Y/Cb/Cr offset: %u/%u/%u\n"
-         "color format: %d\n"
-         "chroma interleave: %d\n",
+         "image format: %d\n",
          jpeg_dec_info.aligned_frame_width, jpeg_dec_info.aligned_frame_height,
          jpeg_dec_info.actual_frame_width,  jpeg_dec_info.actual_frame_height,
          jpeg_dec_info.y_stride,            jpeg_dec_info.cbcr_stride,             jpeg_dec_info.cbcr_stride,
          jpeg_dec_info.y_size,              jpeg_dec_info.cbcr_size,               jpeg_dec_info.cbcr_size,
          jpeg_dec_info.y_offset,            jpeg_dec_info.cb_offset,               jpeg_dec_info.cr_offset,
-         jpeg_dec_info.color_format,
-         jpeg_dec_info.chroma_interleave);
+         jpeg_dec_info.image_format);
 
   phys_addr = bm_mem_get_device_addr(*(jpeg_dec_info.framebuffer->dma_buffer));
+  buf_size = jpeg_dec_info.framebuffer->dma_buffer->size > GST_VIDEO_INFO_SIZE (info) ?
+             GST_VIDEO_INFO_SIZE (info) : jpeg_dec_info.framebuffer->dma_buffer->size;
 
   mem_import = gst_bm_allocator_import_bmjpg_buf(self->allocator,
-                                      phys_addr,
-                                      jpeg_dec_info.framebuffer->dma_buffer->size);
+                                              phys_addr,
+                                              buf_size);
+
+
 
   if (!mem_import) {
     GST_ERROR_OBJECT (self, "import jpeg_dec yuv buffer failed");
@@ -806,47 +807,18 @@ static GstVideoFormat bm_format_to_gst_format(BMVidFrame* bmframe)
 {
     GstVideoFormat gst_format;
 
-    GST_DEBUG_OBJECT(NULL, "bmframe->frameFormat = %d bmframe->cbcrInterleave %d \n",
-            bmframe->frameFormat, bmframe->cbcrInterleave);
-    switch (bmframe->frameFormat) {
-    case 0:
-        if(bmframe->cbcrInterleave == 1) {
-            if(bmframe->nv21 == 0)
-                gst_format = GST_VIDEO_FORMAT_NV12;
-            else if(bmframe->nv21 == 1)
-                gst_format = GST_VIDEO_FORMAT_NV21;
-            else
-                gst_format = GST_VIDEO_FORMAT_UNKNOWN ;
-        } else if(bmframe->cbcrInterleave == 0)
-            gst_format = GST_VIDEO_FORMAT_I420;
-        else
-            gst_format = GST_VIDEO_FORMAT_UNKNOWN ;
-        break;
-    case 1:
+    GST_DEBUG_OBJECT(NULL, "bmframe->pixel_format = %d bmframe->pixel_format %d \n",
+            bmframe->pixel_format, bmframe->pixel_format);
+
+    if (bmframe->pixel_format == BM_VPU_DEC_PIX_FORMAT_NV12)
         gst_format = GST_VIDEO_FORMAT_NV12;
-        break;
-    case 2:
-        gst_format = GST_VIDEO_FORMAT_YUY2;
-        break;
-    case 3:
-        gst_format = GST_VIDEO_FORMAT_NV16 ;
-        break;
-    case 5:
-        if(bmframe->cbcrInterleave)
-            gst_format = GST_VIDEO_FORMAT_UNKNOWN;
-        else
-            gst_format = GST_VIDEO_FORMAT_UNKNOWN;
-        break;
-    case 6:
-        if(bmframe->cbcrInterleave)
-            gst_format = GST_VIDEO_FORMAT_UNKNOWN;
-        else
-            gst_format = GST_VIDEO_FORMAT_UNKNOWN;
-        break;
-    default:
-        gst_format = GST_VIDEO_FORMAT_UNKNOWN ;
-        break;
-    }
+    else if (bmframe->pixel_format == BM_VPU_DEC_PIX_FORMAT_NV21)
+        gst_format = GST_VIDEO_FORMAT_NV21;
+    else if (bmframe->pixel_format == BM_VPU_DEC_PIX_FORMAT_COMPRESSED)
+        gst_format = GST_VIDEO_FORMAT_NV12;
+    else
+        gst_format = GST_VIDEO_FORMAT_I420;
+
     GST_DEBUG_OBJECT(NULL, "gst_format = %d \n", gst_format);
     return gst_format;
 }
@@ -902,38 +874,40 @@ static gboolean gst_bm_decoder_check_video_info_change(GstVideoDecoder *decoder,
  return TRUE;
 }
 
-static GstVideoFormat bm_jpeg_format_to_gst_format(BmJpuColorFormat jpg_color_format, int chroma_interleave)
+static GstVideoFormat bm_jpeg_format_to_gst_format(BmJpuImageFormat jpg_image_format)
 {
   GstVideoFormat gst_format;
-  switch (jpg_color_format)
+  switch (jpg_image_format)
   {
-    case BM_JPU_COLOR_FORMAT_YUV420:
-        gst_format = chroma_interleave ? GST_VIDEO_FORMAT_NV12 : GST_VIDEO_FORMAT_I420;
-        if (chroma_interleave == 2) {
-          gst_format = GST_VIDEO_FORMAT_NV21;
-        } break;
-    case BM_JPU_COLOR_FORMAT_YUV422_HORIZONTAL:
-        gst_format = chroma_interleave ? GST_VIDEO_FORMAT_NV16 : GST_VIDEO_FORMAT_Y42B;
+    case BM_JPU_IMAGE_FORMAT_YUV420P:
+        gst_format = GST_VIDEO_FORMAT_I420;
         break;
-    case BM_JPU_COLOR_FORMAT_YUV422_VERTICAL:
-        gst_format = GST_VIDEO_FORMAT_UNKNOWN;    /*  to do: I don't know what it is...  */
+    case BM_JPU_IMAGE_FORMAT_NV12:
+        gst_format = GST_VIDEO_FORMAT_NV12;
         break;
-    case BM_JPU_COLOR_FORMAT_YUV444:
-        gst_format = chroma_interleave ? GST_VIDEO_FORMAT_NV24 : GST_VIDEO_FORMAT_Y444;
+    case BM_JPU_IMAGE_FORMAT_NV21:
+        gst_format = GST_VIDEO_FORMAT_NV21;
         break;
-
-    case BM_JPU_COLOR_FORMAT_YUV400:
-        gst_format = chroma_interleave ? GST_VIDEO_FORMAT_UNKNOWN : GST_VIDEO_FORMAT_GRAY8;
+    case BM_JPU_IMAGE_FORMAT_YUV422P:
+        gst_format = GST_VIDEO_FORMAT_Y42B;
         break;
-    case BM_JPU_COLOR_FORMAT_RGB:
-        gst_format = GST_VIDEO_FORMAT_UNKNOWN;    /*  to do: I don't know what it is...  */
+    case BM_JPU_IMAGE_FORMAT_NV16:
+        gst_format = GST_VIDEO_FORMAT_NV16;
+        break;
+    case BM_JPU_IMAGE_FORMAT_NV61:
+        gst_format = GST_VIDEO_FORMAT_NV61;
+        break;
+    case BM_JPU_IMAGE_FORMAT_YUV444P:
+        gst_format = GST_VIDEO_FORMAT_Y444;
+        break;
+    case BM_JPU_IMAGE_FORMAT_GRAY:
+        gst_format = GST_VIDEO_FORMAT_GRAY8;
         break;
     default:
         gst_format = GST_VIDEO_FORMAT_UNKNOWN;
         break;
   }
   return gst_format;
-
 }
 
 static GQuark
@@ -969,7 +943,7 @@ static gboolean gst_bm_decoder_check_jpg_info_change(GstVideoDecoder *decoder, B
       self->coded_width  != jpeg_dec_info->aligned_frame_width ||
       self->coded_height != jpeg_dec_info->aligned_frame_height) {
     GstVideoCodecState *output_state;
-    GstVideoFormat format = bm_jpeg_format_to_gst_format(jpeg_dec_info->color_format, jpeg_dec_info->chroma_interleave);
+    GstVideoFormat format = bm_jpeg_format_to_gst_format(jpeg_dec_info->image_format);
     g_return_val_if_fail (format != GST_VIDEO_FORMAT_UNKNOWN, FALSE);
     self->width        = jpeg_dec_info->actual_frame_width;
     self->height       = jpeg_dec_info->actual_frame_height;

@@ -314,8 +314,15 @@ DWORD WINAPI videoWriteThread(void* arg){
     const char *cstr = default_outfile.c_str();
     if((strcmp(threadPara->outputName,"NULL") != 0) && (strcmp(threadPara->outputName,"null") != 0)) {
         outfile = threadPara->outputName;
-        pos = outfile.find(".");
-        if (pos != std::string::npos) {outfile.insert(pos, "_" + to_string(threadPara->thread_index));}
+        size_t last_index = outfile.rfind('/');
+    	string last_string = outfile.substr(last_index+1);
+    	outfile = outfile.substr(0, last_index+1); //处理完last_part后，直接outfile重新加上
+    	size_t pos1 = last_string.find('.');
+    	if(pos1 == std::string::npos)
+        	pos1 = last_string.size();
+    	last_string.insert(pos1, "_"+to_string(threadPara->thread_index));
+    	outfile += last_string;
+        cout << "thread[" << threadPara->thread_index << "]  url: " << outfile << endl;
     }
 
     if(strstr(threadPara->outputName,"rtmp://") || strstr(threadPara->outputName,"rtsp://"))
@@ -366,7 +373,7 @@ DWORD WINAPI videoWriteThread(void* arg){
         goto cleanup_write;
     while(1){
         if(is_stream){
-#ifdef __linux__"
+#ifdef __linux__
             gettimeofday(&tv, NULL);
             curframe_start= (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
 #elif _WIN32
@@ -388,6 +395,7 @@ DWORD WINAPI videoWriteThread(void* arg){
                     takeoutcount[index]++;
                     imageQueue_lock[index].unlock();
                     writer->write(*toEncImage);
+                    delete toEncImage;
                     count_write[index]++;
                 }else{
                     if( eof[index] ){   // Currently queue is empty while end of file, start to flush.
@@ -477,8 +485,10 @@ DWORD WINAPI videoWriteThread(void* arg){
                             free(roiinfo.field);
                             roiinfo.field = NULL;
                         }
-                    }else   // roienable = 0
+                    } else {   // roienable = 0
                         writer->write(*toEncImage, out_buf, &out_buf_len);
+                        delete toEncImage;
+                    }
                 }else{ // queue is empty
                     if( eof[index] ){  //end of file while queue is empty,start to flush
                         Mat flushMat;
@@ -504,7 +514,7 @@ DWORD WINAPI videoWriteThread(void* arg){
             }
 
             if( !threadPara->imageQueue->empty() && takeoutcount[index] > 0){
-                delete toEncImage;
+                //delete toEncImage;
                 takeoutcount[index]--;
                 quit_times = 0;
             }
@@ -676,8 +686,11 @@ void usage(char *argv_0){
     cout << "\t" << "<roi_enable>: 0 disable roi encoder; 1 enable roi encoder." << endl;
     cout << "\t" << "              if roi_enable is 1, you should set null/Null in outputname and set roi_enable=1 in encodeparams." << endl;
     cout << "\t" << "<thread_num>: thread number you want to create, MAX thread_num is 32, default value is 0. " << endl;
-    cout << "\t" << "<encodeparams>: gop=30:bitrate=800:gop_preset=2:mb_rc=1:delta_qp=3:min_qp=20:max_qp=40:roi_enable=1:push_stream=rtmp/rtsp." << endl;
+    cout << "\t" << "<encodeparams>: gop=30:bitrate=800:gop_preset=2:mb_rc=1:delta_qp=3:min_qp=20:max_qp=40:roi_enable=1:enc_cmd_queue=1:push_stream=rtmp/rtsp." << endl;
     cout << "\t" << "Tip: if there is only one optional parameter, thread_num takes precedence." << endl;
+    cout << "\t" << "Tip: When the output is xxx.xx file, the new file name is xxx_threadnum.xx;  eg：when thread_num is 1:\n"
+                    "                                     rtmp://172.28.141.136/live/room1——》 rtmp://172.28.141.136/live/room1_0 \n"
+                    "                                     rtsp://172.28.141.136/test.ts——》 rtsp://172.28.141.136/test_0.ts"<< endl;
 }
 
 

@@ -261,7 +261,7 @@ add_custom_target(GSTREAMER_DEB_SCRIPTS ALL
     # post-remove
     COMMAND echo "rm -f ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest" > sophon-gstreamer/postrm
     COMMAND echo "latest=\$(ls -dr ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-* 2>/dev/null | head -n 1)" >> sophon-gstreamer/postrm VERBATIM
-    COMMAND echo "if [-n \"\${latest}\" ]; then ln -s \${latest} ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest; fi" >> sophon-gstreamer/postrm
+    COMMAND echo "if [ -n \"\${latest}\" ]; then ln -s \${latest} ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest; fi" >> sophon-gstreamer/postrm
     # devel-post-install
     #COMMAND echo "sed -i \"s/\\\/usr\\\/local/${REPLACE_CPACK_INSTALL_PREFIX}\\\/sophon-gstreamer-latest/g\" ${CPACK_PACKAGING_INSTALL_PREFIX}/sophon-gstreamer-latest/lib/pkgconfig/*.pc" > sophon-gstreamer-devel/postinst
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script
