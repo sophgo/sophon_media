@@ -1,0 +1,11 @@
+prefix=../../../../prebuilt
+libdir=${prefix}/lib930/gst
+includedir=${prefix}/include/gst/gstreamer-1.0
+
+Name: GStreamer Allocators Library
+Description: Allocators implementation
+Requires: gstreamer-1.0
+Version: 1.16.3
+Libs: -L${libdir} -lgstallocators-1.0
+Cflags: -I${includedir}
+

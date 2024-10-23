@@ -1,0 +1,9 @@
+prefix=../../../../prebuilt
+includedir=${prefix}/include/gst
+libdir=${prefix}/lib930/gst
+
+Name: zlib
+Description: zlib compression library
+Version: 1.2.11
+Libs: -L${libdir} -lz
+Cflags: -I${includedir}

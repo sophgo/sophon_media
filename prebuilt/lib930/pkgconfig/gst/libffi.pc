@@ -1,0 +1,9 @@
+prefix=../../../../prebuilt
+includedir=${prefix}/include/gst
+libdir=${prefix}/lib930/gst
+
+Name: ffi
+Description: Library supporting Foreign Function Interfaces
+Version: 3.2.9999
+Libs: -L${libdir} -lffi
+Cflags: -I${includedir}
