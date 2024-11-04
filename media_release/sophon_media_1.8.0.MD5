@@ -1,16 +1,6 @@
-e7bbc6fb5b79c4fe9b0cc8fd37c9375f  ./sophon-media-soc_1.8.0_aarch64.tar.gz
-c3f99ed43a3eba9eaebdb4e4428a55ea  ./sophon-media-soc-sophon-ffmpeg-dev_1.8.0_arm64.deb
 ea93f27d629c3a875b5e57c87271c995  ./sophon-media-soc-sophon-gstreamer_1.8.0_arm64.deb
 6393e0c4e55570e5a01d4631b3cc36c1  ./sophon_media.MD5
-01e229b04a585f2ae8145e0d1b8b394d  ./sophon-media-soc-sophon-gstreamer-dev_1.8.0_arm64.deb
 ae3677de7ee67fec432bf2b866002ccc  ./sophon-media-soc-sophon-sample_1.8.0_arm64.deb
-3478f858b4f4fb087c6c73bb1f3c2bb7  ./doc/算能边缘产品多媒体使用参考指南.pdf
-9439da484196ad609b164c16753a72e7  ./doc/Multimedia_FAQ_en.pdf
-6b20e318debb3492cdf832e68a3d24d7  ./doc/算能边缘产品MULTIMEDIA开发参考手册.pdf
-568d4256dbad149f91f8e6db7fd84e5c  ./doc/算能边缘产品MULTIMEDIA常见问题手册.pdf
-f73422504bacf6191c8c58bf5e5e75c7  ./doc/Multimedia_Manual_en.pdf
-b710b0381f8b8f57e2a4aab57e12298d  ./doc/Multimedia_Guide_en.pdf
 a4fcc6a627f58b75e74bc5147c32af2d  ./sophon-media-soc-sophon-opencv_1.8.0_arm64.deb
-86a5165712dd6f022332872a023e69b5  ./sophon-media-soc-sophon-opencv-dev_1.8.0_arm64.deb
 672fff654e3407bd9c11a2e90e2ab2fe  ./sophon-media-soc-sophon-ffmpeg_1.8.0_arm64.deb
 4794575e427cbc24b64d93e8707fbc22  ./release_version.txt
