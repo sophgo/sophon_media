@@ -505,7 +505,7 @@ static av_cold int bm_decode_init(AVCodecContext *avctx)
     ret = bmvpu_dec_create(&handle, param);
     if (ret != 0) {
         av_log(avctx, AV_LOG_ERROR, "bmvpu_dec_create failed\n");
-        ret = AVERROR_INVALIDDATA;
+        ret = AVERROR_EXTERNAL;
     }
     bmctx->handle = handle;
     bmctx->endof_flag = 0;
@@ -1492,7 +1492,7 @@ GET_FRAME:
 
         if(send_pkg == 1) {
             if(ret < 0) {
-                av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame.\n");
+                av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame. ret=%d\n", ret);
             }
             free(bmframe);
             return ret;
