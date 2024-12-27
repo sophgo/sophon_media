@@ -165,7 +165,7 @@ int avframe_to_bm_image(bm_handle_t &bm_handle,AVFrame &in, bm_image &out){
             printf("bmcv allocate mem failed!!!");
         }
 
-        bmcv_rect_t crop_rect = {0, 0, in.width, in.height};
+        bmcv_rect_t crop_rect = {0, 0, (unsigned int)in.width, (unsigned int)in.height};
         bmcv_image_vpp_convert(bm_handle, 1, cmp_bmimg, &out, &crop_rect,BMCV_INTER_LINEAR);
         bm_image_destroy(&cmp_bmimg);
     }
@@ -260,6 +260,9 @@ int bm_image_to_avframe(bm_handle_t &bm_handle,bm_image *in,AVFrame *out){
         if(plane == 3){
             ImgOut->buf2 = ImgOut->buf0 + (unsigned int)(ImgOut->bmImg->height * ImgOut->bmImg->width * 5 / 4);
         }
+    } else {
+        printf("Unsupport size(0*0-8192*8192)");
+        return -1;
     }
 
     out->buf[0] = av_buffer_create(ImgOut->buf0,ImgOut->bmImg->width * ImgOut->bmImg->height,

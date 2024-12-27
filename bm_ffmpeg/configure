@@ -7255,6 +7255,7 @@ elif enabled gcc; then
     check_cflags -Werror=vla
     check_cflags -Wformat
     check_cflags -fdiagnostics-color=auto
+    check_cflags -Wno-deprecated-declarations
     enabled extra_warnings || check_disable_warning -Wno-maybe-uninitialized
     if enabled x86_32; then
         case $target_os in

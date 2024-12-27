@@ -1,0 +1,37 @@
+cmake_minimum_required(VERSION 3.16)
+cmake_policy(SET CMP0046 NEW)
+
+PROJECT(ff_sns_decode)
+
+include_directories(/opt/sophon/libsophon-current/include)
+link_directories(/opt/sophon/libsophon-current/lib)
+
+#ffmpeg
+include_directories(/opt/sophon/sophon-ffmpeg-latest/include)
+link_directories(/opt/sophon/sophon-ffmpeg-latest/lib)
+
+#audio
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../prebuilt/include/alsa)
+#link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../prebuilt/lib)
+
+#isp
+include_directories(/opt/sophon/sophon-soc-libisp-dev_1.0.0/include)
+link_directories(/opt/sophon/sophon-soc-libisp_1.0.0/lib)
+
+set(FFMPEG_LIB avfilter avformat avdevice avcodec swscale avutil swresample)
+set(BMLIB    bmlib)
+set(VPU_LIB  bmvd bmvenc)
+set(BMCV_LIB bmcv)
+set(JPEG_LIB bmjpeg)
+set(SYSTEM_LIB pthread stdc++)
+set(ISP_LIB ispv4l2_helper ae af awb cvi_bin isp isp_algo ispv4l2_adapter sns_full)
+SET(SRCS
+  ff_sns_decode.hpp
+  ff_sns_encode.hpp
+  ff_avframe_convert.cpp
+  ff_sns_xcode.cpp
+)
+
+add_executable(test_ff_sns_xcode EXCLUDE_FROM_ALL ${SRCS})
+target_compile_options(test_ff_sns_xcode PRIVATE -Wno-deprecated-declarations)
+target_link_libraries(test_ff_sns_xcode ${FFMPEG_LIB} ${BMLIB} ${VPU_LIB} ${BMCV_LIB} ${JPEG_LIB} ${SYSTEM_LIB} ${ISP_LIB})

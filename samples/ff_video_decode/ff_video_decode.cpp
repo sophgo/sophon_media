@@ -42,6 +42,7 @@ VideoDec_FFMPEG::VideoDec_FFMPEG()
 }
 VideoDec_FFMPEG::~VideoDec_FFMPEG()
 {
+    av_packet_unref(&pkt);
     closeDec();
 
     printf("#VideoDec_FFMPEG exit \n");
@@ -96,10 +97,10 @@ int VideoDec_FFMPEG::openDec(const char *filename, int codec_name_flag,
            "openDec video_stream_idx = %d, pix_fmt = %d\n",
            video_stream_idx, pix_fmt);
     av_dict_free(&dict);
-    if (strlen(filename) < sizeof(file_name))
-        strncpy(file_name, filename, strlen(filename) + 1);
-    else
-    {
+    if (strlen(filename) < sizeof(file_name)) {
+        strncpy(file_name, filename, sizeof(file_name) - 1);
+        file_name[sizeof(file_name) - 1] = '\0';
+    } else {
         av_log(video_dec_ctx, AV_LOG_INFO,
                "the filename is too long");
     }
@@ -353,6 +354,7 @@ AVFrame *VideoDec_FFMPEG::grabFrame2()
     {
         return flushDecoder(video_dec_ctx, 1); // Clean up residual frames in the decoder
     }
+    return NULL;
 }
 
 int VideoDec_FFMPEG::WriteDataToFile(int datatype, const char *filename, void *data, int width, int height)
@@ -504,10 +506,10 @@ AVFrame *VideoDec_FFMPEG::grabFrameByParser()
     int len;
 
 #ifdef WIN32
-    clock_t tv1, tv2;
+    clock_t tv1;
     tv1 = clock();
 #else
-    struct timeval tv1, tv2;
+    struct timeval tv1;
     gettimeofday(&tv1, NULL);
 #endif
     while (!fflush_flag)

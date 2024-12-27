@@ -1072,6 +1072,7 @@ int main (int argc, char **argv)
     av_log_set_callback(custom_output);
     av_log_set_level(AV_LOG_INFO);
 #endif
+
     for(i=1; i<inst_num + 1; i++) {
         inst[i-1].src_filename = inputPath;
         inst[i-1].video_dst_filename = refYuvPath;

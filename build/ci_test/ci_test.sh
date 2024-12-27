@@ -57,6 +57,7 @@ function soc_file_copy() {
     cp_file ${MM_TOP_DIR}/buildit/samples/                                     $dest/              $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/buildit/libsophav/bmcv/                              $dest/              $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/buildit/libsophav/libyuv/lib/                        $dest/              $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
+    cp_file ${MM_TOP_DIR}/libsophav/3rdparty/tpu_kernel_module/libbm1688_kernel_module.so $dest/              $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/buildit/libsophav/bmcv/libbmcv.so                    $dest/lib/          $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/buildit/libsophav/jpeg/libbmjpeg.so                  $dest/lib/          $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null
     cp_file ${MM_TOP_DIR}/buildit/libsophav/video/dec/libbmvd.so               $dest/lib/          $SOC_PASS_WORD $SOC_IP_ADDR 1 > /dev/null

@@ -57,10 +57,25 @@
 #endif
 
 #include <SDL.h>
-#include <SDL_thread.h>
-
+#include "bmcv_api_ext_c.h"
 #include "cmdutils.h"
 #include "opt_common.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <time.h>
+#include <unistd.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+#include <drm_fourcc.h>
+#include "bo.h"
+#include <sys/time.h>
+#include <stdio.h>
 
 const char program_name[] = "ffplay";
 const int program_birth_year = 2003;
@@ -109,7 +124,36 @@ const int program_birth_year = 2003;
 
 #define USE_ONEPASS_SUBTITLE_RENDER 1
 
+#define PLANE_ID 36
+#define CRTC_ID 40
+#define CONN_ID 44
+
 static unsigned sws_flags = SWS_BICUBIC;
+
+static int fd = -1;
+static struct bo* global_bo_obj_1 = NULL;
+static struct bo* global_bo_obj_2 = NULL;
+static unsigned long long framecount = 0;
+typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} DisplayObject;
+
+static DisplayObject disp_obj = {0, 0, 0, 0};
+
+static void set_disp_rect(void *optctx, const char *opt, const char *arg) {
+    int scanned = sscanf(arg, "%d_%d_%d_%d", &disp_obj.x, &disp_obj.y, &disp_obj.width, &disp_obj.height);
+    if (scanned != 4) {
+        fprintf(stderr, "Invalid format for disp_rect. Please use the format x_y_width_height.\n");
+        exit(1);
+    }
+}
+
+static void set_fd(void *optctx, const char *opt, const char *arg) {
+    fd = atoi(arg);
+}
 
 typedef struct MyAVPacketList {
     AVPacket *pkt;
@@ -220,9 +264,9 @@ typedef struct VideoState {
     Clock vidclk;
     Clock extclk;
 
-    FrameQueue pictq;
-    FrameQueue subpq;
-    FrameQueue sampq;
+    FrameQueue pictq;// video
+    FrameQueue subpq;// subtitle
+    FrameQueue sampq;// audio sample
 
     Decoder auddec;
     Decoder viddec;
@@ -269,9 +313,9 @@ typedef struct VideoState {
     FFTSample *rdft_data;
     int xpos;
     double last_vis_time;
-    SDL_Texture *vis_texture;
-    SDL_Texture *sub_texture;
-    SDL_Texture *vid_texture;
+    SDL_Texture *vis_texture;// audio texture
+    SDL_Texture *sub_texture;// subtitle
+    SDL_Texture *vid_texture;// video frame
 
     int subtitle_stream;
     AVStream *subtitle_st;
@@ -414,6 +458,31 @@ int cmp_audio_fmts(enum AVSampleFormat fmt1, int64_t channel_count1,
         return av_get_packed_sample_fmt(fmt1) != av_get_packed_sample_fmt(fmt2);
     else
         return channel_count1 != channel_count2 || fmt1 != fmt2;
+}
+
+static void init_buffer(int fd, int width, int height, int format)
+{
+    if (!global_bo_obj_1) {
+        global_bo_obj_1 = bo_create_dumb_fd(fd, width, height, format);
+        if (!global_bo_obj_1) {
+            fprintf(stderr, "Failed to create buffer object 1\n");
+            return;
+        }
+    }
+
+    if (!global_bo_obj_2) {
+        global_bo_obj_2 = bo_create_dumb_fd(fd, width, height, format);
+        if (!global_bo_obj_2) {
+            fprintf(stderr, "Failed to create buffer object 2\n");
+            return;
+        }
+    }
+}
+
+static void exit_buffer()
+{
+    bo_destroy(global_bo_obj_1);
+    bo_destroy(global_bo_obj_2);
 }
 
 static int packet_queue_put_private(PacketQueue *q, AVPacket *pkt)
@@ -961,13 +1030,88 @@ static void set_sdl_yuv_conversion_mode(AVFrame *frame)
 #endif
 }
 
+static int avformat_to_bmformat(int avformat)
+{
+    int format;
+    switch(avformat){
+        case AV_PIX_FMT_YUV420P:
+        case AV_PIX_FMT_YUVJ420P:
+          format = FORMAT_YUV420P; break;
+        case AV_PIX_FMT_YUV422P:
+        case AV_PIX_FMT_YUVJ422P:
+          format = FORMAT_YUV422P; break;
+        case AV_PIX_FMT_YUV444P:
+        case AV_PIX_FMT_YUVJ444P:
+          format = FORMAT_YUV444P; break;
+        case AV_PIX_FMT_NV12:    format = FORMAT_NV12; break;
+        case AV_PIX_FMT_NV16:    format = FORMAT_NV16; break;
+        case AV_PIX_FMT_GRAY8:   format = FORMAT_GRAY; break;
+        case AV_PIX_FMT_GBRP:    format = FORMAT_RGBP_SEPARATE; break;
+        default: printf("Unsupported format %d", avformat); return -1;
+    }
+
+    return format;
+}
+
+static int drmformat_to_bmformat(unsigned int drm_format)
+{
+    int format;
+	switch (drm_format) {
+	case DRM_FORMAT_NV12:
+        format = FORMAT_NV12;
+        break;
+	case DRM_FORMAT_NV21:
+        format = FORMAT_NV21;
+        break;
+	case DRM_FORMAT_NV16:
+        format = FORMAT_NV16;
+        break;
+	case DRM_FORMAT_YUV420:
+        format = FORMAT_YUV420P;
+        break;
+	case DRM_FORMAT_YUV422:
+        format = FORMAT_YUV422P;
+        break;
+	case DRM_FORMAT_BGR888:
+        format = FORMAT_BGR_PACKED;
+        break;
+	case DRM_FORMAT_RGB888:
+        format = FORMAT_RGB_PACKED;
+        break;
+	default:
+		printf("Unsupported format 0x%08x", drm_format);
+		return -1;
+	}
+
+    return format;
+}
+
 static void video_image_display(VideoState *is)
 {
     Frame *vp;
+/*
     Frame *sp = NULL;
     SDL_Rect rect;
-
+*/
     vp = frame_queue_peek_last(&is->pictq);
+    AVFrame *frame = vp->frame;
+    bm_status_t bm_ret = BM_SUCCESS;
+    bm_handle_t bm_handle = NULL;
+    bm_image *src = NULL;
+    bm_image *dst = NULL;
+    int in_height = 0;
+    int in_width = 0;
+    bm_image_format_ext bmInFormat = FORMAT_YUV420P;
+    bm_image_format_ext bmOutFormat = FORMAT_YUV420P;
+    int plane_size[3] = {0};
+    int input_stride[3] = {0};
+    bmcv_rect_t crop_rect;
+    unsigned long long input_addr_phy[3] = {0};
+    bm_device_mem_t input_addr[3] = {0};
+    bm_device_mem_t output_addr[3] = {0};
+    int dma_fd;
+
+/*
     if (is->subtitle_st) {
         if (frame_queue_nb_remaining(&is->subpq) > 0) {
             sp = frame_queue_peek(&is->subpq);
@@ -1013,6 +1157,118 @@ static void video_image_display(VideoState *is)
         }
     }
 
+*/
+
+    bm_dev_request(&bm_handle, 0);
+
+    src = (bm_image *) malloc(sizeof(bm_image));
+    dst = (bm_image *) malloc(sizeof(bm_image));
+    if (src == NULL || dst == NULL) {
+        printf("Failed to allocate memory for bm_image! \n");
+        goto clean_up;
+    }
+
+    in_height = vp->height;
+    in_width = vp->width;
+
+    bmInFormat = (bm_image_format_ext)avformat_to_bmformat(vp->format);
+
+    input_stride[0] = frame->linesize[4];
+    plane_size[0] = input_stride[0] * in_height;
+    input_addr_phy[0] = (unsigned long long)(frame->data[4]);
+    input_addr[0] = bm_mem_from_device(input_addr_phy[0], plane_size[0]);
+
+    input_stride[1] = frame->linesize[5];
+    plane_size[1] = input_stride[1] * in_height / 2;
+    input_addr_phy[1] = (unsigned long long)(frame->data[5]);
+    input_addr[1] = bm_mem_from_device(input_addr_phy[1], plane_size[1]);
+
+    if (frame->format == AV_PIX_FMT_YUV420P || frame->format == AV_PIX_FMT_YUVJ420P) {
+        input_stride[2] = frame->linesize[6];
+        plane_size[2] = input_stride[2] * in_height / 2;
+        input_addr_phy[2] = (unsigned long long)(frame->data[6]);
+        input_addr[2] = bm_mem_from_device(input_addr_phy[2], plane_size[2]);
+    } else {
+        input_stride[2] = 0;
+        plane_size[2] = 0;
+        input_addr_phy[2] = 0;
+    }
+
+    bm_image_create(bm_handle, in_height, in_width, bmInFormat, DATA_TYPE_EXT_1N_BYTE, src, input_stride);
+    bm_image_attach(*src, input_addr);
+
+    bmOutFormat = (bm_image_format_ext)drmformat_to_bmformat(DRM_FORMAT_YUV420);
+    if (framecount % 2 == 0) {
+        if (!global_bo_obj_1) {
+            printf("global_bo_obj_1 is nullptr");
+            goto clean_up;
+        }
+
+        dma_fd = global_bo_obj_1->buff_fd;
+        int plane_num = global_bo_obj_1->plane_num;
+        int plane_size[3] = {0};
+
+        for (int i = 0; i < plane_num; i++) {
+            plane_size[i] = global_bo_obj_1->length[i];
+            output_addr[i] = bm_mem_from_device(dma_fd, plane_size[i]);
+        }
+    } else {
+        if (!global_bo_obj_2) {
+            printf("global_bo_obj_2 is nullptr");
+            goto clean_up;
+        }
+
+        dma_fd = global_bo_obj_2->buff_fd;
+        int plane_num = global_bo_obj_2->plane_num;
+        int plane_size[3] = {0};
+
+        for (int i = 0; i < plane_num; i++) {
+            plane_size[i] = global_bo_obj_2->length[i];
+            output_addr[i] = bm_mem_from_device(dma_fd, plane_size[i]);
+        }
+    }
+    bm_image_create(bm_handle, disp_obj.height, disp_obj.width, bmOutFormat, DATA_TYPE_EXT_1N_BYTE, dst, NULL);
+    bm_image_attach(*dst, output_addr);
+
+    crop_rect.start_x = 0;
+    crop_rect.start_y = 0;
+    crop_rect.crop_w = in_width;
+    crop_rect.crop_h = in_height;
+    bm_ret = bmcv_image_vpp_convert(bm_handle, 1, *src, dst, &crop_rect, BMCV_INTER_LINEAR);
+    if (bm_ret != BM_SUCCESS) {
+        printf("Failed to convert image, error code: %d", bm_ret);
+        goto clean_up;
+    }
+
+	drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+    if (framecount % 2 == 0) {
+        if (!global_bo_obj_1) {
+            printf("global_bo_obj_1 is nullptr");
+            goto clean_up;
+        }
+
+        drmModeSetPlane(fd, PLANE_ID, CRTC_ID, global_bo_obj_1->fb_id, 0,
+        disp_obj.x, disp_obj.y, disp_obj.width, disp_obj.height,
+		0 << 16, 0 << 16, disp_obj.width << 16, disp_obj.height << 16);
+    } else {
+        if (!global_bo_obj_2) {
+            printf("global_bo_obj_2 is nullptr");
+            goto clean_up;
+        }
+
+        drmModeSetPlane(fd, PLANE_ID, CRTC_ID, global_bo_obj_2->fb_id, 0,
+        disp_obj.x, disp_obj.y, disp_obj.width, disp_obj.height,
+		0 << 16, 0 << 16, disp_obj.width << 16, disp_obj.height << 16);
+    }
+
+clean_up:
+    framecount = (framecount + 1) % 2;
+    bm_image_destroy(src);
+    bm_image_destroy(dst);
+    free(src);
+    free(dst);
+    bm_dev_free(bm_handle);
+/*
     calculate_display_rect(&rect, is->xleft, is->ytop, is->width, is->height, vp->width, vp->height, vp->sar);
     set_sdl_yuv_conversion_mode(vp->frame);
 
@@ -1044,6 +1300,7 @@ static void video_image_display(VideoState *is)
         }
 #endif
     }
+*/
 }
 
 static inline int compute_mod(int a, int b)
@@ -1305,6 +1562,7 @@ static void do_exit(VideoState *is)
         printf("\n");
     SDL_Quit();
     av_log(NULL, AV_LOG_QUIET, "%s", "");
+    exit_buffer();
     exit(0);
 }
 
@@ -1353,7 +1611,7 @@ static void video_display(VideoState *is)
 {
     if (!is->width)
         video_open(is);
-
+/*
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     if (is->audio_st && is->show_mode != SHOW_MODE_VIDEO)
@@ -1361,6 +1619,9 @@ static void video_display(VideoState *is)
     else if (is->video_st)
         video_image_display(is);
     SDL_RenderPresent(renderer);
+*/
+    if (is->video_st)
+        video_image_display(is);
 }
 
 static double get_clock(Clock *c)
@@ -2131,7 +2392,7 @@ static int video_thread(void *arg)
     int ret;
     AVRational tb = is->video_st->time_base;
     AVRational frame_rate = av_guess_frame_rate(is->ic, is->video_st, NULL);
-
+/*
 #if CONFIG_AVFILTER
     AVFilterGraph *graph = NULL;
     AVFilterContext *filt_out = NULL, *filt_in = NULL;
@@ -2141,7 +2402,7 @@ static int video_thread(void *arg)
     int last_serial = -1;
     int last_vfilter_idx = 0;
 #endif
-
+*/
     if (!frame)
         return AVERROR(ENOMEM);
 
@@ -2151,8 +2412,9 @@ static int video_thread(void *arg)
             goto the_end;
         if (!ret)
             continue;
-
+/*
 #if CONFIG_AVFILTER
+        printf(" CONFIG_AVFILTER CONFIG_AVFILTER CONFIG_AVFILTER\n");
         if (   last_w != frame->width
             || last_h != frame->height
             || last_format != frame->format
@@ -2208,23 +2470,27 @@ static int video_thread(void *arg)
                 is->frame_last_filter_delay = 0;
             tb = av_buffersink_get_time_base(filt_out);
 #endif
+*/
             duration = (frame_rate.num && frame_rate.den ? av_q2d((AVRational){frame_rate.den, frame_rate.num}) : 0);
             pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(tb);
             ret = queue_picture(is, frame, pts, duration, frame->pkt_pos, is->viddec.pkt_serial);
             av_frame_unref(frame);
+/*
 #if CONFIG_AVFILTER
             if (is->videoq.serial != is->viddec.pkt_serial)
                 break;
         }
 #endif
-
+*/
         if (ret < 0)
             goto the_end;
     }
  the_end:
+/*
 #if CONFIG_AVFILTER
     avfilter_graph_free(&graph);
 #endif
+*/
     av_frame_free(&frame);
     return 0;
 }
@@ -2620,6 +2886,8 @@ static int stream_component_open(VideoState *is, int stream_index)
         av_dict_set(&opts, "threads", "auto", 0);
     if (stream_lowres)
         av_dict_set_int(&opts, "lowres", stream_lowres, 0);
+    if(!strcmp(codec->name, "h264_bm") || !strcmp(codec->name, "hevc_bm"))
+        av_dict_set_int(&opts, "cbcr_interleave", 0, 0);
     if ((ret = avcodec_open2(avctx, codec, &opts)) < 0) {
         goto fail;
     }
@@ -3570,6 +3838,8 @@ static int dummy;
 
 static const OptionDef options[] = {
     CMDUTILS_COMMON_OPTIONS
+    { "disp_rect", HAS_ARG, { .func_arg = set_disp_rect }, "set display rectangle as x_y_width_height", "x_y_width_height" },
+    { "fd", HAS_ARG, { .func_arg = set_fd }, "set the file descriptor for output", "fd" },
     { "x", HAS_ARG, { .func_arg = opt_width }, "force displayed width", "width" },
     { "y", HAS_ARG, { .func_arg = opt_height }, "force displayed height", "height" },
     { "fs", OPT_BOOL, { &is_full_screen }, "force full screen" },
@@ -3675,9 +3945,7 @@ int main(int argc, char **argv)
     parse_loglevel(argc, argv, options);
 
     /* register all codecs, demux and protocols */
-#if CONFIG_AVDEVICE
     avdevice_register_all();
-#endif
     avformat_network_init();
 
     signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).    */
@@ -3686,6 +3954,20 @@ int main(int argc, char **argv)
     show_banner(argc, argv, options);
 
     parse_options(NULL, argc, argv, options, opt_input_file);
+
+    if(fd == -1)
+        fd = open("/dev/dri/card0", O_RDWR);
+
+    if(disp_obj.width == 0) {
+        drmModeConnector *conn;
+        conn = drmModeGetConnector(fd, CONN_ID);
+        disp_obj.x = 0;
+        disp_obj.y = 0;
+        disp_obj.width = conn->modes[0].hdisplay;
+        disp_obj.height = conn->modes[0].vdisplay;
+    }
+
+    init_buffer(fd, disp_obj.width, disp_obj.height, DRM_FORMAT_YUV420);
 
     if (!input_filename) {
         show_usage();

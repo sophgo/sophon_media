@@ -301,7 +301,7 @@ void *video_decoder_pthread(void *arg){
     int output_format_mode      = 101;
 
     int ret                     =  0;
-    char file_name[256]         = {0};
+    //char file_name[256]         = {0};
     struct timeval tv1, tv2;
     float time;
     count_dec[index] = 0;
@@ -381,9 +381,9 @@ void *video_process_pthread(void *arg){
     int height                  = thread_arg->height;
     int width                   = thread_arg->width;
     int encode_pixel_format     = thread_arg->encode_pixel_format;
-    int sophon_idx              = thread_arg->sophon_idx;
+    //int sophon_idx              = thread_arg->sophon_idx;
 
-    int ret                     =  0;
+    //int ret                     =  0;
     struct timeval tv1, tv2;
     float time;
 
@@ -575,7 +575,7 @@ void handler(int sig)
     int try_count = 50;
     while (try_count--){
         bool exit_all = true;
-        for (int i = 0; i < MAX_THREAD_NUM; i++) {
+        for (i = 0; i < MAX_THREAD_NUM; i++) {
             if(g_thread_num){
                 exit_all = false;
             }
@@ -589,14 +589,14 @@ void handler(int sig)
 
     if (try_count<=0){
         pthread_cancel(stat_thread);
-        for (int i = 0; i < MAX_THREAD_NUM; i++) {
+        for (i = 0; i < MAX_THREAD_NUM; i++) {
             pthread_cancel(dec_thread[i]);
             pthread_cancel(dec_thread[i]);
             pthread_cancel(dec_thread[i]);
         }
     }
 
-    for (int i = 0; i < MAX_THREAD_NUM; i++) {
+    for (i = 0; i < MAX_THREAD_NUM; i++) {
         if (!g_writer[i].isClosed())
             g_writer[i].closeEnc();
         if (!g_reader[i].isClosed())
@@ -632,7 +632,7 @@ void* stat_pthread(void *arg)
         sleep(INTERVAL);
         if (dis_mode == 1) {
             for (int i = 0; i < thread_num; i++) {
-                printf("ID[%d] ,DEC_FRM[%10lld], DEC_FPS[%2.2f],[%2.2f] | VPP_FRM[%10lld], VPP_FPS[%2.2f],[%2.2f]| ENC_FRM[%10lld], ENC_FPS[%2.2f],[%2.2f], VPP_QUEUE[%d] ENC_QUEUE[%d]\n",
+                printf("ID[%d] ,DEC_FRM[%10lld], DEC_FPS[%2.2f],[%2.2f] | VPP_FRM[%10lld], VPP_FPS[%2.2f],[%2.2f]| ENC_FRM[%10lld], ENC_FPS[%2.2f],[%2.2f], VPP_QUEUE[%ld] ENC_QUEUE[%ld]\n",
                     i, (long long)count_dec[i],((double)(count_dec[i]-last_count_dec[i]))/INTERVAL, fps_dec[i],
                        (long long)count_vpp[i],((double)(count_vpp[i]-last_count_vpp[i]))/INTERVAL, fps_vpp[i],
                        (long long)count_enc[i], ((double)(count_enc[i]-last_count_enc[i]))/INTERVAL, fps_enc[i], g_image_vpp_queue[i].size(), g_image_enc_queue[i].size());
@@ -647,7 +647,7 @@ void* stat_pthread(void *arg)
             uint64_t count_sum = 0;
             for (int i = 0; i < thread_num; i++)
               count_sum += count_enc[i];
-            printf("thread %d, frame %lld, enc_fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
+            printf("thread %d, frame %ld, enc_fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
             last_count_sum = count_sum;
         }
         printf("\r");

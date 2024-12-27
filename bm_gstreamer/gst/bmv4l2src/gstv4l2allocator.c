@@ -816,8 +816,8 @@ gst_v4l2_allocator_alloc_mmap (GstV4l2Allocator * allocator,
   for (i = 0; i < group->n_mem; i++) {
     if (group->mem[i] == NULL) {
       gpointer data;
-      GstMemory *dma_mem;
-      GstV4l2Memory *mem;
+    //  GstMemory *dma_mem;
+    //  GstV4l2Memory *mem;
 
       data = obj->mmap (NULL, group->planes[i].length, PROT_READ | PROT_WRITE,
           MAP_SHARED, obj->video_fd, group->planes[i].m.mem_offset);
@@ -932,6 +932,7 @@ gst_v4l2_allocator_remake_dma_buf (GstV4l2Allocator * allocator,
       group->mem[i] = dma_mem;
     }
   }
+  return NULL;
 }
 
 GstV4l2MemoryGroup *

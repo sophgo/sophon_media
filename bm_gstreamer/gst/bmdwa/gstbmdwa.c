@@ -17,7 +17,7 @@ GST_DEBUG_CATEGORY (gst_bm_dwa_debug);
 #define DEFAULT_PROP_DWA_AFFINE_REG_NUM           1
 #define DEFAULT_PROP_DWA_AFFINE_SIZE_W            640
 #define DEFAULT_PROP_DWA_AFFINE_SIZE_H            480
-#define DEFAULT_PROP_DWA_AFFINE_REG_ATTR          ""
+#define DEFAULT_PROP_DWA_AFFINE_REG_ATTR          0
 #define DEFAULT_PROP_DWA_FISHEYE_EN               0
 #define DEFAULT_PROP_DWA_FISHEYE_BGCOLOR_EN       0
 #define DEFAULT_PROP_DWA_FISHEYE_BGCOLOR_Y        0
@@ -31,7 +31,7 @@ GST_DEBUG_CATEGORY (gst_bm_dwa_debug);
 #define DEFAULT_PROP_DWA_FISHEYE_USE_MODE         BMCV_MODE_PANORAMA_360
 #define DEFAULT_PROP_DWA_FISHEYE_REG_NUM          1
 #define DEFAULT_PROP_DWA_FISHEYE_VIEW_MODE        BMCV_FISHEYE_VIEW_NORMAL
-#define DEFAULT_PROP_DWA_FISHEYE_GRID_INFO_NAME   ""
+#define DEFAULT_PROP_DWA_FISHEYE_GRID_INFO_NAME   0
 #define DEFAULT_PROP_DWA_FISHEYE_GRID_INFO_SIZE   0
 #define DEFAULT_PROP_DWA_GDC_ASPECT               0
 #define DEFAULT_PROP_DWA_GDC_X_RATIO              0
@@ -40,9 +40,9 @@ GST_DEBUG_CATEGORY (gst_bm_dwa_debug);
 #define DEFAULT_PROP_DWA_GDC_CENTER_X_OFFSET      0
 #define DEFAULT_PROP_DWA_GDC_CENTER_Y_OFFSET      0
 #define DEFAULT_PROP_DWA_GDC_DISTORT_RATIO        0
-#define DEFAULT_PROP_DWA_GDC_GRID_INFO_NAME       ""
+#define DEFAULT_PROP_DWA_GDC_GRID_INFO_NAME       0
 #define DEFAULT_PROP_DWA_GDC_GRID_INFO_SIZE       0
-#define DEFAULT_PROP_DWA_DEWARP_GRID_INFO_NAME    ""
+#define DEFAULT_PROP_DWA_DEWARP_GRID_INFO_NAME    0
 #define DEFAULT_PROP_DWA_DEWARP_GRID_INFO_SIZE    0
 #define YUV_8BIT(y, u, v) ((((y)&0xff) << 16) | (((u)&0xff) << 8) | ((v)&0xff))
 static gboolean gst_bm_dwa_start (GstBaseTransform * trans);
@@ -242,7 +242,7 @@ gst_bm_dwa_set_property (GObject * object,
       break;
     }
     case PROP_DWA_AFFINE_REG_ATTR:{
-      gchar *affine_region_attr_name = g_value_get_string (value);
+      const gchar *affine_region_attr_name = g_value_get_string (value);
       memcpy(self->affine_region_attr_name,affine_region_attr_name,128);
       break;
     }
@@ -312,12 +312,12 @@ gst_bm_dwa_set_property (GObject * object,
       break;
     }
     case PROP_DWA_FISHEYE_GRID_INFO_NAME:{
-      gchar *fisheye_gridinfo_name = g_value_get_string (value);
+      const gchar *fisheye_gridinfo_name = g_value_get_string (value);
       memcpy(self->fisheye_gridinfo_name,fisheye_gridinfo_name,128);
       break;
     }
     case PROP_DWA_FISHEYE_GRID_INFO_SIZE:{
-      guint  fisheye_gridinfo_size = g_value_get_uint (value);
+      guint fisheye_gridinfo_size = g_value_get_uint (value);
       self->fisheye_gridinfo_size = fisheye_gridinfo_size;
       break;
     }
@@ -357,7 +357,7 @@ gst_bm_dwa_set_property (GObject * object,
       break;
     }
     case PROP_DWA_GDC_GRID_INFO_NAME:{
-      gchar* gdc_gridinfo_name = g_value_get_string (value);
+      const gchar* gdc_gridinfo_name = g_value_get_string (value);
       memcpy(self->gdc_gridinfo_name,gdc_gridinfo_name,128);
       break;
     }
@@ -367,7 +367,7 @@ gst_bm_dwa_set_property (GObject * object,
       break;
     }
     case PROP_DWA_DEWARP_GRID_INFO_NAME:{
-      gchar* dewarp_gridinfo_name = g_value_get_string (value);
+      const gchar* dewarp_gridinfo_name = g_value_get_string (value);
       memcpy(self->dewarp_gridinfo_name,dewarp_gridinfo_name,128);
       GST_INFO_OBJECT(self, "dewarp_gridinfo_name: %s", self->dewarp_gridinfo_name);
       break;
@@ -880,7 +880,7 @@ gst_bm_dwa_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
   bm_image dst ;
 
 
-  bmcv_rect_t crop_rect = {0, 0, inframe->info.width, inframe->info.height};
+//  bmcv_rect_t crop_rect = {0, 0, inframe->info.width, inframe->info.height};
 
   bm_image_format_ext bmInFormat =
       (bm_image_format_ext)map_gstformat_to_bmformat(inframe->info.finfo->format);
@@ -1049,7 +1049,7 @@ map_gstformat_to_bmformat(GstVideoFormat gst_format)
   return format;
 }
 
-static
+static __attribute__((unused))
 GstVideoFormat map_bmformat_to_gstformat(int bm_format)
 {
   GstVideoFormat format;

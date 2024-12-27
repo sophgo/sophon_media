@@ -1,8 +1,0 @@
-module:sophon_media(release)
-commit: 500e21ca227078bc8bf13e7a0f58a7a0897b6875
-
-module:libsophav(release)
-commit: b390357a0988b8f16643bd05748333b0f17b2abb
-
-module:sophgo-develop-docs(master)
-commit: d8cee0430fa5d8b20896b192b6ff14f378f5e238

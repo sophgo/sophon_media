@@ -29,9 +29,9 @@ int main(int argc, char **argv)
 {
 #ifdef __ARM_ARCH
     struct timeval tv0,tv1;
-    int actionCode = -1;
-    int FC3test = -1;
-    int tooltype = 3;
+    //int actionCode = -1;
+    //int FC3test = -1;
+    //int tooltype = 3;
     if (argc <3) {
         cout << "usage:" << endl;
         cout << "bmcvvpptest in.jpeg resize/SingleCrop/MultiCrop/border/split/merge outfile(no suffix)" << endl;
@@ -50,7 +50,7 @@ int main(int argc, char **argv)
         return -1;
         }
 
-        printf(" hi xingxing src.stride=%d \n",src.step[0]);
+        printf(" hi xingxing src.stride=%ld \n",src.step[0]);
         gettimeofday(&tv0,NULL);
 
         resize(src,dst1,Size(src.cols*3/4,src.rows*3/4));
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
         cout << "load img err!" << endl;
         return -1;
         }
-        printf("src.stride=%d \n",src.step[0]);
+        printf("src.stride=%ld \n",src.step[0]);
         gettimeofday(&tv0,NULL);
         bmcv::hwCrop(src,Rect(src.cols*1/4,src.rows*1/4,src.cols*3/4,src.rows*3/4),dst1);
         gettimeofday(&tv1,NULL);
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
         cout << "load img err!" << endl;
         return -1;
         }
-        printf("src.stride=%d \n",src.step[0]);
+        printf("src.stride=%ld \n",src.step[0]);
         gettimeofday(&tv0,NULL);
         std::vector<Rect> local;
         local.push_back(Rect(src.cols*1/4,src.rows*1/4,src.cols*3/4,src.rows*3/4));
@@ -150,7 +150,7 @@ int main(int argc, char **argv)
         cout << "load img err!" << endl;
         return -1;
         }
-        printf("src.stride=%d \n",src.step[0]);
+        printf("src.stride=%ld \n",src.step[0]);
         gettimeofday(&tv0,NULL);
         Mat crop_img = src(Rect(src.cols/2,src.rows/2,192,192));
         copyMakeBorder(crop_img, dst1,src.rows/30, src.rows/30, src.rows/30, src.rows/30,BORDER_CONSTANT,Scalar(255,0,0));
@@ -177,7 +177,7 @@ int main(int argc, char **argv)
         cout << "load img err!" << endl;
         return -1;
         }
-        printf("src.stride=%d \n",src.step[0]);
+        printf("src.stride=%ld \n",src.step[0]);
         Mat crop_img = src(Rect(src.cols/4,src.rows/4,700,700));
         Mat resized,resizedhw;
         gettimeofday(&tv0,NULL);
@@ -257,7 +257,7 @@ int main(int argc, char **argv)
         cout << "load img err!" << endl;
         return -1;
         }
-        printf("src.stride=%d \n",src.step[0]);
+        printf("src.stride=%ld \n",src.step[0]);
         Mat crop_img = src(Rect(src.cols/2,src.rows/2,192,192));
         transpose(crop_img,dst1);
         printf("%s:time_consume(us): %ld\n",argv[2],(tv1.tv_sec-tv0.tv_sec)*1000000+(tv1.tv_usec-tv0.tv_usec));
@@ -283,7 +283,7 @@ int main(int argc, char **argv)
         cout << "load img err!" << endl;
         return -1;
         }
-        printf("src.stride=%d \n",src.step[0]);
+        printf("src.stride=%ld \n",src.step[0]);
         Mat crop_img = src(Rect(src.cols/2,src.rows/2,192,192));
         transpose(crop_img,dst1);
         printf("%s:time_consume(us): %ld\n",argv[2],(tv1.tv_sec-tv0.tv_sec)*1000000+(tv1.tv_usec-tv0.tv_usec));

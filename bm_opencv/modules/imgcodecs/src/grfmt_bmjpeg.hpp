@@ -111,6 +111,11 @@ protected:
     // int   m_vpp_fd;
 };
 
+bm_status_t dec_convert(Mat & img, int height, int width, unsigned long long p_phys_addr, unsigned int cb_offset, unsigned int cr_offset,
+                      int* src_stride, int* dst_stride, bm_image_format_ext src_fmt,  csc_type_t csc_type);
+bm_status_t enc_convert(const Mat& img, unsigned long output_device_addr0, unsigned long output_device_addr1, unsigned long output_device_addr2,
+                     int* dst_stride, int height, int width, bm_image_format_ext input_fmt, bm_image_format_ext output_fmt, bmcv_resize_algorithm algorithm, csc_type_t csc_type);
+
 }
 
 #endif/*_GRFMT_BMJPEG_H_*/

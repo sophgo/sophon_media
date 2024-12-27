@@ -6,6 +6,8 @@ PROJECT(gst_bm_vcmulti)
 find_package(PkgConfig REQUIRED)
 if("${GCC_VERSION}" STREQUAL "930")
     set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib930/pkgconfig/gst")
+elseif("${GCC_VERSION}" STREQUAL "1131")
+    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib1131/pkgconfig/gst")
 else()
     set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/pkgconfig/gst")
 endif()
@@ -28,8 +30,16 @@ if("${GCC_VERSION}" STREQUAL "930")
 
     add_compile_options(${FFI_CFLAGS} ${GST_TAG_CFLAGS})
     add_compile_options(${FFI_LDFLAGS} ${GST_TAG_LDFLAGS})
-    
+
     link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib930/gst)
+elseif("${GCC_VERSION}" STREQUAL "1131")
+    pkg_check_modules(FFI REQUIRED libffi)
+    pkg_check_modules(GST_TAG REQUIRED gstreamer-tag-1.0)
+
+    add_compile_options(${FFI_CFLAGS} ${GST_TAG_CFLAGS})
+    add_compile_options(${FFI_LDFLAGS} ${GST_TAG_LDFLAGS})
+
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib1131/gst)
 else()
     link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/gst)
 endif()
@@ -43,6 +53,8 @@ SET(SRCS
 
 add_executable(test_gst_vcmulti EXCLUDE_FROM_ALL ${SRCS})
 if("${GCC_VERSION}" STREQUAL "930")
+    target_link_libraries(test_gst_vcmulti ${GST_VIDEO_LIBRARIES} ${GST_PBUTILS_LIBRARIES} ${GMODULE_LIBRARIES} ${SYSTEM_LIB} ${FFI_LIBRARIES} ${GST_TAG_LIBRARIES})
+elseif("${GCC_VERSION}" STREQUAL "1131")
     target_link_libraries(test_gst_vcmulti ${GST_VIDEO_LIBRARIES} ${GST_PBUTILS_LIBRARIES} ${GMODULE_LIBRARIES} ${SYSTEM_LIB} ${FFI_LIBRARIES} ${GST_TAG_LIBRARIES})
 else()
     target_link_libraries(test_gst_vcmulti ${GST_VIDEO_LIBRARIES} ${GST_PBUTILS_LIBRARIES} ${GMODULE_LIBRARIES} ${SYSTEM_LIB})

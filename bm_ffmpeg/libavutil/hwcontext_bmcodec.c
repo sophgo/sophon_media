@@ -64,6 +64,8 @@ static int bmvpu_malloc_device_byte_heap(AVHWDeviceContext *ctx, bm_handle_t bm_
     int ret = 0;
     int i = 0;
     int heap_num = 0;
+    int available_heap_mask = 0;
+    int enable_heap_mask = 0;
     ret = bm_get_gmem_total_heap_num(bm_handle, &heap_num);
     if (ret != 0)
     {
@@ -71,12 +73,11 @@ static int bmvpu_malloc_device_byte_heap(AVHWDeviceContext *ctx, bm_handle_t bm_
         return -1;
     }
 
-    int available_heap_mask = 0;
     for (i=0; i<heap_num; i++){
         available_heap_mask = available_heap_mask | (0x1 << i);
     }
 
-    int enable_heap_mask = available_heap_mask & heap_id_mask;
+    enable_heap_mask = available_heap_mask & heap_id_mask;
     if (enable_heap_mask == 0x0)
     {
         av_log(ctx, AV_LOG_ERROR, "bmvpu_malloc_device_byte_heap failed!\n");
@@ -224,7 +225,6 @@ static void bmcodec_buffer_free(void* opaque, uint8_t* data)
     AVHWFramesContext* ctx = opaque;
     AVBmCodecDeviceContext* hwctx = ctx->device_ctx->hwctx;
     AVBmCodecFrame   *hwpic  = (AVBmCodecFrame*)data;
-    int ret;
     bm_device_mem_t *buffer;
 
     av_log(ctx, AV_LOG_TRACE, "[%s,%d] enter\n", __func__, __LINE__);
@@ -246,7 +246,7 @@ static void bmcodec_buffer_free(void* opaque, uint8_t* data)
     av_log(ctx, AV_LOG_TRACE, "[%s,%d] leave\n", __func__, __LINE__);
 }
 
-static AVBufferRef* bmcodec_pool_alloc(void *opaque, int size)
+static AVBufferRef* bmcodec_pool_alloc(void *opaque, size_t size)
 {
     AVHWFramesContext     *ctx = opaque;
     AVBmCodecDeviceContext *hwctx = ctx->device_ctx->hwctx;
@@ -254,13 +254,14 @@ static AVBufferRef* bmcodec_pool_alloc(void *opaque, int size)
 
     AVBufferRef *ref = NULL;
     AVBmCodecFrame   *hwpic  = NULL;
+    bm_device_mem_t *buffer = NULL;
     int ret;
 
     av_log(ctx, AV_LOG_TRACE, "[%s,%d] enter\n", __func__, __LINE__);
 
     /* call bm allocation function to allocate buffer */
-    bm_device_mem_t *buffer = (bm_device_mem_t *)av_mallocz(sizeof(bm_device_mem_t));
-    ret = bmvpu_malloc_device_byte_heap(ctx, hwctx->handle, buffer, size, HEAP_MASK_1_2, 1);
+    buffer = (bm_device_mem_t *)av_mallocz(sizeof(bm_device_mem_t));
+    ret = bmvpu_malloc_device_byte_heap((AVHWDeviceContext *)ctx, hwctx->handle, buffer, size, HEAP_MASK_1_2, 1);
     if(ret != BM_SUCCESS)
     {
         av_free(buffer);
@@ -469,7 +470,7 @@ static int bm_map_frame(AVHWFramesContext *ctx, AVFrame *dst, const AVFrame *src
     bm_device_mem_t* buffer = (bm_device_mem_t*)hwpic->buffer;
     AVBmCodecDeviceContext *hwctx = ctx->device_ctx->hwctx;
     BmCodecFramesContext *priv = ctx->internal->priv;
-    uint32_t map_flags = 0;
+    //uint32_t map_flags = 0;
     int ret;
 
     if (buffer==NULL) {

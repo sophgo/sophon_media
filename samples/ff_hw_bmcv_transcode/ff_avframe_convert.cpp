@@ -181,7 +181,7 @@ int avframe_to_bm_image(bm_handle_t &bm_handle,AVFrame &in, bm_image &out){
             printf("bmcv allocate mem failed!!!");
         }
 
-        bmcv_rect_t crop_rect = {0, 0, in.width, in.height};
+        bmcv_rect_t crop_rect = {0, 0, (unsigned int)in.width, (unsigned int)in.height};
         bmcv_image_vpp_convert(bm_handle, 1, cmp_bmimg, &out, &crop_rect,BMCV_INTER_LINEAR);
         bm_image_destroy(&cmp_bmimg);
        return BM_SUCCESS;
@@ -194,12 +194,10 @@ int bm_image_to_avframe(bm_handle_t &bm_handle,bm_image *in,AVFrame *out,AVBuffe
     ImgOut->bmImg = in;
     bm_image_format_info_t image_info;
     int idx       = 0;
-    int plane     = 0;
     if(in == NULL || out == NULL){
         free(ImgOut);
         return -1;
     }
-    plane = 3;
 
     out->format = AV_PIX_FMT_BMCODEC;
     out->height = ImgOut->bmImg->height;
@@ -219,7 +217,7 @@ int bm_image_to_avframe(bm_handle_t &bm_handle,bm_image *in,AVFrame *out,AVBuffe
     ImgOut->hwpic = hwpic;
     hwpic->maptype = 0;
 
-    bm_device_mem_t mem_tmp[3];
+    bm_device_mem_t mem_tmp[4];
     if(bm_image_get_device_mem(*(ImgOut->bmImg),mem_tmp) != BM_SUCCESS ){
         free(ImgOut);
         free(in);
@@ -285,8 +283,6 @@ int bm_image_to_avframe(bm_handle_t &bm_handle,bm_image *in,AVFrame *out,AVBuffe
 *    convert success return 0 else return -1.
 */
 int AVFrameConvert(bm_handle_t &bmHandle,AVFrame *inPic,AVFrame *outPic,int enc_frame_height,int enc_frame_width,int enc_pix_format, AVBufferRef *hw_frames_ctx, int enable_mosaic,int enable_watermark, bm_device_mem_t* watermark){
-
-    static int mem_flags = USEING_MEM_HEAP1;
     if(!inPic){
         return -1;
     }
@@ -306,6 +302,7 @@ int AVFrameConvert(bm_handle_t &bmHandle,AVFrame *inPic,AVFrame *outPic,int enc_
         return -1;
     }
 #if 0
+    static int mem_flags = USEING_MEM_HEAP1;
     bm_image_format_ext bmOutFormat = (bm_image_format_ext)map_avformat_to_bmformat(FORMAT_YUV420P);
     int stride_yuv = ((enc_frame_width +31) >> 5) << 5;
     int stride_bmi[3] = {0};
@@ -331,7 +328,7 @@ int AVFrameConvert(bm_handle_t &bmHandle,AVFrame *inPic,AVFrame *outPic,int enc_
 
     /* mosaic process */
     if (enable_mosaic){
-        bmcv_rect_t mosaic_rect = {0, 0, inPic->width/2, inPic->height/2};
+        bmcv_rect_t mosaic_rect = {0, 0, (unsigned int)(inPic->width/2), (unsigned int)(inPic->height/2)};
         ret = bmcv_image_mosaic(bmHandle, 1, *bmImagein, &mosaic_rect, 0);
         if(ret != BM_SUCCESS){
             printf("mosaic_process failed \n");

@@ -22,6 +22,7 @@
 #define INTERVAL 1
 #define IMAGE_MATQUEUE_NUM 25
 #define MAX_THREAD_NUM 32
+#define UNUSED(x) (void)(x)
 int g_thread_num   = 0;
 
 using namespace cv;
@@ -30,6 +31,8 @@ using namespace std;
 void *videoLoadThread(void *arg);
 void *videoWriteThread(void *arg);
 void *displayFpsThread(void *arg);
+void signal_handler(int sig);
+void usage(char *argv_0);
 
 
 #ifdef WIN32
@@ -87,8 +90,9 @@ int takeoutcount[MAX_THREAD_NUM]    = {0};  // ensure data number.
 
 void signal_handler(int sig)
 {
+    UNUSED(sig);
     int i = 0;
-    for (int i = 0; i < MAX_THREAD_NUM+1; i++) {
+    for (i = 0; i < MAX_THREAD_NUM+1; i++) {
         exit_flag[i] = 1;
     }
 
@@ -96,7 +100,7 @@ void signal_handler(int sig)
     int try_count = 50;
     while (try_count--){
         bool exit_all = true;
-        for (int i = 0; i < MAX_THREAD_NUM; i++) {
+        for (i = 0; i < MAX_THREAD_NUM; i++) {
             if(g_thread_num){
                 exit_all = false;
             }
@@ -190,7 +194,7 @@ DWORD WINAPI videoLoadThread(void* arg){
     gettimeofday(&tv1, NULL);
 #endif
 
-    for(; count_load[index] < threadPara->frameNum;)
+    for(; (int)count_load[index] < threadPara->frameNum;)
     {
         if (read_times <= 0) {
             break;
@@ -302,6 +306,7 @@ DWORD WINAPI videoWriteThread(void* arg){
     float time;
     count_write[index]     = 0;
     string default_outfile = "pkt.dump";
+	int idx = 0;
 
 #ifdef __linux__
     struct timeval         tv;
@@ -437,12 +442,12 @@ DWORD WINAPI videoWriteThread(void* arg){
                             roiinfo.field = (cv::RoiField*)malloc(sizeof(cv::RoiField)*nums);
                             for (int i = 0;i <(BM_ALIGN16(threadPara->imageRows) >> 4);i++) {
                                 for (int j=0;j < (BM_ALIGN16(threadPara->imageCols) >> 4);j++) {
-                                    int pos = i*(BM_ALIGN16(threadPara->imageCols) >> 4) + j;
-                                    // roiinfo.field[pos].H264.mb_qp = roi_frame_nums%51;
+                                    idx = i*(BM_ALIGN16(threadPara->imageCols) >> 4) + j;
+                                    // roiinfo.field[idx].H264.mb_qp = roi_frame_nums%51;
                                     if ((i >= (BM_ALIGN16(threadPara->imageRows) >> 4)/2) && (j >= (BM_ALIGN16(threadPara->imageCols) >> 4)/2)) {
-                                        roiinfo.field[pos].H264.mb_qp = 10;
+                                        roiinfo.field[idx].H264.mb_qp = 10;
                                     }else{
-                                        roiinfo.field[pos].H264.mb_qp = 40;
+                                        roiinfo.field[idx].H264.mb_qp = 40;
                                     }
                                 }
                             }
@@ -457,30 +462,31 @@ DWORD WINAPI videoWriteThread(void* arg){
 
                             for (int i = 0;i <(BM_ALIGN64(threadPara->imageRows) >> 6);i++) {
                                 for (int j=0;j < (BM_ALIGN64(threadPara->imageCols) >> 6);j++) {
-                                    int pos = i*(BM_ALIGN64(threadPara->imageCols) >> 6) + j;
+                                    idx = i*(BM_ALIGN64(threadPara->imageCols) >> 6) + j;
                                     if ((i >= (BM_ALIGN64(threadPara->imageRows) >> 6)/2) && (j >= (BM_ALIGN64(threadPara->imageCols) >> 6)/2)) {
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_0 = 10;
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_1 = 10;
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_2 = 10;
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_3 = 10;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_0 = 10;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_1 = 10;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_2 = 10;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_3 = 10;
                                     } else {
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_0 = 40;
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_1 = 40;
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_2 = 40;
-                                        roiinfo.field[pos].HEVC.sub_ctu_qp_3 = 40;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_0 = 40;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_1 = 40;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_2 = 40;
+                                        roiinfo.field[idx].HEVC.sub_ctu_qp_3 = 40;
 
                                     }
-                                    roiinfo.field[pos].HEVC.ctu_force_mode = 0;
-                                    roiinfo.field[pos].HEVC.ctu_coeff_drop = 0;
-                                    roiinfo.field[pos].HEVC.lambda_sad_0 = 0;
-                                    roiinfo.field[pos].HEVC.lambda_sad_1 = 0;
-                                    roiinfo.field[pos].HEVC.lambda_sad_2 = 0;
-                                    roiinfo.field[pos].HEVC.lambda_sad_3 = 0;
+                                    roiinfo.field[idx].HEVC.ctu_force_mode = 0;
+                                    roiinfo.field[idx].HEVC.ctu_coeff_drop = 0;
+                                    roiinfo.field[idx].HEVC.lambda_sad_0 = 0;
+                                    roiinfo.field[idx].HEVC.lambda_sad_1 = 0;
+                                    roiinfo.field[idx].HEVC.lambda_sad_2 = 0;
+                                    roiinfo.field[idx].HEVC.lambda_sad_3 = 0;
                                 }
                             }
                         }
 
                         writer->write(*toEncImage, out_buf, &out_buf_len, &roiinfo);
+                        delete toEncImage;
                         if (roiinfo.field != NULL) {
                             free(roiinfo.field);
                             roiinfo.field = NULL;
@@ -630,7 +636,7 @@ void* displayFpsThread(void *arg)
 
         if (dis_mode == 1) {
             for (int i = 0; i < thread_num; i++) {
-                printf("ID[%d] ,DEC_FRM[%10lld], DEC_FPS[%5.2f],[%5.2f] | ENC_FRM[%10lld], ENC_FPS[%5.2f],[%5.2f], ENC_QUEUE_NUM[%d]\n",
+                printf("ID[%d] ,DEC_FRM[%10lld], DEC_FPS[%5.2f],[%5.2f] | ENC_FRM[%10lld], ENC_FPS[%5.2f],[%5.2f], ENC_QUEUE_NUM[%ld]\n",
                     i, (long long)count_load[i],((double)(count_load[i]-last_count_load[i]))/interval_num, fps_load[i],
                        (long long)count_write[i], ((double)(count_write[i]-last_count_write[i]))/interval_num, fps_write[i], threadPara[i].imageQueue->size());
 
@@ -647,7 +653,7 @@ void* displayFpsThread(void *arg)
                 fps_load_sum += fps_load[i];
                 fps_write_sum += fps_write[i];
             }
-            printf("thread %d, dec frame: %lld, dec fps %2.2f, enc frame: %lld, enc fps %2.2f", thread_num,
+            printf("thread %d, dec frame: %ld, dec fps %2.2f, enc frame: %ld, enc fps %2.2f", thread_num,
                     count_load_sum, fps_load_sum, count_write_sum, fps_write_sum);
         }
         printf("\r");

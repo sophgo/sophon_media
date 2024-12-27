@@ -7,6 +7,7 @@
 using namespace std;
 
 #ifdef HAVE_BMCV
+#define UNUSED(x) (void)(x)
 
 namespace cv { namespace bmcv {
 
@@ -127,6 +128,7 @@ bm_handle_t getCard(int id)
 int getId(bm_handle_t handle)
 {
 #ifdef USING_SOC
+  UNUSED(handle);
   return 0;
 #else
   int ret = bm_get_devid(handle);
@@ -313,7 +315,8 @@ bm_status_t toBMI(Mat &m, bm_image *image, bool update)
 
 static void download(bm_handle_t handle, Mat &m, bm_image *image)
 {
-  uchar *p = m.data;
+//  uchar *p = m.data;
+  UNUSED(m);
   bm_device_mem_t mem[4];
 
   memset(mem, 0, sizeof(mem));
@@ -325,7 +328,7 @@ static void download(bm_handle_t handle, Mat &m, bm_image *image)
       bm_mem_invalidate_device_mem(handle, &mem[i]);
 #else
       bm_memcpy_d2s(handle, p, mem[i]);
-      p += mem[i].size;
+    //  p += mem[i].size;
 #endif
     }
   }
@@ -490,8 +493,8 @@ bm_status_t toMAT(bm_image *image, Mat &m, bool update, csc_type_t csc)
   bm_status_t ret;
   bm_handle_t handle = bm_image_get_handle(image);
 
-  uint len;
-  bm_device_mem_t mem;
+//  uint len;
+//  bm_device_mem_t mem;
 
   int id = bm_get_devid(handle);
   if (m.card) id = BM_MAKEFLAG(0, BM_CARD_HEAP(m.card), id);
@@ -512,6 +515,8 @@ bm_status_t toMAT(bm_image *image, Mat &m, bool update, csc_type_t csc)
   bm_thread_sync(handle);
 #ifndef USING_SOC
   if (update) download(handle, m, &dst);
+#else
+  UNUSED(update);
 #endif
 
 done:
@@ -541,8 +546,7 @@ bm_status_t toMAT(bm_image *image, Mat &m, Mat &m1, Mat &m2, Mat &m3, bool updat
 
   Mat v[4] = { m, m1, m2, m3 };
 
-  bm_image dst[4];
-  memset(dst, 0, sizeof(dst));
+  bm_image dst[4] = {};
 
   for (int i = 0; i < 4; i++) {
     int step[1] = { (int)m.step[0] };
@@ -568,6 +572,8 @@ done:
   for (int i = 0; i < 4; i++) {
 #ifndef USING_SOC
     if (update) download(handle, v[i], &dst[i]);
+#else
+    UNUSED(update);
 #endif
     bm_image_destroy(dst + i);
   }
@@ -613,6 +619,8 @@ bm_status_t decomp(Mat &m, Mat &out, bool update)
   bm_thread_sync(handle);
 #ifndef USING_SOC
   if(update) download(handle, out, &dst);
+#else
+  UNUSED(update);
 #endif
 
 done:
@@ -671,7 +679,7 @@ bm_status_t convert(Mat &m, std::vector<Rect> &vrt, std::vector<Size> &vsz, std:
         csc_type_t csc, csc_matrix_t *matrix, bmcv_resize_algorithm algorithm)
 {
   if (!m.u || !m.u->addr) {printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n"); return BM_NOT_SUPPORTED;}
-  bm_status_t ret;
+  bm_status_t ret = BM_SUCCESS;
   bm_handle_t handle = m.u->hid ? m.u->hid : getCard();
 
   CV_Assert(vrt.size() == vsz.size());
@@ -1247,6 +1255,7 @@ static bm_status_t uploadUsrData(bm_handle_t handle, void *src, bm_device_mem_t 
 {
   bm_status_t ret = BM_SUCCESS;
 #ifdef USING_SOC
+  UNUSED(src);
   ret = bm_mem_flush_device_mem(handle, &mem);
 #else
   ret = bm_memcpy_s2d(handle, mem, src);
@@ -1258,6 +1267,7 @@ static bm_status_t downloadDeviceData(bm_handle_t handle, void *dst, bm_device_m
 {
     bm_status_t ret = BM_SUCCESS;
 #ifdef USING_SOC
+    UNUSED(dst);
     ret = bm_mem_invalidate_device_mem(handle, &mem);
 #else
     ret = bm_memcpy_d2s(handle, dst, mem);
@@ -1317,7 +1327,7 @@ static bm_status_t matMemToBMI(Mat &memMat, bm_image *image, bm_image_format_ext
     bm_handle_t handle = memMat.u->hid ? memMat.u->hid : getCard();
     if(FORMAT_YUV420P == format)
     {
-        int sstep[3] = {memMat.step[0], memMat.step[0]/2,memMat.step[0]/2};
+        int sstep[3] = {(int)memMat.step[0], (int)memMat.step[0]/2, (int)memMat.step[0]/2};
         int imghigh = memMat.rows*2/3;
 
         ret = bm_image_create(handle, imghigh, memMat.cols, FORMAT_YUV420P, DATA_TYPE_EXT_1N_BYTE, image, sstep);
@@ -1332,7 +1342,7 @@ static bm_status_t matMemToBMI(Mat &memMat, bm_image *image, bm_image_format_ext
     }
     else if(FORMAT_NV12 == format)
     {
-        int sstep[2] = { memMat.step[0], memMat.step[0]};
+        int sstep[2] = {(int)memMat.step[0], (int)memMat.step[0]};
         int imghigh = memMat.rows*2/3;
         ret = bm_image_create(handle, imghigh, memMat.cols, format, DATA_TYPE_EXT_1N_BYTE, image, sstep);
         if (ret != BM_SUCCESS) return ret;
@@ -1346,7 +1356,7 @@ static bm_status_t matMemToBMI(Mat &memMat, bm_image *image, bm_image_format_ext
     }
     else if(FORMAT_BGR_PACKED == format || FORMAT_RGB_PACKED == format || FORMAT_GRAY == format)
     {
-        int sstep[1] = { memMat.step[0] };
+        int sstep[1] = {(int)memMat.step[0]};
         ret = bm_image_create(handle, memMat.rows, memMat.cols, format, DATA_TYPE_EXT_1N_BYTE, image, sstep);
         if (ret != BM_SUCCESS) return ret;
         uint slen = memMat.rows * memMat.step[0];
@@ -1411,13 +1421,14 @@ bm_status_t hwColorCvt(Mat &srcm, OutputArray _dst,  int srcformat, int dstforma
     }
 
     int stype = srcm.type();
-    int scn = CV_MAT_CN(stype), depth = CV_MAT_DEPTH(stype);
+    //int scn = CV_MAT_CN(stype),
+    int depth = CV_MAT_DEPTH(stype);
 
     bm_status_t ret;
     bm_image src;
     bm_device_mem_t totalmem;
     Mat  dstm;
-	int outCard = _dst.getMatRef().card;
+    int outCard = _dst.getMatRef().card;
     bm_image dst;
 
     int id = getId(handle);

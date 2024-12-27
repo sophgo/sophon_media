@@ -224,7 +224,6 @@ int VideoEnc_FFMPEG::openEnc(const char* filename, int codecId, int framerate,
 int VideoEnc_FFMPEG::writeFrame(const uint8_t* data, int step, int width, int height)
 {
     int ret = 0 ;
-    int got_output = 0;
 
     if( step % SIMD_SIZE != 0) {
         av_log(enc_ctx, AV_LOG_ERROR, "input step must align with SIMD_SIZE\n");

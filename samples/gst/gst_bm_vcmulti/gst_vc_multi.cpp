@@ -210,7 +210,7 @@ static gboolean add_dec_enc_branch(GstElement *tee, const gchar *dec_name, const
 }
 
 void *multi_decode (void *arg) {
-    GstElement *pipeline, *source, *parse, *tee;
+    GstElement *pipeline, *source, *parse = NULL, *tee;
     GMainLoop *main_loop;
     codec_param *param = (codec_param *)arg;
     gchar *name = param->name;
@@ -370,7 +370,7 @@ void *multi_encode (void *arg) {
 }
 
 void *multi_dec_enc (void *arg) {
-    GstElement *pipeline, *source, *parse, *tee;
+    GstElement *pipeline, *source, *parse = NULL, *tee;
     GMainLoop *main_loop;
     codec_param *param = (codec_param *)arg;
     gchar *name = param->name;

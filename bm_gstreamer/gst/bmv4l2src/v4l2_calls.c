@@ -95,7 +95,7 @@ cap_failed:
  * We follow their lead here.  @name is modified
  * in-place.
  ******************************************************/
-static void
+static void __attribute__((unused))
 gst_v4l2_normalise_control_name (gchar * name)
 {
   int i, j;

@@ -19,7 +19,7 @@ execute_process(
     OUTPUT_VARIABLE GIT_VERSION)
 if(NOT "${GIT_VERSION}" STREQUAL "")
     STRING(REGEX REPLACE "[\n\t\r]" "" GIT_VERSION ${GIT_VERSION})
-    set(OPENCV_LIBVERSION "${OPENCV_LIBVERSION}-sophon-${GIT_VERSION}")
+    set(OPENCV_LIBVERSION "${OPENCV_LIBVERSION}-sophon")
 endif()
 
 # create a dependency on the version file

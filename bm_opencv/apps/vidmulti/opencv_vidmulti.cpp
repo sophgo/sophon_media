@@ -79,14 +79,18 @@ int g_enc_cif_h = 288;
 DWORD stat_pthread(void *arg);
 DWORD video_download_pthread(void* arg);
 DWORD video_encoder_pthread(void * arg);
+DWORD WINAPI image_process_pthread(void * arg);
 #else
 void *stat_pthread(void *arg);
 void *video_download_pthread(void * arg);
 void *video_encoder_pthread(void * arg);
 int  kbhit(void);
+void *image_process_pthread(void * arg);
 #endif
+void print_trace (void);
 void signal_handler(int signum);
 void register_signal_handler(void);
+void usages(char **argv);
 
 #ifndef WIN32
 int kbhit (void)
@@ -219,12 +223,12 @@ void* stat_pthread(void *arg)
         if (dis_mode == 1) {
             for (int i = 0; i < thread_num; i++) {
                 if (i == 0)
-                    printf("ID[%d], [%5d  %5d],  RECON[%5lld], FRM[%10lld], FPS[%2.2f],[%2.2f] drop[%9lld] |   FRM[%10lld], FPS[%2.2f],[%2.2f] enc_que_nums[%d] \n",
+                    printf("ID[%d], [%5ld  %5ld],  RECON[%5ld], FRM[%10lld], FPS[%2.2f],[%2.2f] drop[%9ld] |   FRM[%10lld], FPS[%2.2f],[%2.2f] enc_que_nums[%d] \n",
                         i, g_width_enc_in[i], g_height_enc_in[i], g_reconnect_count[i],
                            (long long)count[i],((double)(count[i]-last_count[i]))/INTERVAL, fps[i], g_drop_count[i],
                            (long long)count_enc[i], ((double)(count_enc[i]-last_count_enc[i]))/INTERVAL, fps_enc[i], g_image_enc_queue_nums[i]);
                 else
-                    printf("ID[%d] ,[%5d  %5d],  RECON[%5lld], FRM[%10lld], FPS[%2.2f],[%2.2f] drop[%9lld] |   FRM[%10lld], FPS[%2.2f],[%2.2f] enc_que_nums[%d] \n",
+                    printf("ID[%d] ,[%5ld  %5ld],  RECON[%5ld], FRM[%10lld], FPS[%2.2f],[%2.2f] drop[%9ld] |   FRM[%10lld], FPS[%2.2f],[%2.2f] enc_que_nums[%d] \n",
                         i, g_width_enc_in[i], g_height_enc_in[i], g_reconnect_count[i],
                            (long long)count[i], ((double)(count[i]-last_count[i]))/INTERVAL, fps[i], g_drop_count[i],
                            (long long)count_enc[i], ((double)(count_enc[i]-last_count_enc[i]))/INTERVAL, fps_enc[i], g_image_enc_queue_nums[i]);
@@ -236,7 +240,7 @@ void* stat_pthread(void *arg)
             uint64_t count_sum = 0;
             for (int i = 0; i < thread_num; i++)
               count_sum += count[i];
-            printf("thread %d, frame %lld, fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
+            printf("thread %d, frame %ld, fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
             last_count_sum = count_sum;
         }
         printf("\r");
@@ -244,7 +248,7 @@ void* stat_pthread(void *arg)
     }
     printf("\n[ID],[frame nums], [rate],  [invl>80ms],  [invl>160ms], [invl>400ms], [invl>1s]\n");
     for (int i = 0; i < thread_num; i++) {
-        printf("[%d], [%10lld], [%2.2f], [%10llu], [%10llu], [%10llu], [%10llu]\n",
+        printf("[%d], [%10lld], [%2.2f], [%10lu], [%10lu], [%10lu], [%10lu]\n",
             i, (long long)count[i], fps[i], g_interval_80[i], g_interval_160[i], g_interval_400[i], g_interval_1s[i]);
         last_count[i] = count[i];
     }
@@ -262,9 +266,9 @@ void *image_process_pthread(void * arg)
 {
     int id = *(int *)arg;
 #ifdef WIN32
-    clock_t tv1, tv2;
+    clock_t tv2;
 #else
-    struct timeval tv1, tv2;
+    struct timeval tv2;
 #endif
     Mat m;
     Mat rgb_m, resize_m, resize_m1, resize_m2;
@@ -369,7 +373,7 @@ void *video_encoder_pthread(void * arg)
     struct timeval tv0, tv1;
 #endif
     char *out_buf = NULL;
-    FILE *fp_out = NULL;
+    //FILE *fp_out = NULL;
     Mat image;
 
     VideoWriter writer;

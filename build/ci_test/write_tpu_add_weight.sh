@@ -12,7 +12,7 @@ function writeTpuAddWeight(){
 		cat <<-EOF > $nfs_path/tmp_daily.sh
 		for((i=1; i<=$try_n_times; i++))
 		do
-		    ./bmcv/test_cv_add_weight 1 1 1 1080 1920 10 0.5 0.5 10 ./stream/1920x1080_rgb.bin ./stream/1920x1080_rgb.bin out_add_weight.bin 2>&1 | tee cv_add_weight_log.txt
+		    ./bmcv/test_cv_add_weight 1 1 1 1920 1080 10 1 0.5 0.5 10 ./stream/1920x1080_rgb.bin ./stream/1920x1080_rgb.bin out_add_weight.bin 2>&1 | tee cv_add_weight_log.txt
 		    cmd_status=\${PIPESTATUS[0]}
 		    if [ \$cmd_status -ne 0 ]; then
 		        exit \$cmd_status

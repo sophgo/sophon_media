@@ -182,6 +182,7 @@ gst_v4l2_src_fixate_struct_with_preference (GstStructure * s,
         pref->fps_d);
 }
 
+static gboolean
 gst_v4l2src_fixed_caps_compare (GstCaps * caps_a, GstCaps * caps_b,
     struct PreferredCapsInfo *pref)
 {
@@ -927,7 +928,7 @@ gst_bmv4l2src_class_init (GstBmV4l2SrcClass * klass)
   GstElementClass *element_class;
   GstBaseSrcClass *basesrc_class;
   GstPushSrcClass *pushsrc_class;
-  GError *err = NULL;
+//  GError *err = NULL;
 
   gobject_class = G_OBJECT_CLASS (klass);
   element_class = GST_ELEMENT_CLASS (klass);

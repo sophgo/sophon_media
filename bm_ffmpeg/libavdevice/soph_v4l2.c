@@ -149,10 +149,10 @@ static int get_dev_num(AVFormatContext *ctx, int fd) {
     struct v4l2_ext_controls val;
     struct v4l2_ext_control control;
     int err;
+    uint16_t *dev_num;
 
     memset(&val, 0, sizeof(struct v4l2_ext_controls));
 
-    uint16_t *dev_num;
     dev_num = (uint16_t *)malloc(sizeof(uint16_t));
     if(fd > 0) {
         control.id = VI_IOCTL_GET_LINK_NUM;
@@ -524,7 +524,7 @@ static void bm_release_buffer(void *opaque, uint8_t *data)
     struct buffer_info *buf_info = buf_descriptor->buf_info;
     bm_status_t res;
 
-    if(res = bm_mem_unmap_device_mem(s->bm_handle,buf_info->vaddr,buf_info->len)
+    if(res = bm_mem_unmap_device_mem(s->bm_handle,(void*)buf_info->vaddr,buf_info->len)
     != BM_SUCCESS) {
         av_log(NULL , AV_LOG_ERROR,"Unmap failed,res= %d \n",res);
     }
@@ -617,12 +617,11 @@ static int try_get_buf_paddr(AVFormatContext *ctx, int fd)
     /* sophgo: record all v4l2 buffer phy_addr */
     struct video_data *s = ctx->priv_data;
 
+    int i;
     struct v4l2_ext_controls val;
 	struct v4l2_ext_control control;
 	uint64_t *phy_addr;
 	phy_addr = (uint64_t *) malloc(sizeof(uint64_t) * s->v4l2_buffer_num);
-
-	int i;
 
     memset(&val, 0, sizeof(struct v4l2_ext_controls));
 
@@ -736,7 +735,7 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
             av_log(ctx, AV_LOG_ERROR,"Bm d2d failed!\n");
         }
 
-        bm_mem_mmap_device_mem(s->bm_handle,frame_buffer, &pkt->data);
+        bm_mem_mmap_device_mem(s->bm_handle,frame_buffer, (unsigned long long *)(uintptr_t)&pkt->data);
 
         res = enqueue_buffer(s, &buf);
         if (res) {
@@ -769,7 +768,7 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         buf_info->idx    = buf.index;
         buf_info->paddr  = frame_buffer->u.device.device_addr;
         buf_info->len    = pkt->size;
-        buf_info->vaddr  = pkt->data;
+        buf_info->vaddr  = (uint64_t)(uintptr_t)pkt->data;
         buf_info->bm_mem = frame_buffer;
         pkt->opaque      = buf_info;
         pkt->buf         = av_buffer_create(pkt->data, pkt->size, bm_release_buffer,
@@ -829,7 +828,6 @@ static int mmap_start(AVFormatContext *ctx)
     struct video_data *s = ctx->priv_data;
     enum v4l2_buf_type type;
     int i, res;
-	static int isp_init_time;
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
@@ -849,22 +847,6 @@ static int mmap_start(AVFormatContext *ctx)
         }
     }
     atomic_store(&s->buffers_queued, s->buffers);
-
-    if (s->use_isp) {
-        CVI_ISP_V4L2_Init(s->channel,s->fd);
-        pthread_mutex_lock(&isp_mutex);
-        isp_init_time++;
-
-        if (isp_init_time == s->dev_num) {
-            pthread_cond_broadcast(&isp_cond);
-        } else {
-            int wait_res = pthread_cond_timedwait(&isp_cond, &isp_mutex, &ts);
-            if (wait_res == ETIMEDOUT) {
-                av_log(ctx, AV_LOG_ERROR, "ISP channel init timeout, check number setting\n");
-            }
-        }
-        pthread_mutex_unlock(&isp_mutex);
-    }
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (v4l2_ioctl(s->fd, VIDIOC_STREAMON, &type) < 0) {
@@ -906,6 +888,7 @@ static void mmap_close(struct video_data *s)
 
 static int v4l2_set_parameters(AVFormatContext *ctx)
 {
+    int i, ret;
     struct video_data *s = ctx->priv_data;
     struct v4l2_standard standard = { 0 };
     struct v4l2_streamparm streamparm = { 0 };
@@ -915,7 +898,6 @@ static int v4l2_set_parameters(AVFormatContext *ctx)
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
-    int i, ret;
 
     if (s->framerate &&
         (ret = av_parse_video_rate(&framerate_q, s->framerate)) < 0) {
@@ -1087,6 +1069,10 @@ static int v4l2_read_probe(const AVProbeData *p)
 
 static int v4l2_read_header(AVFormatContext *ctx)
 {
+    static int isp_init_time;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 5;
     struct video_data *s = ctx->priv_data;
     AVStream *st;
     int res = 0;
@@ -1129,6 +1115,21 @@ static int v4l2_read_header(AVFormatContext *ctx)
 
     /* enum input */
     input.index = s->channel;
+    if (s->use_isp) {
+        CVI_ISP_V4L2_Init(s->channel,s->fd);
+        pthread_mutex_lock(&isp_mutex);
+        isp_init_time++;
+
+        if (isp_init_time == s->dev_num) {
+            pthread_cond_broadcast(&isp_cond);
+        } else {
+            int wait_res = pthread_cond_timedwait(&isp_cond, &isp_mutex, &ts);
+            if (wait_res == ETIMEDOUT) {
+                av_log(ctx, AV_LOG_ERROR, "ISP channel init timeout, check number setting\n");
+            }
+        }
+        pthread_mutex_unlock(&isp_mutex);
+    }
 
     if (v4l2_ioctl(s->fd, VIDIOC_ENUMINPUT, &input) < 0) {
         res = AVERROR(errno);

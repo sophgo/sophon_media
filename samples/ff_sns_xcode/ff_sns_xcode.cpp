@@ -7,6 +7,7 @@
 #include <thread>
 #include <queue>
 #include <mutex>
+#include <memory>
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
@@ -193,7 +194,6 @@ int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, 
     auto currentTime = std::chrono::steady_clock::now();
     std::chrono::milliseconds::rep elapsedTime;
     int ret = 0, cur = 0;
-    float time = 0;
     ret = reader->openDec(input_file, 9, sophon_idx, v4l2_buf_num, use_isp, wdr_on, outputCount);
     if (ret < 0) {
         av_log(NULL, AV_LOG_INFO, "#################open input media failed  ##########\n");
@@ -207,7 +207,7 @@ int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, 
             break;
         }
 
-        while ((g_image_enc_queue[index].size() == v4l2_buf_num / 4) && (!quit_flag)) {
+        while ((g_image_enc_queue[index].size() == (size_t)(v4l2_buf_num/4)) && (!quit_flag)) {
             usleep(10);
         }
 
@@ -261,7 +261,6 @@ int video_encoder_pthread(const char* output_file, int enccodec_id, int framerat
     auto currentTime = std::chrono::steady_clock::now();
     std::chrono::milliseconds::rep elapsedTime;
     int ret = 0;
-    float time = 0;
 
     while (!quit_flag) {
 

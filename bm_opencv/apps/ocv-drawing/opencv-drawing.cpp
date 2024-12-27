@@ -29,7 +29,7 @@ void circle_params_parse(char *params,int &centerX, int &centerY, int &radius, i
 void ellipse_params_parse(char *params,int &centerX, int &centerY, int &radiusX, int &radiusY, double &angle, int &R, int &G, int &B, int &thickness);
 void polylines_params_parse(char *params, int &posnums, int *posX, int *posY, int &R, int &G, int &B, int &thickness);
 void fillPoly_params_parse(char *params, int &posnums, int *posX, int *posY, int &R, int &G, int &B);
-void freetype_params_parse(char *params, char *text, char *foutpath, int &posX, int &posY, int &fontHeight, int &R, int &G, int &B, int &thickness);
+void freetype_params_parse(char *params, char *text, char *foutpath, int &posX, int &posY, int &fontHeight, int &R, int &G, int &B, int &thickness, int &linestyle); 
 
 //解析line参数  rectangle适用
 //startX_startY_endX_endY_R_G_B_thickness
@@ -329,7 +329,6 @@ int main(int argc, char* argv[])
 
 #endif
     string encodeparms = "";
-    FILE *fp_out = NULL;
     if (loops < 1) {
         cout << "loops param err." << endl;
         return -1;

@@ -1079,7 +1079,7 @@ gst_v4l2_object_v4l2fourcc_to_video_format (guint32 fourcc)
   return format;
 }
 
-static gboolean
+static gboolean __attribute__((unused))
 gst_v4l2_object_v4l2fourcc_is_rgb (guint32 fourcc)
 {
   gboolean ret = FALSE;
@@ -2347,7 +2347,7 @@ error:
   return ret;
 }
 
-static gboolean
+static gboolean __attribute__((unused))
 gst_v4l2_object_is_dmabuf_supported (GstV4l2Object * v4l2object)
 {
   gboolean ret = TRUE;
@@ -2518,7 +2518,7 @@ gst_v4l2_object_set_format_full (GstV4l2Object * v4l2object, GstCaps * caps,
   gint fd = v4l2object->video_fd;
   struct v4l2_format format;
   struct v4l2_streamparm streamparm;
-  enum v4l2_field field;
+  enum v4l2_field field = 0;
   guint32 pixelformat;
   struct v4l2_fmtdesc *fmtdesc;
   GstVideoInfo info;
@@ -3671,7 +3671,7 @@ gst_v4l2_object_match_buffer_layout_from_struct (GstV4l2Object * obj,
 {
   GstVideoInfo info;
   GstVideoAlignment align;
-  gsize plane_size[GST_VIDEO_MAX_PLANES];
+//  gsize plane_size[GST_VIDEO_MAX_PLANES];
 
   if (!validate_video_meta_struct (obj, s))
     return FALSE;
