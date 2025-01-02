@@ -2509,13 +2509,16 @@ bool CvCapture_FFMPEG::retrieveFrame(int, cv::OutputArray image)
     comp.cols = context->width;
     comp.rows = context->height;
 
+    int myimage_w = (comp.avComp() && rotation_auto && (rotation_angle%180 != 0)) ? height : width;
+    int myimage_h = (comp.avComp() && rotation_auto && (rotation_angle%180 != 0)) ? width : height;
+
     if (myimage.empty() || (out_yuv > 0 && !myimage.avOK()) ||
         (out_yuv > 0 && (myimage.avFormat() != AV_PIX_FMT_YUV420P)) ||
         !(myimage.u && myimage.u->addr) || (BM_CARD_ID(myimage.card) != BM_CARD_ID(card)) ||
-        (myimage.rows != height) || (myimage.cols != width)){
+        (myimage.rows != myimage_h) || (myimage.cols != myimage_w)){
         // create mat buffer
         if (out_yuv > 0){
-            AVFrame *f = cv::av::create(height, width, card);
+            AVFrame *f= cv::av::create(myimage_h, myimage_w, card);
             myimage.create(f, card);
         } else {
             if (myimage.allocator && myimage.allocator != cv::hal::getAllocator()){
@@ -2523,12 +2526,15 @@ bool CvCapture_FFMPEG::retrieveFrame(int, cv::OutputArray image)
                 myimage.allocator = cv::hal::getAllocator();
             }
 
-            myimage.create(height, width, CV_8UC3, card);
+            myimage.create(myimage_h, myimage_w, CV_8UC3, card);
         }
     }
 
     if (comp.avComp()) {
-        cv::bmcv::decomp(comp, myimage, out_yuv > 0 ? false : true);
+        if(rotation_auto && (rotation_angle != 0))
+            cv::bmcv::decomp_rot(comp, myimage, out_yuv > 0 ? false : true, rotation_angle);
+        else
+            cv::bmcv::decomp(comp, myimage, out_yuv > 0 ? false : true);
     } else if (out_yuv > 0) {
         image.assign(comp);
     } else {
