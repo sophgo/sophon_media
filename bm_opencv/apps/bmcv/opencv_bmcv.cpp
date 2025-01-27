@@ -381,13 +381,18 @@ static int bmimage_copyto_bmimage(bm_image in, bm_image out)
     int height = out.height;
     bm_handle_t handle = bm_image_get_handle(&in);
     int total_copy = 0;
+    bm_status_t ret;
 
     assert(width <= in.width);
     assert(height <= in.height);
-    assert(bm_image_get_device_mem(in, src_mem) == BM_SUCCESS);
-    assert(bm_image_get_device_mem(out, dst_mem) == BM_SUCCESS);
-    assert(bm_image_get_stride(in, src_stride) == BM_SUCCESS);
-    assert(bm_image_get_stride(out, dst_stride) == BM_SUCCESS);
+    ret = bm_image_get_device_mem(in, src_mem);
+    assert(ret == BM_SUCCESS);
+    ret = bm_image_get_device_mem(out, dst_mem);
+    assert(ret == BM_SUCCESS);
+    ret = bm_image_get_stride(in, src_stride);
+    assert(ret == BM_SUCCESS);
+    ret = bm_image_get_stride(out, dst_stride);
+    assert(ret == BM_SUCCESS);
 
     for (i = 0; i < plane_num; i++){
         int dst_offset = 0;

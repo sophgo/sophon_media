@@ -128,7 +128,6 @@ static pthread_mutex_t isp_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  isp_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t wdr_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  wdr_cond = PTHREAD_COND_INITIALIZER;
-
 struct buffer_info {
     uint64_t paddr;
     uint64_t vaddr;
@@ -176,6 +175,32 @@ static int get_dev_num(AVFormatContext *ctx, int fd) {
     return 0;
 }
 
+static int set_dev_num(AVFormatContext *ctx, int fd) {
+    struct video_data *s = ctx->priv_data;
+    struct v4l2_ext_controls val;
+    struct v4l2_ext_control control;
+    int err;
+
+    memset(&val, 0, sizeof(struct v4l2_ext_controls));
+
+
+    if(fd > 0) {
+        control.id = VI_IOCTL_SET_DEV_NUM;
+        control.value = s->dev_num;
+        val.count = 1;
+        val.controls = &control;
+        if(ioctl(fd, VIDIOC_S_EXT_CTRLS, &val) < 0) {
+            err = AVERROR(errno);
+            av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_S_EXT_CTRLS): %s\n",
+                av_err2str(err));
+            return err;
+        } else {
+            av_log(NULL, AV_LOG_INFO,"set dev num = %d\n", s->dev_num);
+        }
+    }
+
+    return 0;
+}
 
 static int device_open(AVFormatContext *ctx, const char* device_path)
 {
@@ -236,8 +261,12 @@ static int device_open(AVFormatContext *ctx, const char* device_path)
     av_log(ctx, AV_LOG_VERBOSE, "fd:%d capabilities:%x\n",
            fd, cap.capabilities);
 
-    if(!s->dev_num) {//if not set dev_num get the sensor num
+    if (!s->dev_num) {//if not set dev_num get the sensor num
         if ((err = get_dev_num(ctx, fd)) < 0) {
+            goto fail;
+        }
+    } else {
+        if ((err = set_dev_num(ctx, fd)) < 0) {
             goto fail;
         }
     }
@@ -828,6 +857,7 @@ static int mmap_start(AVFormatContext *ctx)
     struct video_data *s = ctx->priv_data;
     enum v4l2_buf_type type;
     int i, res;
+    static int isp_init_time;
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
@@ -839,6 +869,11 @@ static int mmap_start(AVFormatContext *ctx)
             .memory = V4L2_MEMORY_MMAP
         };
 
+        if (v4l2_ioctl(s->fd, VIDIOC_QUERYBUF, &buf) < 0) {
+            av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_QUERYBUF): %s\n", av_err2str(res));
+            return -1;
+        }
+
         if (v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf) < 0) {
             res = AVERROR(errno);
             av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_QBUF): %s\n",
@@ -847,6 +882,22 @@ static int mmap_start(AVFormatContext *ctx)
         }
     }
     atomic_store(&s->buffers_queued, s->buffers);
+
+    if (s->use_isp) {
+        CVI_ISP_V4L2_Init(s->channel,s->fd);
+        pthread_mutex_lock(&isp_mutex);
+        isp_init_time++;
+
+        if (isp_init_time == s->dev_num) {
+            pthread_cond_broadcast(&isp_cond);
+        } else {
+            int wait_res = pthread_cond_timedwait(&isp_cond, &isp_mutex, &ts);
+            if (wait_res == ETIMEDOUT) {
+                av_log(ctx, AV_LOG_ERROR, "ISP channel init timeout, check number setting\n");
+            }
+        }
+        pthread_mutex_unlock(&isp_mutex);
+    }
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (v4l2_ioctl(s->fd, VIDIOC_STREAMON, &type) < 0) {
@@ -1069,10 +1120,6 @@ static int v4l2_read_probe(const AVProbeData *p)
 
 static int v4l2_read_header(AVFormatContext *ctx)
 {
-    static int isp_init_time;
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 5;
     struct video_data *s = ctx->priv_data;
     AVStream *st;
     int res = 0;
@@ -1080,6 +1127,7 @@ static int v4l2_read_header(AVFormatContext *ctx)
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
     enum AVPixelFormat pix_fmt = AV_PIX_FMT_NONE;
     struct v4l2_input input = { 0 };
+
     bm_dev_request(&s->bm_handle,0);
     st = avformat_new_stream(ctx, NULL);
     if (!st)
@@ -1093,6 +1141,7 @@ static int v4l2_read_header(AVFormatContext *ctx)
 #endif
 
     s->fd = device_open(ctx, ctx->url);
+
     if (s->fd < 0)
         return s->fd;
 
@@ -1115,21 +1164,6 @@ static int v4l2_read_header(AVFormatContext *ctx)
 
     /* enum input */
     input.index = s->channel;
-    if (s->use_isp) {
-        CVI_ISP_V4L2_Init(s->channel,s->fd);
-        pthread_mutex_lock(&isp_mutex);
-        isp_init_time++;
-
-        if (isp_init_time == s->dev_num) {
-            pthread_cond_broadcast(&isp_cond);
-        } else {
-            int wait_res = pthread_cond_timedwait(&isp_cond, &isp_mutex, &ts);
-            if (wait_res == ETIMEDOUT) {
-                av_log(ctx, AV_LOG_ERROR, "ISP channel init timeout, check number setting\n");
-            }
-        }
-        pthread_mutex_unlock(&isp_mutex);
-    }
 
     if (v4l2_ioctl(s->fd, VIDIOC_ENUMINPUT, &input) < 0) {
         res = AVERROR(errno);
@@ -1203,6 +1237,11 @@ static int v4l2_read_header(AVFormatContext *ctx)
         }
 
         pix_fmt =  ff_fmt_v4l2ff(fmt.fmt.pix.pixelformat, codec_id);
+    }
+
+    if (pix_fmt == AV_PIX_FMT_YUYV422 ||
+        pix_fmt == AV_PIX_FMT_UYVY422) {
+            s->use_isp = 0; //YUV sensor close isp
     }
 
     res = device_try_init(ctx, pix_fmt, &s->width, &s->height, &desired_format, &codec_id);
@@ -1393,8 +1432,8 @@ static const AVOption options[] = {
     { "use_libv4l2",  "use libv4l2 (v4l-utils) conversion functions",             OFFSET(use_libv4l2),  AV_OPT_TYPE_BOOL,   {.i64 = 0}, 0, 1, DEC },
     { "use_isp",      "use isp channel number",                                   OFFSET(use_isp),      AV_OPT_TYPE_INT,    {.i64 = 1}, 0, 1, DEC },
     { "wdr_on",        "set sensor wdr mode",                                     OFFSET(wdr_on),          AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC },
-    { "v4l2_buffer_num", "video buffer num",                                      OFFSET(v4l2_buffer_num), AV_OPT_TYPE_INT, {.i64 = 8}, 0, 32, DEC },
-    { "dev_num",       "device number",                                           OFFSET(dev_num),         AV_OPT_TYPE_INT, {.i64 = 0}, 0, 6, DEC },
+    { "v4l2_buffer_num", "video buffer num",                                      OFFSET(v4l2_buffer_num), AV_OPT_TYPE_INT, {.i64 = 6}, 0, 32, DEC },
+    { "dev_num",       "device number",                                           OFFSET(dev_num),         AV_OPT_TYPE_INT, {.i64 = 0}, 0, 12, DEC },
     { NULL },
 };
 

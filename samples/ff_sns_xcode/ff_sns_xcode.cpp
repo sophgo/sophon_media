@@ -18,7 +18,7 @@ extern "C" {
 #include "libavutil/pixdesc.h"
 }
 
-#define MAX_THREAD_NUM 6
+#define MAX_THREAD_NUM 12
 #define PARAM_SET_INDEP 3
 int quit_flag = 0;
 unsigned int count_dec[MAX_THREAD_NUM];
@@ -39,7 +39,7 @@ static void usage(char *program_name) {
     av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s devnum <input dev> <output file> <wdr_on> ... encoder framerate bitrate(kbps) use_isp v4l2_buf_num framenum loopflag\n", program_name);
 
     av_log(NULL, AV_LOG_ERROR, "\tencoder: H264 or H265, H264 is default.\n");
-    av_log(NULL, AV_LOG_ERROR, "\tdevnum: must be set to [1,6].\n");
+    av_log(NULL, AV_LOG_ERROR, "\tdevnum: must be set to [1,12].\n");
     av_log(NULL, AV_LOG_ERROR, "\tuse_isp:  use isp or not\n");
     av_log(NULL, AV_LOG_ERROR, "\tloopflag: If it is 0, it will encode and decode based on the number of frames; if it is 1, it will continuously encode and decode without generating valid videoes.\n");
     av_log(NULL, AV_LOG_ERROR, "\twdr_on: open the wdr mode or not\n");
@@ -75,8 +75,8 @@ int main(int argc, char **argv) {
         return -1;
     }
     int outputCount = atoi(argv[1]);
-    if (outputCount <= 0 || outputCount >= 7) {
-        av_log(NULL, AV_LOG_WARNING, "devnum must be set to [1,6]\n");
+    if (outputCount <= 0 || outputCount >= 13) {
+        av_log(NULL, AV_LOG_WARNING, "devnum must be set to [1,12]\n");
         return 1;
     }
     std::string outputFiles[outputCount];

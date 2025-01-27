@@ -1469,8 +1469,7 @@ GET_FRAME:
                 bmctx->pts_offset = 0 - dts;
             }
         }
-        if(avpkt->pts == AV_NOPTS_VALUE)
-            bmframe->pts = bmframe->dts + bmctx->pts_offset;
+        bmframe->pts = bmframe->dts + bmctx->pts_offset;
         overtime_cnt = 0;
         get_frame = 1;
     }
