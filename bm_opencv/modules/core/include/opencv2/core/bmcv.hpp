@@ -42,6 +42,7 @@ CV_EXPORTS bm_status_t toMAT(bm_image *image, Mat &m, int color_space, int color
                              bool update = true, bool nocopy = true);
 
 CV_EXPORTS bm_status_t decomp(Mat &m, Mat &out, bool update = true);
+CV_EXPORTS bm_status_t decomp_rot(Mat &m, Mat &out, bool update = true, int rotation_angle = 90);
 CV_EXPORTS bm_status_t resize(Mat &m, Mat &out, bool update = true, int interpolation = BMCV_INTER_NEAREST);
 CV_EXPORTS bm_status_t convert(Mat &m, Mat &out, bool update = true);
 

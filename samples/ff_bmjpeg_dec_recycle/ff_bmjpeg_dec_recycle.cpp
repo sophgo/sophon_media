@@ -152,9 +152,8 @@ int main(int argc, char* argv[])
     AVIOContext *avio_ctx = nullptr;
     AVFrame *pFrame = nullptr;
     AVPacket pkt;
-    int got_picture;
-    FILE *infile;
-    int numBytes;
+    FILE *infile = NULL;
+    int numBytes = 0;
     uint8_t *aviobuffer = nullptr;
     int aviobuf_size = 32*1024; // 32K
     uint8_t *bs_buffer = nullptr;
@@ -164,7 +163,6 @@ int main(int argc, char* argv[])
     string input_name;
     string output_file_name = "recycle-output";
     bm_handle_t handle;
-    unsigned long long p_vaddr = 0;
     uint8_t *virt_addr = nullptr;
 
 #ifdef BM_PCIE_MODE

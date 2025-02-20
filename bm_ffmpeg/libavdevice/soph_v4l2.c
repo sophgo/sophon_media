@@ -128,7 +128,6 @@ static pthread_mutex_t isp_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  isp_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t wdr_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  wdr_cond = PTHREAD_COND_INITIALIZER;
-
 struct buffer_info {
     uint64_t paddr;
     uint64_t vaddr;
@@ -149,10 +148,10 @@ static int get_dev_num(AVFormatContext *ctx, int fd) {
     struct v4l2_ext_controls val;
     struct v4l2_ext_control control;
     int err;
+    uint16_t *dev_num;
 
     memset(&val, 0, sizeof(struct v4l2_ext_controls));
 
-    uint16_t *dev_num;
     dev_num = (uint16_t *)malloc(sizeof(uint16_t));
     if(fd > 0) {
         control.id = VI_IOCTL_GET_LINK_NUM;
@@ -176,6 +175,32 @@ static int get_dev_num(AVFormatContext *ctx, int fd) {
     return 0;
 }
 
+static int set_dev_num(AVFormatContext *ctx, int fd) {
+    struct video_data *s = ctx->priv_data;
+    struct v4l2_ext_controls val;
+    struct v4l2_ext_control control;
+    int err;
+
+    memset(&val, 0, sizeof(struct v4l2_ext_controls));
+
+
+    if(fd > 0) {
+        control.id = VI_IOCTL_SET_DEV_NUM;
+        control.value = s->dev_num;
+        val.count = 1;
+        val.controls = &control;
+        if(ioctl(fd, VIDIOC_S_EXT_CTRLS, &val) < 0) {
+            err = AVERROR(errno);
+            av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_S_EXT_CTRLS): %s\n",
+                av_err2str(err));
+            return err;
+        } else {
+            av_log(NULL, AV_LOG_INFO,"set dev num = %d\n", s->dev_num);
+        }
+    }
+
+    return 0;
+}
 
 static int device_open(AVFormatContext *ctx, const char* device_path)
 {
@@ -236,8 +261,12 @@ static int device_open(AVFormatContext *ctx, const char* device_path)
     av_log(ctx, AV_LOG_VERBOSE, "fd:%d capabilities:%x\n",
            fd, cap.capabilities);
 
-    if(!s->dev_num) {//if not set dev_num get the sensor num
+    if (!s->dev_num) {//if not set dev_num get the sensor num
         if ((err = get_dev_num(ctx, fd)) < 0) {
+            goto fail;
+        }
+    } else {
+        if ((err = set_dev_num(ctx, fd)) < 0) {
             goto fail;
         }
     }
@@ -524,7 +553,7 @@ static void bm_release_buffer(void *opaque, uint8_t *data)
     struct buffer_info *buf_info = buf_descriptor->buf_info;
     bm_status_t res;
 
-    if(res = bm_mem_unmap_device_mem(s->bm_handle,buf_info->vaddr,buf_info->len)
+    if(res = bm_mem_unmap_device_mem(s->bm_handle,(void*)buf_info->vaddr,buf_info->len)
     != BM_SUCCESS) {
         av_log(NULL , AV_LOG_ERROR,"Unmap failed,res= %d \n",res);
     }
@@ -617,12 +646,11 @@ static int try_get_buf_paddr(AVFormatContext *ctx, int fd)
     /* sophgo: record all v4l2 buffer phy_addr */
     struct video_data *s = ctx->priv_data;
 
+    int i;
     struct v4l2_ext_controls val;
 	struct v4l2_ext_control control;
 	uint64_t *phy_addr;
 	phy_addr = (uint64_t *) malloc(sizeof(uint64_t) * s->v4l2_buffer_num);
-
-	int i;
 
     memset(&val, 0, sizeof(struct v4l2_ext_controls));
 
@@ -736,7 +764,7 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
             av_log(ctx, AV_LOG_ERROR,"Bm d2d failed!\n");
         }
 
-        bm_mem_mmap_device_mem(s->bm_handle,frame_buffer, &pkt->data);
+        bm_mem_mmap_device_mem(s->bm_handle,frame_buffer, (unsigned long long *)(uintptr_t)&pkt->data);
 
         res = enqueue_buffer(s, &buf);
         if (res) {
@@ -769,7 +797,7 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         buf_info->idx    = buf.index;
         buf_info->paddr  = frame_buffer->u.device.device_addr;
         buf_info->len    = pkt->size;
-        buf_info->vaddr  = pkt->data;
+        buf_info->vaddr  = (uint64_t)(uintptr_t)pkt->data;
         buf_info->bm_mem = frame_buffer;
         pkt->opaque      = buf_info;
         pkt->buf         = av_buffer_create(pkt->data, pkt->size, bm_release_buffer,
@@ -829,7 +857,7 @@ static int mmap_start(AVFormatContext *ctx)
     struct video_data *s = ctx->priv_data;
     enum v4l2_buf_type type;
     int i, res;
-	static int isp_init_time;
+    static int isp_init_time;
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
@@ -840,6 +868,11 @@ static int mmap_start(AVFormatContext *ctx)
             .index  = i,
             .memory = V4L2_MEMORY_MMAP
         };
+
+        if (v4l2_ioctl(s->fd, VIDIOC_QUERYBUF, &buf) < 0) {
+            av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_QUERYBUF): %s\n", av_err2str(res));
+            return -1;
+        }
 
         if (v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf) < 0) {
             res = AVERROR(errno);
@@ -906,6 +939,7 @@ static void mmap_close(struct video_data *s)
 
 static int v4l2_set_parameters(AVFormatContext *ctx)
 {
+    int i, ret;
     struct video_data *s = ctx->priv_data;
     struct v4l2_standard standard = { 0 };
     struct v4l2_streamparm streamparm = { 0 };
@@ -915,7 +949,6 @@ static int v4l2_set_parameters(AVFormatContext *ctx)
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 5;
-    int i, ret;
 
     if (s->framerate &&
         (ret = av_parse_video_rate(&framerate_q, s->framerate)) < 0) {
@@ -1094,6 +1127,7 @@ static int v4l2_read_header(AVFormatContext *ctx)
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
     enum AVPixelFormat pix_fmt = AV_PIX_FMT_NONE;
     struct v4l2_input input = { 0 };
+
     bm_dev_request(&s->bm_handle,0);
     st = avformat_new_stream(ctx, NULL);
     if (!st)
@@ -1107,6 +1141,7 @@ static int v4l2_read_header(AVFormatContext *ctx)
 #endif
 
     s->fd = device_open(ctx, ctx->url);
+
     if (s->fd < 0)
         return s->fd;
 
@@ -1202,6 +1237,11 @@ static int v4l2_read_header(AVFormatContext *ctx)
         }
 
         pix_fmt =  ff_fmt_v4l2ff(fmt.fmt.pix.pixelformat, codec_id);
+    }
+
+    if (pix_fmt == AV_PIX_FMT_YUYV422 ||
+        pix_fmt == AV_PIX_FMT_UYVY422) {
+            s->use_isp = 0; //YUV sensor close isp
     }
 
     res = device_try_init(ctx, pix_fmt, &s->width, &s->height, &desired_format, &codec_id);
@@ -1392,8 +1432,8 @@ static const AVOption options[] = {
     { "use_libv4l2",  "use libv4l2 (v4l-utils) conversion functions",             OFFSET(use_libv4l2),  AV_OPT_TYPE_BOOL,   {.i64 = 0}, 0, 1, DEC },
     { "use_isp",      "use isp channel number",                                   OFFSET(use_isp),      AV_OPT_TYPE_INT,    {.i64 = 1}, 0, 1, DEC },
     { "wdr_on",        "set sensor wdr mode",                                     OFFSET(wdr_on),          AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, DEC },
-    { "v4l2_buffer_num", "video buffer num",                                      OFFSET(v4l2_buffer_num), AV_OPT_TYPE_INT, {.i64 = 8}, 0, 32, DEC },
-    { "dev_num",       "device number",                                           OFFSET(dev_num),         AV_OPT_TYPE_INT, {.i64 = 0}, 0, 6, DEC },
+    { "v4l2_buffer_num", "video buffer num",                                      OFFSET(v4l2_buffer_num), AV_OPT_TYPE_INT, {.i64 = 6}, 0, 32, DEC },
+    { "dev_num",       "device number",                                           OFFSET(dev_num),         AV_OPT_TYPE_INT, {.i64 = 0}, 0, 12, DEC },
     { NULL },
 };
 

@@ -81,6 +81,7 @@ extern "C" {
 
 #define BS_MASK (1024*16-1)
 #define CHIP_ID_1684 0x1684
+#define UNUSED(x) (void)(x)
 
 #ifndef _WIN32
 #define FAST_MEMCPY
@@ -263,7 +264,7 @@ static void write_plane(uint8_t* src, int width, int height, int stride, FILE* f
 }
 
 #ifndef _WIN32
-static void dump_jpu_framebuf(char * strFunc, uint8_t* virt_addr, BmJpuFramebuffer& framebuffer, int width, int height, int dir, int sampleFactor, int dump_num)
+static void __attribute__((unused)) dump_jpu_framebuf(char * strFunc, uint8_t* virt_addr, BmJpuFramebuffer& framebuffer, int width, int height, int dir, int sampleFactor, int dump_num)
 {
     FILE *fout = NULL;
     char filename[255];
@@ -292,7 +293,7 @@ static void dump_jpu_framebuf(char * strFunc, uint8_t* virt_addr, BmJpuFramebuff
     }
 
 }
-static void dump_jpu_mat(char * strFunc, const Mat&  img,  int dir, int sampleFactor, int dump_num)
+static void __attribute__((unused)) dump_jpu_mat(char * strFunc, const Mat&  img,  int dir, int sampleFactor, int dump_num)
 {
     FILE *fout = NULL;
     char filename[255];
@@ -316,7 +317,7 @@ static void dump_jpu_mat(char * strFunc, const Mat&  img,  int dir, int sampleFa
 
     fclose(fout);
 }
-static void dump_jpu_mat_yuv(char * strFunc, const Mat&  img,  int dir, int sampleFactor, int dump_num)
+static void __attribute__((unused)) dump_jpu_mat_yuv(char * strFunc, const Mat&  img,  int dir, int sampleFactor, int dump_num)
 {
     FILE *fout = NULL;
     char filename[255];
@@ -347,7 +348,7 @@ static void dump_jpu_mat_yuv(char * strFunc, const Mat&  img,  int dir, int samp
 
     fclose(fout);
 }
-static void dump_jpu_virt_addr(char * strFunc, uint8_t* virt_addr, BmJpuJPEGDecInfo&  info,  int dir, int sampleFactor, int dump_num)
+static void __attribute__((unused)) dump_jpu_virt_addr(char * strFunc, uint8_t* virt_addr, BmJpuJPEGDecInfo&  info,  int dir, int sampleFactor, int dump_num)
 {
     FILE *fout = NULL;
     char filename[255];
@@ -711,6 +712,7 @@ static void av_buffer_release(void *opaque, uint8_t *data)
 {
     BmJpuJPEGDecoder *jpeg_decoder = (BmJpuJPEGDecoder *)opaque;
     UMatOpaque *jpeg_opaque;
+	UNUSED(data);
 
     if (!jpeg_decoder)
         return;
@@ -1057,7 +1059,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
         src_stride[0] = info.y_stride;
         dst_stride[0] = img.step[0];
 
-        bm_image_format_ext src_fmt;
+        bm_image_format_ext src_fmt = FORMAT_YUV420P;
         csc_type_t csc_type = CSC_YPbPr2RGB_BT601;
 
         if(info.image_format == BM_JPU_IMAGE_FORMAT_YUV420P){
@@ -1092,7 +1094,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
             bm_status_t ret = bm_mem_mmap_device_mem(handle, (info.framebuffer)->dma_buffer, &vmem);
             if (ret != BM_SUCCESS) {
                 CV_Error(CV_HalMemErr, "mmap failed");
-                return NULL;
+                return -1;
             }
             p_virt_addr = (uint8_t*)vmem;
         #endif
@@ -1330,7 +1332,7 @@ int BMJpegDecoder::softDec(Mat& img, unsigned int iScale, unsigned int scale_w, 
     {
         Size dsize = Size(scale_w, scale_h);
         if (dst.empty() || !(dst.u && dst.u->addr) ||
-            (dst.rows != scale_h) || (dst.cols != scale_w) ||
+            (dst.rows != (int)scale_h) || (dst.cols != (int)scale_w) ||
             (BM_CARD_ID(dst.card) != BM_CARD_ID(m_device_id))){
             dst.release();
             dst.create(dsize, img.type(), m_device_id);
@@ -1383,7 +1385,7 @@ bool BMJpegDecoder::readData( Mat& img )
 
     jpeg_decompress_struct* cinfo = &((JpegState*)m_state)->cinfo;
     JpegErrorMgr* jerr = &((JpegState*)m_state)->jerr;
-    JSAMPARRAY buffer = 0;
+    //JSAMPARRAY buffer = 0;
 
     int ret = setjmp(jerr->setjmp_buffer);
     if (ret)
@@ -1848,8 +1850,9 @@ bool BMJpegEncoder::prepareDMABuffer(BmJpuFramebuffer &framebuffer, int width, i
     else
     {
 #ifdef USING_SOC
-        prepareInternalDMABuffer(framebuffer, width, height, image_format, bgr_img);
-        return true;
+        UNUSED(out_img);
+        bool ret = prepareInternalDMABuffer(framebuffer, width, height, image_format, bgr_img);
+        return ret;
 #else
         if (image_format == BM_JPU_IMAGE_FORMAT_GRAY){
           out_img = bgr_img;
@@ -1899,7 +1902,7 @@ bool BMJpegEncoder::prepareEncInputParams(BmJpuJPEGEncParams& encParams, int& bs
                                           void* file)
 {
     int width, height, channels;
-    int chroma_interleave = 0;
+    //int chroma_interleave = 0;
     int raw_size;
     BmJpuImageFormat out_image_format  = BM_JPU_IMAGE_FORMAT_YUV420P;
 
@@ -2055,7 +2058,7 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
 {
     /* Initialize the input framebuffer */
     int framebuffer_alignment = 16;
-    int chroma_interleave = 0; // 0: I420; 1: NV12 : 2 NV21P_1_2n
+    //int chroma_interleave = 0; // 0: I420; 1: NV12 : 2 NV21P_1_2n
     BmJpuFramebufferSizes calculated_sizes;
     int ret;
     ret = bm_jpu_calc_framebuffer_sizes(width, height,
@@ -2081,12 +2084,12 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
      * encoder can read from them directly. */
 
     framebuffer.dma_buffer = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t));
-    bm_handle_t handle = bm_jpu_enc_get_bm_handle(m_device_id);
-    bm_status_t bm_ret = bm_malloc_device_byte_heap_mask(handle, framebuffer.dma_buffer,
+    bm_handle_t handle1 = bm_jpu_enc_get_bm_handle(m_device_id);
+    bm_status_t bm_ret = bm_malloc_device_byte_heap_mask(handle1, framebuffer.dma_buffer,
                                                 HEAP_1_2, calculated_sizes.total_size);
     if (bm_ret != BM_SUCCESS) {
       printf("malloc device memory size = %d failed, ret = %d\n", calculated_sizes.total_size, ret);
-      return -1;
+      return false;
     }
     if (framebuffer.dma_buffer == NULL)
     {
@@ -2151,8 +2154,8 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
         vmem = bm_mem_get_device_addr(*(framebuffer.dma_buffer));
         p_virt_addr = (uint8_t *)bm_jpu_devm_map(vmem, framebuffer.dma_buffer->size);
     #else
-        bm_handle_t handle = bm_jpu_enc_get_bm_handle(m_device_id);
-        bm_mem_mmap_device_mem(handle, framebuffer.dma_buffer, &vmem);
+        bm_handle_t handle2 = bm_jpu_enc_get_bm_handle(m_device_id);
+        bm_mem_mmap_device_mem(handle2, framebuffer.dma_buffer, &vmem);
         p_virt_addr = (uint8_t*)vmem;
     #endif
         if (p_virt_addr == NULL)
@@ -2188,21 +2191,21 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
         }
 
         /* Flush cache to the DMA buffer */
-        bm_mem_flush_device_mem(handle, framebuffer.dma_buffer);
+        bm_mem_flush_device_mem(handle2, framebuffer.dma_buffer);
     #ifdef BOARD_FPGA
         bm_jpu_devm_unmap(p_virt_addr, framebuffer.dma_buffer->size);
     #else
-        bm_mem_unmap_device_mem(handle, p_virt_addr, framebuffer.dma_buffer->size);
+        bm_mem_unmap_device_mem(handle2, p_virt_addr, framebuffer.dma_buffer->size);
     #endif
     }
 #if 0
     static int ab= 0;
     unsigned long long vmem = 0;
-    bm_handle_t handle = bm_jpu_enc_get_bm_handle(m_device_id);
-    bm_mem_mmap_device_mem(handle, framebuffer.dma_buffer, &vmem);
+    bm_handle_t handle3 = bm_jpu_enc_get_bm_handle(m_device_id);
+    bm_mem_mmap_device_mem(handle3, framebuffer.dma_buffer, &vmem);
     uint8_t* p_virt_addr2 = (uint8_t*)vmem;
     dump_jpu_framebuf((char*)"jpuenc", p_virt_addr2, framebuffer, width, height, DUMP_OUT, FORMAT_420, ab++);
-    bm_mem_unmap_device_mem(handle, p_virt_addr2, framebuffer.dma_buffer->size);
+    bm_mem_unmap_device_mem(handle3, p_virt_addr2, framebuffer.dma_buffer->size);
 #endif
 #if defined(PROFILING_ENC)
     gettimeofday(&end, NULL);
@@ -2215,7 +2218,7 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
 bool BMJpegEncoder::write(const Mat& img, const std::vector<int>& params)
 {
     (void)(params);
-    int width, height, channels;
+    //int width, height, channels;
     Mat out_img;
     m_last_error.clear();
 

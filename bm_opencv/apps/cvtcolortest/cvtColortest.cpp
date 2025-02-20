@@ -33,7 +33,7 @@ static void alignWithStride(uchar* uv, int stride, int width, int uvheight)
         }
     }
 }
-static void alignWithHalfStride(uchar* uv, int stride, int width, int uvheight)
+static void __attribute__((unused)) alignWithHalfStride(uchar* uv, int stride, int width, int uvheight)
 {
     if (stride/2 <= width/2 || stride%2 != 0)
         return;
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
         bmcv::hwColorCvt(src,  dst2, FORMAT_BGR_PACKED, FORMAT_YUV420P, Size(src.cols, src.rows * 3 / 2), 1);
         gettimeofday(&tv1,NULL);
         printf("%s:vpp_time_consume(us): %ld\n",argv[2],(tv1.tv_sec-tv0.tv_sec)*1000000+(tv1.tv_usec-tv0.tv_usec));
-        int com_width = dst2.cols;
+        //int com_width = dst2.cols;
 
         // FILE *dst1_file = fopen("vppout_dst1.yuv","wb");
         // printf("!!write file\n");
@@ -395,7 +395,7 @@ int main(int argc, char **argv)
 
         FILE *gray_file = fopen("bgr2gray.bin","wb");
         printf("!!write file\n");
-        printf("dst2: width = %d, height = %d, total() = %d, channels = %d\n",
+        printf("dst2: width = %d, height = %d, total() = %ld, channels = %d\n",
                 dst2.size().width, dst2.size().height, dst2.total(),
                 dst2.channels());
         fwrite(dst2.data, 1, dst2.total() * dst2.channels(), gray_file);
@@ -425,7 +425,7 @@ int main(int argc, char **argv)
 
         gray_file = fopen("bgr2gray2rgb.bin","wb");
         printf("!!write file\n");
-        printf("rgbhw: width = %d, height = %d, total() = %d, channels = %d\n",
+        printf("rgbhw: width = %d, height = %d, total() = %ld, channels = %d\n",
                 rgbhw.size().width, rgbhw.size().height, rgbhw.total(),
                 rgbhw.channels());
         fwrite(rgbhw.data, 1, rgbhw.total() * rgbhw.channels(), gray_file);

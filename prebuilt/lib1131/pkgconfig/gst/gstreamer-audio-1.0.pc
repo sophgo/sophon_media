@@ -1,0 +1,12 @@
+prefix=../../../../prebuilt
+libdir=${prefix}/lib1131/gst
+includedir=${prefix}/include/gst/gstreamer-1.0
+
+Name: GStreamer Audio library
+Description: Audio helper functions and base classes
+Requires: gstreamer-1.0 gstreamer-base-1.0
+Requires.private:
+Version: 1.16.3
+Libs: -L${libdir} -lgstaudio-1.0
+Cflags: -I${includedir}
+

@@ -112,7 +112,7 @@ static int get_plane_size(int format, int plane, int width, int height)
     return ret;
 }
 
-static int dump_data(const char *fn, Mat in, int yuv_enable)
+static int __attribute__((unused)) dump_data(const char *fn, Mat in, int yuv_enable)
 {
   FILE *fp;
 
@@ -170,7 +170,7 @@ static int dump_data(const char *fn, Mat in, int yuv_enable)
   return 0;
 }
 
-static int dump_image(const char *fn, bm_image in)
+static int __attribute__((unused)) dump_image(const char *fn, bm_image in)
 {
     int i, j;
     bm_status_t ret;
@@ -180,7 +180,7 @@ static int dump_image(const char *fn, bm_image in)
     void *data[4] = { NULL };
     int offset = 0;
     int plane_num = bm_image_get_plane_num(in);
-    bm_handle_t handle = bm_image_get_handle(&in);
+    //bm_handle_t handle = bm_image_get_handle(&in);
 
     fp = fopen(fn, "wb");
     if (!fp) {
@@ -196,7 +196,7 @@ static int dump_image(const char *fn, bm_image in)
     }
 
     for (i = 0; i < plane_num; i++) {
-        data[i] = buf + offset;
+        data[i] = (char*)buf + offset;
         offset += get_plane_size(in.image_format, i, in.width, in.height);
     }
 
@@ -226,7 +226,7 @@ static int dump_image(const char *fn, bm_image in)
         }
 
         for (j = 0; j < plane_height; j++){
-            fwrite(data[i] + src_offset, 1, plane_width, fp);
+            fwrite((char*)data[i] + src_offset, 1, plane_width, fp);
             src_offset += src_stride[i];
         }
     }

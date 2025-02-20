@@ -543,6 +543,7 @@ error:
   bm_image_destroy(dst);
   free(src);
   free(dst);
+  bm_dev_free(bm_handle);
 
   return ret;
 }
@@ -559,6 +560,18 @@ map_gstformat_to_bmformat(GstVideoFormat gst_format)
   case GST_VIDEO_FORMAT_Y42B:
     format = FORMAT_YUV422P;
     break;
+  case GST_VIDEO_FORMAT_YUY2:
+    format = FORMAT_YUV422_YUYV;
+    break;
+  case GST_VIDEO_FORMAT_YVYU:
+    format = FORMAT_YUV422_YVYU;
+    break;
+  case GST_VIDEO_FORMAT_UYVY:
+    format = FORMAT_YUV422_UYVY;
+    break;
+  case GST_VIDEO_FORMAT_VYUY:
+    format = FORMAT_YUV422_VYUY;
+    break;
   case GST_VIDEO_FORMAT_Y444:
     format = FORMAT_YUV444P;
     break;
@@ -573,6 +586,9 @@ map_gstformat_to_bmformat(GstVideoFormat gst_format)
     break;
   case GST_VIDEO_FORMAT_NV16:
     format = FORMAT_NV16;
+    break;
+  case GST_VIDEO_FORMAT_NV61:
+    format = FORMAT_NV61;
     break;
   case GST_VIDEO_FORMAT_RGB:
     format = FORMAT_RGB_PACKED;

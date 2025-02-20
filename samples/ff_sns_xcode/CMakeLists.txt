@@ -7,10 +7,22 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../prebuilt/include/alsa)
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../prebuilt/lib)
 #libbmlib
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/include)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+if("${GCC_VERSION}" STREQUAL "930")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib930/${PLATFORM})
+elseif("${GCC_VERSION}" STREQUAL "1131")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib1131/${PLATFORM})
+else()
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+endif()
 #libisp
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libisp/include)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libisp/lib/soc)
+if("${GCC_VERSION}" STREQUAL "930")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libisp/lib930/${PLATFORM})
+elseif("${GCC_VERSION}" STREQUAL "1131")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libisp/lib1131/${PLATFORM})
+else()
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libisp/lib/${PLATFORM})
+endif()
 #jpeg
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/jpeg/3rdparty/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/jpeg/inc)
@@ -37,7 +49,7 @@ set(VPU_LIB  bmvd bmvenc)
 set(BMCV_LIB bmcv)
 set(JPEG_LIB bmjpeg turbojpeg)
 set(SYSTEM_LIB pthread stdc++)
-set(ISP_LIB ispv4l2_helper ae af awb cvi_bin cvi_bin_isp cvi_ispd2 isp isp_algo ispv4l2_adapter json-c sns_full)
+set(ISP_LIB ispv4l2_helper ae af awb cvi_bin cvi_bin_isp isp isp_algo ispv4l2_adapter sns_full)
 SET(SRCS
   ff_sns_decode.hpp
   ff_sns_encode.hpp
@@ -46,4 +58,5 @@ SET(SRCS
 )
 
 add_executable(test_ff_sns_xcode EXCLUDE_FROM_ALL ${SRCS})
+target_compile_options(test_ff_sns_xcode PRIVATE -Wno-deprecated-declarations)
 target_link_libraries(test_ff_sns_xcode ${FFMPEG_LIB} ${BMLIB} ${VPU_LIB}	${BMCV_LIB} ${JPEG_LIB} ${SYSTEM_LIB} ${ISP_LIB})

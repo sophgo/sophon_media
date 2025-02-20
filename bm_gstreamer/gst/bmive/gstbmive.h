@@ -11,6 +11,8 @@
 
 G_BEGIN_DECLS
 
+#define USE_BM_ALLOCATOR
+
 #define GST_BM_IVE_TYPE_NAME "bmive"
 
 #define GST_VIDEO_CAPS_MAKE_FORMATS \

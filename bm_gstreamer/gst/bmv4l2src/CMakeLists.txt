@@ -8,6 +8,9 @@ add_compile_options(${GST_VIDEO_LDFLAGS} ${GST_PBUTILS_LDFLAGS} ${GMODULE_LDFLAG
 if("${GCC_VERSION}" STREQUAL "930")
     link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib930/gst)
     link_directories(${LIBSOPHAV_TOP}/3rdparty/libisp/lib930/soc)
+elseif("${GCC_VERSION}" STREQUAL "1131")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib1131/gst)
+    link_directories(${LIBSOPHAV_TOP}/3rdparty/libisp/lib1131/soc)
 else()
     link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/gst)
     link_directories(${LIBSOPHAV_TOP}/3rdparty/libisp/lib/soc)
@@ -47,7 +50,7 @@ set(LIB_NAME gstbmv4l2src)
 add_library(${LIB_NAME} SHARED ${SRCS})
 target_link_libraries(${LIB_NAME}
     ${GST_VIDEO_LIBRARIES} ${GST_PBUTILS_LIBRARIES} ${GMODULE_LIBRARIES}
-    gstbmallocator ispv4l2_helper ae af awb cvi_bin cvi_bin_isp cvi_ispd2 isp isp_algo ispv4l2_adapter json-c sns_full
+    gstbmallocator ispv4l2_helper ae af awb cvi_bin cvi_bin_isp isp isp_algo ispv4l2_adapter sns_full
     )
 
 add_custom_target(bmv4l2src_all ALL DEPENDS ${LIB_NAME})

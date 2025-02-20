@@ -264,7 +264,7 @@ int VideoDec_FFMPEG::flushFrame(AVFrame *frame){
 
     ret = avcodec_send_packet(video_dec_ctx, NULL);
     while(1) {
-        AVPacket *out_pkt = av_packet_alloc();
+        //AVPacket *out_pkt = av_packet_alloc();
         ret = avcodec_receive_frame(video_dec_ctx, frame);
         if (ret == AVERROR(EAGAIN)) {
             break;

@@ -9,6 +9,7 @@ extern "C" {
 
 namespace cv { namespace av {
 
+CV_EXPORTS MatAllocator* getAVAllocator();
 CV_EXPORTS MatAllocator* getAllocator();
 /* function: create an opencv specific AVFrame structure.
  * parameter:

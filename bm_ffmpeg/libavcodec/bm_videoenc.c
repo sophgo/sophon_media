@@ -626,8 +626,13 @@ static av_cold int bm_videoenc_init(AVCodecContext *avctx)
     av_log(avctx, AV_LOG_DEBUG,
            "timebase_den=%d, timebase_num=%d\n",
            eop->timebase_den, eop->timebase_num);
-    eop->fps_num = avctx->time_base.den;
-    eop->fps_den = avctx->time_base.num * avctx->ticks_per_frame;
+    if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
+        eop->fps_num = avctx->framerate.num;
+        eop->fps_den = avctx->framerate.den;
+    } else {
+        eop->fps_num = avctx->time_base.den;
+        eop->fps_den = avctx->time_base.num * avctx->ticks_per_frame;
+    }
 
     /* If this is 1, then Cb and Cr are interleaved in one shared chroma
      * plane, otherwise they are separated in their own planes.

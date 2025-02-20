@@ -7,6 +7,8 @@ add_compile_options(${GST_BASE_LDFLAGS} ${GST_VIDEO_LDFLAGS} ${GST_ALLOCATORS_LD
 
 if("${GCC_VERSION}" STREQUAL "930")
     link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib930/gst)
+elseif("${GCC_VERSION}" STREQUAL "1131")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib1131/gst)
 else()
     link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/gst)
 endif()

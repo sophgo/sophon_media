@@ -20,15 +20,15 @@ plugin_init(GstPlugin *plugin)
 
   if (!sink_template1) {
       g_print ("Failed to create sink_template1\n");
-      return;
+      return -1;
   }
   if (!sink_template2) {
       g_print ("Failed to create sink_template2\n");
-      return;
+      return -1;
   }
   if (!src_template) {
       g_print ("Failed to create src_template\n");
-      return;
+      return -1;
   }
   GST_INFO("BM stitch, sink template: %" GST_PTR_FORMAT
       ", src template1: %" GST_PTR_FORMAT", src template1: %" GST_PTR_FORMAT, sink_template1, sink_template2,src_template);

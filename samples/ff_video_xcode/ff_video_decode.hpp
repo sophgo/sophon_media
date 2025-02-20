@@ -34,7 +34,7 @@ private:
     AVFrame *frame;
     AVPacket pkt;
     int refcount;
-    int fflush_flag;
+    int fflush_flag = 0;
 
     const AVCodec* bm_find_hw_decoder(AVCodecID dec_id)
     {

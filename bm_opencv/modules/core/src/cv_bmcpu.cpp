@@ -20,6 +20,7 @@
 #define RAMBOOT_ITB_FILENAME    "ramboot_rootfs.itb"
 #define BMCPU_LOG_FILE    "./bmcpu_ocv.log"
 #define BMCPU_PROFILING     0
+#define UNUSED(x) (void)(x)
 
 using namespace std;
 namespace cv{
@@ -279,8 +280,6 @@ BMCpuSender::BMCpuSender(int dev_id, int size)
     :_buffer(NULL), _param_byte_size(0), _buffer_size(0),
      _device_id(-1), _map_vaddr(NULL), _handle(NULL), _process_handle(0)
 {
-    bm_status_t ret;
-
     _dev_mem.size = 0;
 
 #if !defined(USING_SOC) && defined(BM1684_CHIP) && defined(ENABLE_BMCPU)
@@ -327,6 +326,9 @@ BMCpuSender::BMCpuSender(int dev_id, int size)
     _device_id = dev_id;
     _buffer_size = size;
     _param_byte_size = sizeof(int64_t);  // for memory alignement
+#else
+    UNUSED(dev_id);
+    UNUSED(size);
 #endif
 
     return;
@@ -407,6 +409,9 @@ int BMCpuSender::run(const String& function_name)
 #if BMCPU_PROFILING
     BMCPU_LOG(stdout, "[Profiling]BMCpuSender run d2s uses %ld tickers\n", getTickCount() - start);
 #endif
+
+#else
+    UNUSED(function_name);
 #endif
     return ret;
 }
@@ -442,7 +447,7 @@ int BMCpuSender::put(Mat &m)
         BMCPU_LOG(stdout, "BMCpuSender Mat device buffer is not allocated\n");
         return -2;
     }
-    if (_param_byte_size + size(m) > (size_t)_buffer_size){
+    if (_param_byte_size + size(m) > _buffer_size){
         BMCPU_LOG(stdout, "BMCpuSender no sufficient memory for parameters _param_byte_size=%d m_len=%d _buffer_size=%d\n", _param_byte_size, size(m), _buffer_size);
         return -1;
     }
@@ -475,7 +480,7 @@ int BMCpuSender::skip(Mat &m)
         BMCPU_LOG(stdout, "BMCpuSender device %d buffer is not allocated\n", _device_id);
         return -1;
     }
-    if (_param_byte_size + size(m) > (size_t)_buffer_size){
+    if (_param_byte_size + size(m) > _buffer_size){
         BMCPU_LOG(stdout, "BMCpuSender no sufficient memory for parameters\n");
         return -1;
     }
@@ -497,7 +502,10 @@ int BMCpuSender::get(Mat &m)
 
     ret = skip(m);
     if (ret == 0){
-        memcpy(&m, _buffer+offset, sizeof(Mat));
+        //memcpy(&m, _buffer+offset, sizeof(Mat));
+        Mat* tempMat = reinterpret_cast<Mat*>(_buffer + offset);
+        m = *tempMat;
+
         offset += sizeof(Mat);
         if (m.dims > 2){
             int step_buf_size = m.dims*sizeof(m.step.p[0]) + (m.dims+1)*sizeof(m.size.p[0]);
@@ -505,7 +513,9 @@ int BMCpuSender::get(Mat &m)
             offset += step_buf_size;
         }
         if (m.u){
-            memcpy(m.u, _buffer+offset, sizeof(UMatData));
+            //memcpy(m.u, _buffer+offset, sizeof(UMatData));
+            *m.u = *reinterpret_cast<cv::UMatData*>(_buffer + offset);
+
             offset += sizeof(UMatData);
             if (m.avOK()){
                 memcpy(m.u->frame, _buffer+offset, sizeof(AVFrame));
@@ -619,6 +629,7 @@ int BMCpuSender::put(void *m, int byte_size)
 int BMCpuSender::skip(void *m, int &byte_size)
 {
     int ret = 0;
+    UNUSED(m);
 
     if (!_buffer){
         BMCPU_LOG(stdout, "BMCpuSender device %d buffer is not allocated\n", _device_id);
@@ -690,6 +701,7 @@ int BMCpuSender::skip(String &text)
 {
     int ret = 0;
     int text_size;
+    UNUSED(text);
 
     if (!_buffer){
         BMCPU_LOG(stdout, "BMCpuSender device %d buffer is not allocated\n", _device_id);

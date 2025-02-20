@@ -411,7 +411,7 @@ gst_v4l2_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
   /* keep a GstVideoInfo with defaults for the when we need to copy */
   gst_video_info_from_caps (&pool->caps_info, caps);
 
-done:
+//done:
   ret = GST_BUFFER_POOL_CLASS (parent_class)->set_config (bpool, config);
 
   /* If anything was changed documentation recommend to return FALSE */
@@ -1066,7 +1066,7 @@ done:
   return res;
 
   /* ERRORS */
-poll_failed:
+//poll_failed:
   {
     GST_DEBUG_OBJECT (pool, "poll error %s", gst_flow_get_name (res));
     return res;

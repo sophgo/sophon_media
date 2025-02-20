@@ -226,8 +226,8 @@ int main(int argc, char **argv)
             return -1;
         }
 
-        int water_w = 117;
-        int water_h = 79;
+        //int water_w = 117;
+        //int water_h = 79;
         g_watermark = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t));
         ret = bm_malloc_device_byte_heap_mask(g_bmHandle, g_watermark, 0x2, 9243);
         char *watermark_file = (char *)malloc(9243);
@@ -326,15 +326,15 @@ int main(int argc, char **argv)
 }
 
 void *video_decoder_pthread(void *arg){
-    int sophon_idx              = 0;
+    //int sophon_idx              = 0;
     THREAD_ARG *thread_arg      = (THREAD_ARG *)arg;
     int index                   = thread_arg->thread_index;
-    const char *src_filename    = thread_arg->src_filename;
+    //const char *src_filename    = thread_arg->src_filename;
     int height                  = thread_arg->height;
     int width                   = thread_arg->width;
-    int en_bmx264               = thread_arg->en_bmx264;
-    int zero_copy               = thread_arg->zero_copy;
-    sophon_idx                  = thread_arg->sophon_idx;
+    //int en_bmx264               = thread_arg->en_bmx264;
+    //int zero_copy               = thread_arg->zero_copy;
+    //sophon_idx                  = thread_arg->sophon_idx;
 
     int ret                     =  0;
     struct timeval tv1, tv2;
@@ -521,7 +521,7 @@ void* stat_pthread(void *arg)
         sleep(INTERVAL);
         if (dis_mode == 1) {
             for (int i = 0; i < thread_num; i++) {
-                printf("ID[%2d] ,DEC_FRM[%10lld], DEC_FPS[%2.2f],[%2.2f] | VPP_FRM[%10lld], VPP_FPS[%2.2f],[%2.2f]| ENC_FRM[%10lld], ENC_FPS[%2.2f],[%2.2f], VPP_QUEUE[%d] ENC_QUEUE[%d]\n",
+                printf("ID[%2d] ,DEC_FRM[%10lld], DEC_FPS[%2.2f],[%2.2f] | VPP_FRM[%10lld], VPP_FPS[%2.2f],[%2.2f]| ENC_FRM[%10lld], ENC_FPS[%2.2f],[%2.2f], VPP_QUEUE[%ld] ENC_QUEUE[%ld]\n",
                     i, (long long)count_dec[i],((double)(count_dec[i]-last_count_dec[i]))/INTERVAL, fps_dec[i],
                        (long long)count_vpp[i],((double)(count_vpp[i]-last_count_vpp[i]))/INTERVAL, fps_vpp[i],
                        (long long)count_enc[i], ((double)(count_enc[i]-last_count_enc[i]))/INTERVAL, fps_enc[i], g_image_vpp_queue[i].size(), g_image_enc_queue[i].size());
@@ -536,7 +536,7 @@ void* stat_pthread(void *arg)
             uint64_t count_sum = 0;
             for (int i = 0; i < thread_num; i++)
               count_sum += count_enc[i];
-            printf("thread %d, frame %lld, enc_fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
+            printf("thread %d, frame %ld, enc_fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
             last_count_sum = count_sum;
         }
         printf("\r");

@@ -13,8 +13,8 @@
 #define  DEFAULT_PROP_STITCH_DST_H        288
 #define  DEFAULT_PROP_STITCH_OVLP_LX      2304
 #define  DEFAULT_PROP_STITCH_OVLP_RX      4607
-#define  DEFAULT_PROP_STITCH_WGT_NAME_L   ""
-#define  DEFAULT_PROP_STITCH_WGT_NAME_R   ""
+#define  DEFAULT_PROP_STITCH_WGT_NAME_L   0
+#define  DEFAULT_PROP_STITCH_WGT_NAME_R   0
 #define  DEFAULT_PROP_STITCH_WGT_MODE     BM_STITCH_WGT_YUV_SHARE
 #define ALIGN(x, a)      (((x) + ((a)-1)) & ~((a)-1))
 GST_DEBUG_CATEGORY (gst_bm_stitch2way_debug);
@@ -35,6 +35,7 @@ gst_bm_stitch_process_buffers (GstBmSTITCH2WAY *self, GstBuffer *outBuffer);
 /* class initialization */
 G_DEFINE_TYPE(GstBmSTITCH2WAY, gst_bm_stitch2way, GST_TYPE_VIDEO_AGGREGATOR);
 static gpointer parent_class = NULL;
+/*
 static GstStaticPadTemplate gst_bm_stitch_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -44,6 +45,7 @@ GST_STATIC_PAD_TEMPLATE ("src",
     "width = (int) [ 64, 8604 ], " \
     "height = (int) [ 64, 4080 ], " \
     "framerate = " GST_VIDEO_FPS_RANGE));
+*/
 
 static GstStaticPadTemplate gst_bm_stitch_sink1_template =
 GST_STATIC_PAD_TEMPLATE ("sink1",
@@ -151,12 +153,12 @@ gst_bm_stitch_set_property (GObject * object,
       break;
     }
     case PROP_STITCH_WGT_NAME_L:{
-      gchar *wgt_name_l = g_value_get_string (value);
+      const gchar *wgt_name_l = g_value_get_string (value);
       memcpy(self->wgt_name_l,wgt_name_l,128);
       break;
     }
     case PROP_STITCH_WGT_NAME_R:{
-      gchar *wgt_name_r = g_value_get_string (value);
+      const gchar *wgt_name_r = g_value_get_string (value);
       memcpy(self->wgt_name_r,wgt_name_r,128);
       break;
     }
@@ -171,7 +173,7 @@ gst_bm_stitch_set_property (GObject * object,
   }
 }
 
-static void
+static void __attribute__((unused))
 save_output(GstBuffer* buffer,char *output)
 {
   GstMapInfo info;
@@ -185,7 +187,7 @@ save_output(GstBuffer* buffer,char *output)
   gst_buffer_map(buffer, &info, GST_MAP_READ);
   w = fwrite(info.data, 1, info.size, output_file);
   if(w != info.size){
-    printf("written size(%d) != info.size(%d)\n", (unsigned int)w, info.size);
+    printf("written size(%d) != info.size(%ld)\n", (unsigned int)w, info.size);
     return ;
   }
   gst_buffer_unmap(buffer, &info);
@@ -217,11 +219,11 @@ gst_bm_stitch_get_property (GObject * object,
       break;
     }
     case PROP_STITCH_WGT_NAME_L:{
-      g_value_set_string (value,self->wgt_name_l);
+      g_value_set_string (value,*self->wgt_name_l);
       break;
     }
     case PROP_STITCH_WGT_NAME_R:{
-      g_value_set_string (value,self->wgt_name_r);
+      g_value_set_string (value,*self->wgt_name_r);
       break;
     }
     case PROP_STITCH_WGT_MODE:{
@@ -240,8 +242,8 @@ gst_bm_stitch_aggregate (GstVideoAggregator  * vagg, GstBuffer*  outbuf)
   GstFlowReturn ret;
   GstBmSTITCH2WAY *bmstitch = GST_BM_STITCH2WAY(vagg);
   GST_BM_STITCH_LOCK(bmstitch);
-  GstElementClass *klass = GST_ELEMENT_GET_CLASS (vagg);
-  GstVideoAggregatorClass *vagg_klass = (GstVideoAggregatorClass *) klass;
+//  GstElementClass *klass = GST_ELEMENT_GET_CLASS (vagg);
+//  GstVideoAggregatorClass *vagg_klass = (GstVideoAggregatorClass *) klass;
   GST_INFO_OBJECT(bmstitch, "gst_bm_stitch_aggregate start! \n");
   ret = gst_bm_stitch_process_buffers(bmstitch,outbuf);
   if(ret != GST_FLOW_OK) {
@@ -302,10 +304,10 @@ gst_bm_stitch_create_output_buffer (GstVideoAggregator * videoaggregator,
 static void
 gst_bm_stitch2way_class_init (GstBmSTITCH2WAYClass * klass)
 {
-  GstElementClass *element_class = GST_ELEMENT_CLASS(klass);
+//  GstElementClass *element_class = GST_ELEMENT_CLASS(klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstVideoAggregatorClass *vagg_class = GST_VIDEO_AGGREGATOR_CLASS (klass);
-  GstAggregatorClass *agg_class = GST_AGGREGATOR_CLASS (klass);
+//  GstAggregatorClass *agg_class = GST_AGGREGATOR_CLASS (klass);
   gobject_class->set_property =
       GST_DEBUG_FUNCPTR (gst_bm_stitch_set_property);
   gobject_class->get_property =
@@ -403,8 +405,8 @@ gst_bm_stitch2way_init(GstBmSTITCH2WAY *self)
   self->dst_h = DEFAULT_PROP_STITCH_DST_H;
   self->stitch_config.ovlap_attr.ovlp_lx[0] = DEFAULT_PROP_STITCH_OVLP_LX;
   self->stitch_config.ovlap_attr.ovlp_rx[0] = DEFAULT_PROP_STITCH_OVLP_RX;
-  memset(self->wgt_name_l,DEFAULT_PROP_STITCH_WGT_NAME_L,128);
-  memset(self->wgt_name_r,DEFAULT_PROP_STITCH_WGT_NAME_R,128);
+  memset(self->wgt_name_l,DEFAULT_PROP_STITCH_WGT_NAME_L,sizeof(self->wgt_name_l[0]) * 128);
+  memset(self->wgt_name_r,DEFAULT_PROP_STITCH_WGT_NAME_R,sizeof(self->wgt_name_l[0]) * 128);
   self->stitch_config.wgt_mode = DEFAULT_PROP_STITCH_WGT_MODE;
   GST_DEBUG_OBJECT (self, "bmstitch initial");
 
@@ -416,7 +418,7 @@ gst_bm_stitch2way_subinstance_init(GTypeInstance G_GNUC_UNUSED *instance,
                              gpointer G_GNUC_UNUSED g_class)
 {
   GstElement *element = GST_ELEMENT(instance);
-  GstElementClass *element_class = GST_ELEMENT_GET_CLASS(instance);
+//  GstElementClass *element_class = GST_ELEMENT_GET_CLASS(instance);
   GstBmSTITCH2WAY *self = GST_BM_STITCH2WAY(instance);
   GstPadTemplate *sink1_pad_template,*sink2_pad_template;
   sink1_pad_template = gst_static_pad_template_get (&gst_bm_stitch_sink1_template);
@@ -441,14 +443,14 @@ gst_bm_stitch2way_subinstance_init(GTypeInstance G_GNUC_UNUSED *instance,
     g_print("Error: pad1 is not a GstVideoAggregatorPad\n");
     gst_object_unref(GST_PAD(self->sink1_pad));
     gst_object_unref(GST_PAD(self->sink2_pad));
-    return -1;
+    return;
   }
 
   if (!GST_IS_VIDEO_AGGREGATOR_PAD(self->sink2_pad)) {
     g_print("Error: pad2 is not a GstVideoAggregatorPad\n");
     gst_object_unref(GST_PAD(self->sink1_pad));
     gst_object_unref(GST_PAD(self->sink2_pad));
-    return -1;
+    return;
   }
   gst_element_add_pad(element,GST_PAD(self->sink1_pad));
   gst_element_add_pad(element,GST_PAD(self->sink2_pad));
@@ -460,10 +462,12 @@ gst_bm_stitch_process_frame (bm_handle_t bm_handle, GstBmSTITCH2WAY *self, GstVi
     GstVideoFrame *inFrameR, GstVideoFrame *outFrame)
 {
   GstFlowReturn ret = GST_FLOW_OK;
-  gint src_stride[4];
+//  gint src_stride[4];
   bm_image    src[2];
   bm_image       dst;
   int  wgt_len ,wgtWidth, wgtHeight;
+  char** wgt_name_l;
+  char** wgt_name_r;
 
   bm_image_format_ext bmInFormatL =
       (bm_image_format_ext)map_gstformat_to_bmformat(inFrameL->info.finfo->format);
@@ -475,25 +479,25 @@ gst_bm_stitch_process_frame (bm_handle_t bm_handle, GstBmSTITCH2WAY *self, GstVi
   gint in_height_R = inFrameR->info.height;
   gint in_width_R = inFrameR->info.width;
 
-  bm_image_format_ext bmOutFormat =
-      (bm_image_format_ext)map_gstformat_to_bmformat(outFrame->info.finfo->format);
+//  bm_image_format_ext bmOutFormat =
+//      (bm_image_format_ext)map_gstformat_to_bmformat(outFrame->info.finfo->format);
   gint out_height = outFrame->info.height;
   gint out_width = outFrame->info.width;
 
   ret = bm_image_create(bm_handle, in_height_L, in_width_L, bmInFormatL, DATA_TYPE_EXT_1N_BYTE, &src[0], NULL);
-  if(ret != BM_SUCCESS){
+  if(ret != (GstFlowReturn)BM_SUCCESS){
       GST_ERROR_OBJECT(self, "left bm_image create failed. ret = %d \n", ret);
       return GST_FLOW_ERROR;
   }
 
   ret = bm_image_create(bm_handle, in_height_R, in_width_R, bmInFormatR, DATA_TYPE_EXT_1N_BYTE, &src[1], NULL);
-  if(ret != BM_SUCCESS){
+  if(ret != (GstFlowReturn)BM_SUCCESS){
       GST_ERROR_OBJECT(self, "right bm_image create failed. ret = %d \n", ret);
       return GST_FLOW_ERROR;
   }
 
   ret = bm_image_create(bm_handle, out_height, out_width, FORMAT_YUV420P, DATA_TYPE_EXT_1N_BYTE, &dst, NULL);
-  if(ret != BM_SUCCESS){
+  if(ret != (GstFlowReturn)BM_SUCCESS){
       GST_ERROR_OBJECT(self, "output bm_image create failed. ret = %d \n", ret);
       return GST_FLOW_ERROR;
   }
@@ -502,12 +506,14 @@ gst_bm_stitch_process_frame (bm_handle_t bm_handle, GstBmSTITCH2WAY *self, GstVi
   wgtWidth = ALIGN(self->stitch_config.ovlap_attr.ovlp_rx[0] - self->stitch_config.ovlap_attr.ovlp_lx[0] + 1, 16);
   wgtHeight = in_height_R;
   wgt_len = wgtWidth*wgtHeight;
-  bm_dem_read_bin(bm_handle, &self->stitch_config.wgt_phy_mem[0][0], &self->wgt_name_l,  wgt_len);
-  bm_dem_read_bin(bm_handle, &self->stitch_config.wgt_phy_mem[0][1], &self->wgt_name_r,  wgt_len);
+  wgt_name_l = self->wgt_name_l;
+  wgt_name_r = self->wgt_name_r;
+  bm_dem_read_bin(bm_handle, &self->stitch_config.wgt_phy_mem[0][0], *wgt_name_l,  wgt_len);
+  bm_dem_read_bin(bm_handle, &self->stitch_config.wgt_phy_mem[0][1], *wgt_name_r,  wgt_len);
   GST_INFO_OBJECT(self, "wgt_len(%d) wgtWidth(%d) wgtHeight(%d) \n",
                     wgt_len, wgtWidth, wgtHeight);
-  GST_INFO_OBJECT(self, "wgt_phy_mem_L name(%s) \n",self->wgt_name_l);
-  GST_INFO_OBJECT(self, "wgt_phy_mem_R name(%s) \n",self->wgt_name_r);
+  GST_INFO_OBJECT(self, "wgt_phy_mem_L name(%s) \n",*wgt_name_l);
+  GST_INFO_OBJECT(self, "wgt_phy_mem_R name(%s) \n",*wgt_name_r);
   if(bm_image_alloc_dev_mem(dst, 1) != BM_SUCCESS){
       GST_ERROR_OBJECT(self, "bm_image_alloc_dev_mem_dispImg failed \n");
       return GST_FLOW_ERROR;
@@ -550,13 +556,13 @@ gst_bm_stitch_process_buffers (GstBmSTITCH2WAY *self, GstBuffer *outBuffer)
   GstVideoInfo infoL;
   GstVideoInfo infoR;
   GstVideoInfo infoOut;
-  gint dst_stride[4];
-  GstBuffer *inBufferL;
-  GstBuffer *inBufferR;
-  GstAggregatorPad* pad_L;
-  GstAggregatorPad* pad_R;
-  GstVideoAggregatorPad *mpad_L;
-  GstVideoAggregatorPad *mpad_R;
+//  gint dst_stride[4];
+  GstBuffer *inBufferL = NULL;
+  GstBuffer *inBufferR = NULL;
+//  GstAggregatorPad* pad_L;
+//  GstAggregatorPad* pad_R;
+  GstVideoAggregatorPad *mpad_L = NULL;
+  GstVideoAggregatorPad *mpad_R = NULL;
   gst_video_info_init (&infoL);
   gst_video_info_init (&infoR);
   gst_video_info_init (&infoOut);
@@ -566,8 +572,8 @@ gst_bm_stitch_process_buffers (GstBmSTITCH2WAY *self, GstBuffer *outBuffer)
   gint num =0;
   GstFlowReturn ret = GST_FLOW_OK;
   bm_handle_t bm_handle = NULL;
-  GstVideoAggregatorPadClass *vaggpad_class;
-  bm_image_data_format_ext output_dtype = DATA_TYPE_EXT_1N_BYTE;
+//  GstVideoAggregatorPadClass *vaggpad_class;
+//  bm_image_data_format_ext output_dtype = DATA_TYPE_EXT_1N_BYTE;
   bm_dev_request(&bm_handle, 0);
   GST_INFO_OBJECT(self, "gst_bm_stitch_process_buffers start! \n");
 
@@ -604,7 +610,7 @@ gst_bm_stitch_process_buffers (GstBmSTITCH2WAY *self, GstBuffer *outBuffer)
     num ++;
     if(num == 1){
       mpad_L = l->data;
-      pad_L = (GstAggregatorPad*)mpad_L;
+    //  pad_L = (GstAggregatorPad*)mpad_L;
       // inBufferL = gst_video_aggregator_pad_get_current_buffer(pad_L);
       // if(inBufferL){
       //   char name[128]="imgL_tmp.bin";
@@ -614,7 +620,7 @@ gst_bm_stitch_process_buffers (GstBmSTITCH2WAY *self, GstBuffer *outBuffer)
       // }
     }else if(num == 2){
       mpad_R = l->data;
-      pad_R = (GstAggregatorPad*)mpad_R;
+    //  pad_R = (GstAggregatorPad*)mpad_R;
       // inBufferR = gst_video_aggregator_pad_get_current_buffer(pad_R);
       // if(inBufferR){
       //   char name[128]="imgR_tmp.bin";
@@ -697,7 +703,7 @@ map_gstformat_to_bmformat(GstVideoFormat gst_format)
   return format;
 }
 
-static
+static __attribute__((unused))
 GstVideoFormat map_bmformat_to_gstformat(gint bm_format)
 {
   GstVideoFormat format;

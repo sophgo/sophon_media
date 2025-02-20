@@ -7,6 +7,7 @@
 #include <thread>
 #include <queue>
 #include <mutex>
+#include <memory>
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
@@ -17,7 +18,7 @@ extern "C" {
 #include "libavutil/pixdesc.h"
 }
 
-#define MAX_THREAD_NUM 6
+#define MAX_THREAD_NUM 12
 #define PARAM_SET_INDEP 3
 int quit_flag = 0;
 unsigned int count_dec[MAX_THREAD_NUM];
@@ -38,7 +39,7 @@ static void usage(char *program_name) {
     av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s devnum <input dev> <output file> <wdr_on> ... encoder framerate bitrate(kbps) use_isp v4l2_buf_num framenum loopflag\n", program_name);
 
     av_log(NULL, AV_LOG_ERROR, "\tencoder: H264 or H265, H264 is default.\n");
-    av_log(NULL, AV_LOG_ERROR, "\tdevnum: must be set to [1,6].\n");
+    av_log(NULL, AV_LOG_ERROR, "\tdevnum: must be set to [1,12].\n");
     av_log(NULL, AV_LOG_ERROR, "\tuse_isp:  use isp or not\n");
     av_log(NULL, AV_LOG_ERROR, "\tloopflag: If it is 0, it will encode and decode based on the number of frames; if it is 1, it will continuously encode and decode without generating valid videoes.\n");
     av_log(NULL, AV_LOG_ERROR, "\twdr_on: open the wdr mode or not\n");
@@ -74,8 +75,8 @@ int main(int argc, char **argv) {
         return -1;
     }
     int outputCount = atoi(argv[1]);
-    if (outputCount <= 0 || outputCount >= 7) {
-        av_log(NULL, AV_LOG_WARNING, "devnum must be set to [1,6]\n");
+    if (outputCount <= 0 || outputCount >= 13) {
+        av_log(NULL, AV_LOG_WARNING, "devnum must be set to [1,12]\n");
         return 1;
     }
     std::string outputFiles[outputCount];
@@ -193,7 +194,6 @@ int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, 
     auto currentTime = std::chrono::steady_clock::now();
     std::chrono::milliseconds::rep elapsedTime;
     int ret = 0, cur = 0;
-    float time = 0;
     ret = reader->openDec(input_file, 9, sophon_idx, v4l2_buf_num, use_isp, wdr_on, outputCount);
     if (ret < 0) {
         av_log(NULL, AV_LOG_INFO, "#################open input media failed  ##########\n");
@@ -207,7 +207,7 @@ int video_decoder_pthread(const char* input_file, int sophon_idx, int framenum, 
             break;
         }
 
-        while ((g_image_enc_queue[index].size() == v4l2_buf_num / 4) && (!quit_flag)) {
+        while ((g_image_enc_queue[index].size() == (size_t)(v4l2_buf_num/4)) && (!quit_flag)) {
             usleep(10);
         }
 
@@ -261,7 +261,6 @@ int video_encoder_pthread(const char* output_file, int enccodec_id, int framerat
     auto currentTime = std::chrono::steady_clock::now();
     std::chrono::milliseconds::rep elapsedTime;
     int ret = 0;
-    float time = 0;
 
     while (!quit_flag) {
 

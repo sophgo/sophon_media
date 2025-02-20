@@ -36,4 +36,5 @@ SET(SRCS
   ff_video_encode.cpp
 )
 add_executable(test_ff_video_encode EXCLUDE_FROM_ALL ${SRCS})
+target_compile_options(test_ff_video_encode PRIVATE -Wno-deprecated-declarations)
 target_link_libraries(test_ff_video_encode ${FFMPEG_LIB} ${BMLIB} ${VPU_LIB}	${BMCV_LIB} ${JPEG_LIB} ${SYSTEM_LIB})

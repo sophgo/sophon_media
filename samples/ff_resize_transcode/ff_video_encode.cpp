@@ -133,7 +133,6 @@ int VideoEnc_FFMPEG::openEnc(const char* output_filename, const char* codec_name
 int VideoEnc_FFMPEG::writeFrame(AVFrame * inPic)
 {
     int ret = 0 ;
-    int got_output = 0;
     inPic->pts = frame_idx;
     frame_idx++;
     av_log(NULL, AV_LOG_DEBUG, "Encoding frame\n");
@@ -181,7 +180,6 @@ int VideoEnc_FFMPEG::writeFrame(AVFrame * inPic)
 int  VideoEnc_FFMPEG::flush_encoder()
 {
     int ret;
-    int got_frame = 0;
 
     while (1) {
         av_log(NULL, AV_LOG_DEBUG, "Flushing video encoder\n");

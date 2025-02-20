@@ -29,10 +29,9 @@ af_dep = cc.find_library('af', required: true)
 awb_dep = cc.find_library('awb', required: true)
 cvi_bin_dep = cc.find_library('cvi_bin', required: true)
 cvi_bin_isp_dep = cc.find_library('cvi_bin_isp', required: true)
-cvi_ispd2_dep = cc.find_library('cvi_ispd2', required: true)
 isp_dep = cc.find_library('isp', required: true)
 isp_algo_dep = cc.find_library('isp_algo', required: true)
-ispv4l2_dep = [helper_dep,adapter_dep,sensor_dep,ae_dep,af_dep,awb_dep,cvi_bin_dep,cvi_bin_isp_dep,cvi_ispd2_dep,isp_dep,isp_algo_dep]
+ispv4l2_dep = [helper_dep,adapter_dep,sensor_dep,ae_dep,af_dep,awb_dep,cvi_bin_dep,cvi_bin_isp_dep,isp_dep,isp_algo_dep]
 
 gstbmv4l2src = library('gstbmv4l2src',
   bmv4l2src_sources,

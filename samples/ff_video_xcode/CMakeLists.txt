@@ -4,7 +4,13 @@ cmake_policy(SET CMP0046 NEW)
 PROJECT(ff_video_decode)
 #libbmlib
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/include)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+if("${GCC_VERSION}" STREQUAL "930")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib930/${PLATFORM})
+elseif("${GCC_VERSION}" STREQUAL "1131")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib1131/${PLATFORM})
+else()
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+endif()
 #jpeg
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/jpeg/3rdparty/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/jpeg/inc)
@@ -39,4 +45,5 @@ SET(SRCS
 )
 
 add_executable(test_ff_video_xcode EXCLUDE_FROM_ALL ${SRCS})
+target_compile_options(test_ff_video_xcode PRIVATE -Wno-deprecated-declarations)
 target_link_libraries(test_ff_video_xcode ${FFMPEG_LIB} ${BMLIB} ${VPU_LIB}	${BMCV_LIB} ${JPEG_LIB} ${SYSTEM_LIB})

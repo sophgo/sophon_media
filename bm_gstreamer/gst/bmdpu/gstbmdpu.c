@@ -49,6 +49,11 @@ gst_bm_dpu_default_update_src_caps (GstAggregator * agg,
 /* class initialization */
 G_DEFINE_TYPE(GstBmDPU, gst_bm_dpu, GST_TYPE_VIDEO_AGGREGATOR);
 static gpointer parent_class = NULL;
+
+extern bm_status_t bm_dpu_image_calc_stride(bm_handle_t handle, int img_h, int img_w,
+    bm_image_format_ext image_format, bm_image_data_format_ext data_type, int *stride, bool bFgs);
+
+/*
 static GstStaticPadTemplate gst_bm_dpu_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -58,6 +63,7 @@ GST_STATIC_PAD_TEMPLATE ("src",
     "width = (int) [ 64, 1920 ], " \
     "height = (int) [ 64, 1080 ], " \
     "framerate = " GST_VIDEO_FPS_RANGE));
+*/
 
 static GstStaticPadTemplate gst_bm_dpu_sink1_template =
 GST_STATIC_PAD_TEMPLATE ("sink1",
@@ -275,7 +281,7 @@ gst_bm_dpu_update_caps (GstVideoAggregator * vagg, GstCaps * caps)
   return ret;
 }
 
-static GstFlowReturn
+static GstFlowReturn __attribute__((unused))
 gst_bm_dpu_default_update_src_caps (GstAggregator * agg,
     GstCaps * caps, GstCaps ** ret)
 {
@@ -416,7 +422,7 @@ gst_bm_dpu_set_property (GObject * object,
   }
 }
 
-static void
+static void __attribute__((unused))
 save_output(GstBuffer* buffer,char *output)
 {
   GstMapInfo info;
@@ -430,7 +436,7 @@ save_output(GstBuffer* buffer,char *output)
   gst_buffer_map(buffer, &info, GST_MAP_READ);
   w = fwrite(info.data, 1, info.size, output_file);
   if(w != info.size){
-    printf("written size(%d) != info.size(%d)\n", (unsigned int)w, info.size);
+    printf("written size(%d) != info.size(%ld)\n", (unsigned int)w, info.size);
     return ;
   }
   gst_buffer_unmap(buffer, &info);
@@ -438,7 +444,7 @@ save_output(GstBuffer* buffer,char *output)
   fclose(output_file);
 }
 
-static void
+static void __attribute__((unused))
 save_output_size(GstBuffer* buffer,char *output,gint size)
 {
   GstMapInfo info;
@@ -555,8 +561,8 @@ gst_bm_dpu_aggregate (GstVideoAggregator  * vagg, GstBuffer*  outbuf)
   GstFlowReturn ret;
   GstBmDPU *bmdpu = GST_BM_DPU(vagg);
   GST_BM_DPU_LOCK(bmdpu);
-  GstElementClass *klass = GST_ELEMENT_GET_CLASS (vagg);
-  GstVideoAggregatorClass *vagg_klass = (GstVideoAggregatorClass *) klass;
+//  GstElementClass *klass = GST_ELEMENT_GET_CLASS (vagg);
+//  GstVideoAggregatorClass *vagg_klass = (GstVideoAggregatorClass *) klass;
   GST_INFO_OBJECT(bmdpu, "gst_bm_dpu_aggregate start! \n");
   ret = gst_bm_dpu_process_buffers(bmdpu,outbuf);
   if(ret != GST_FLOW_OK) {
@@ -574,11 +580,11 @@ gst_bm_dpu_create_output_buffer (GstVideoAggregator * videoaggregator,
     GstBuffer ** outbuf)
 {
   GstAggregator *aggregator = GST_AGGREGATOR (videoaggregator);
-  GstBufferPool *pool;
+//  GstBufferPool *pool;
   GstFlowReturn ret = GST_FLOW_OK;
   GstBmDPU * self = GST_BM_DPU (videoaggregator);
 
-  pool = gst_aggregator_get_buffer_pool (aggregator);
+//  pool = gst_aggregator_get_buffer_pool (aggregator);
 
   // if (pool) {
   //   if (!gst_buffer_pool_is_active (pool)) {
@@ -605,11 +611,11 @@ gst_bm_dpu_create_output_buffer (GstVideoAggregator * videoaggregator,
       outsize = GST_VIDEO_INFO_SIZE (&videoaggregator->info)*2;
     }
   }else if(self->dpu_mode == GTS_BM_DPU_ONLINE) {
-    if(self->dpu_online_mode != DPU_ONLINE_MUX0){
+    if(self->dpu_online_mode != (GstBmDPUOnlineMode)DPU_ONLINE_MUX0){
       outsize = GST_VIDEO_INFO_SIZE (&videoaggregator->info)*2;
     }
   }else if(self->dpu_mode == GTS_BM_DPU_FGS) {
-    if(self->dpu_fgs_mode == DPU_FGS_MUX1){
+    if(self->dpu_fgs_mode == (GstBmDPUFgsMode)DPU_FGS_MUX1){
       outsize = GST_VIDEO_INFO_SIZE (&videoaggregator->info)*2;
     }
   }else {
@@ -633,10 +639,10 @@ gst_bm_dpu_create_output_buffer (GstVideoAggregator * videoaggregator,
 static void
 gst_bm_dpu_class_init (GstBmDPUClass * klass)
 {
-  GstElementClass *element_class = GST_ELEMENT_CLASS(klass);
+//  GstElementClass *element_class = GST_ELEMENT_CLASS(klass);
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstVideoAggregatorClass *vagg_class = GST_VIDEO_AGGREGATOR_CLASS (klass);
-  GstAggregatorClass *agg_class = GST_AGGREGATOR_CLASS (klass);
+//  GstAggregatorClass *agg_class = GST_AGGREGATOR_CLASS (klass);
   gobject_class->set_property =
       GST_DEBUG_FUNCPTR (gst_bm_dpu_set_property);
   gobject_class->get_property =
@@ -817,7 +823,7 @@ gst_bm_dpu_subinstance_init(GTypeInstance G_GNUC_UNUSED *instance,
                              gpointer G_GNUC_UNUSED g_class)
 {
   GstElement *element = GST_ELEMENT(instance);
-  GstElementClass *element_class = GST_ELEMENT_GET_CLASS(instance);
+//  GstElementClass *element_class = GST_ELEMENT_GET_CLASS(instance);
   GstBmDPU *self = GST_BM_DPU(instance);
   GstPadTemplate *sink1_pad_template,*sink2_pad_template;
   sink1_pad_template = gst_static_pad_template_get (&gst_bm_dpu_sink1_template);
@@ -842,14 +848,14 @@ gst_bm_dpu_subinstance_init(GTypeInstance G_GNUC_UNUSED *instance,
     g_print("Error: pad1 is not a GstVideoAggregatorPad\n");
     gst_object_unref(GST_PAD(self->sink1_pad));
     gst_object_unref(GST_PAD(self->sink2_pad));
-    return -1;
+    return;
   }
 
   if (!GST_IS_VIDEO_AGGREGATOR_PAD(self->sink2_pad)) {
     g_print("Error: pad2 is not a GstVideoAggregatorPad\n");
     gst_object_unref(GST_PAD(self->sink1_pad));
     gst_object_unref(GST_PAD(self->sink2_pad));
-    return -1;
+    return;
   }
   gst_element_add_pad(element,GST_PAD(self->sink1_pad));
   gst_element_add_pad(element,GST_PAD(self->sink2_pad));
@@ -865,7 +871,7 @@ gst_bm_dpu_process_frame (bm_handle_t bm_handle, GstBmDPU *self, GstVideoFrame *
   bm_image *src_left    = NULL;
   bm_image *src_right    = NULL;
   bm_image *dst   = NULL;
-  guint output_size;
+//  guint output_size;
   GST_INFO_OBJECT(self, "gst_bm_dpu_process_frame start! \n");
   src_left = (bm_image *) malloc(sizeof(bm_image));
   src_right = (bm_image *) malloc(sizeof(bm_image));
@@ -875,18 +881,18 @@ gst_bm_dpu_process_frame (bm_handle_t bm_handle, GstBmDPU *self, GstVideoFrame *
     return GST_FLOW_ERROR;
   }
 
-  bm_image_format_ext bmInFormatL =
-      (bm_image_format_ext)map_gstformat_to_bmformat(inFrameL->info.finfo->format);
+//  bm_image_format_ext bmInFormatL =
+//      (bm_image_format_ext)map_gstformat_to_bmformat(inFrameL->info.finfo->format);
   gint in_height_L = inFrameL->info.height;
   gint in_width_L = inFrameL->info.width;
 
-  bm_image_format_ext bmInFormatR =
-      (bm_image_format_ext)map_gstformat_to_bmformat(inFrameR->info.finfo->format);
+//  bm_image_format_ext bmInFormatR =
+//      (bm_image_format_ext)map_gstformat_to_bmformat(inFrameR->info.finfo->format);
   gint in_height_R = inFrameR->info.height;
   gint in_width_R = inFrameR->info.width;
 
-  bm_image_format_ext bmOutFormat =
-      (bm_image_format_ext)map_gstformat_to_bmformat(outFrame->info.finfo->format);
+//  bm_image_format_ext bmOutFormat =
+//      (bm_image_format_ext)map_gstformat_to_bmformat(outFrame->info.finfo->format);
   gint out_height = outFrame->info.height;
   gint out_width = outFrame->info.width;
 
@@ -910,19 +916,19 @@ gst_bm_dpu_process_frame (bm_handle_t bm_handle, GstBmDPU *self, GstVideoFrame *
   bm_dpu_image_calc_stride(bm_handle, in_height_L, in_width_L, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, src_stride, false);
 
   ret = bm_image_create(bm_handle, in_height_L, in_width_L, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, src_left, src_stride);
-  if(ret != BM_SUCCESS){
+  if(ret != (GstFlowReturn)BM_SUCCESS){
       GST_ERROR_OBJECT(self, "left bm_image create failed. ret = %d \n", ret);
       return GST_FLOW_ERROR;
   }
 
   ret = bm_image_create(bm_handle, in_height_L, in_width_L, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, src_right, src_stride);
-  if(ret != BM_SUCCESS){
+  if(ret != (GstFlowReturn)BM_SUCCESS){
       GST_ERROR_OBJECT(self, "right bm_image create failed. ret = %d \n", ret);
       return GST_FLOW_ERROR;
   }
 
   ret = bm_image_create(bm_handle, out_height, out_width, FORMAT_GRAY, output_dtype, dst, dst_stride);
-  if(ret != BM_SUCCESS){
+  if(ret != (GstFlowReturn)BM_SUCCESS){
       GST_ERROR_OBJECT(self, "output bm_image create failed. ret = %d \n", ret);
       return GST_FLOW_ERROR;
   }
@@ -956,19 +962,19 @@ gst_bm_dpu_process_frame (bm_handle_t bm_handle, GstBmDPU *self, GstVideoFrame *
   bm_image_copy_host_to_device(*src_right, (void **)src_right_ptr);
   if(self->dpu_mode == GTS_BM_DPU_SGBM) {
       ret = bmcv_dpu_sgbm_disp(bm_handle, src_left, src_right, dst, &self->dpu_sgbm_attr, self->dpu_sgbm_mode);
-      if(ret != BM_SUCCESS) {
+      if(ret != (GstFlowReturn)BM_SUCCESS) {
             GST_ERROR_OBJECT(self, "bmcv_dpu_sgbm_disp failed. ret = %d \n", ret);
             return GST_FLOW_ERROR;
       }
   }else if(self->dpu_mode == GTS_BM_DPU_ONLINE) {
       ret = bmcv_dpu_online_disp(bm_handle, src_left, src_right, dst, &self->dpu_sgbm_attr, &self->dpu_fgs_attr, self->dpu_online_mode);
-      if(ret != BM_SUCCESS) {
+      if(ret != (GstFlowReturn)BM_SUCCESS) {
             GST_ERROR_OBJECT(self, "bmcv_dpu_online_disp failed. ret = %d \n", ret);
             return GST_FLOW_ERROR;
       }
   }else if(self->dpu_mode == GTS_BM_DPU_FGS) {
       ret = bmcv_dpu_fgs_disp(bm_handle, src_left, src_right, dst, &self->dpu_fgs_attr, self->dpu_fgs_mode);
-      if(ret != BM_SUCCESS) {
+      if(ret != (GstFlowReturn)BM_SUCCESS) {
             GST_ERROR_OBJECT(self, "bmcv_dpu_fgs_disp failed. ret = %d \n", ret);
             return GST_FLOW_ERROR;
       }
@@ -999,12 +1005,12 @@ gst_bm_dpu_process_buffers (GstBmDPU *self, GstBuffer *outBuffer)
   GstVideoInfo infoR;
   GstVideoInfo infoOut;
   gint dst_stride[4];
-  GstBuffer *inBufferL;
-  GstBuffer *inBufferR;
-  GstAggregatorPad* pad_L;
-  GstAggregatorPad* pad_R;
-  GstVideoAggregatorPad *mpad_L;
-  GstVideoAggregatorPad *mpad_R;
+  GstBuffer *inBufferL = NULL;
+  GstBuffer *inBufferR = NULL;
+//  GstAggregatorPad* pad_L;
+//  GstAggregatorPad* pad_R;
+  GstVideoAggregatorPad *mpad_L = NULL;
+  GstVideoAggregatorPad *mpad_R = NULL;
   gst_video_info_init (&infoL);
   gst_video_info_init (&infoR);
   gst_video_info_init (&infoOut);
@@ -1014,7 +1020,7 @@ gst_bm_dpu_process_buffers (GstBmDPU *self, GstBuffer *outBuffer)
   gint num =0;
   GstFlowReturn ret = GST_FLOW_OK;
   bm_handle_t bm_handle = NULL;
-  GstVideoAggregatorPadClass *vaggpad_class;
+//  GstVideoAggregatorPadClass *vaggpad_class;
   bm_image_data_format_ext output_dtype = DATA_TYPE_EXT_1N_BYTE;
   bm_dev_request(&bm_handle, 0);
   GST_INFO_OBJECT(self, "gst_bm_dpu_process_buffers start! \n");
@@ -1022,10 +1028,10 @@ gst_bm_dpu_process_buffers (GstBmDPU *self, GstBuffer *outBuffer)
     (self->dpu_sgbm_mode == GTS_BM_DPU_SGBM_MUX1) ? (output_dtype = DATA_TYPE_EXT_U16) :
                             (output_dtype = DATA_TYPE_EXT_1N_BYTE);
   }else if(self->dpu_mode == GTS_BM_DPU_ONLINE) {
-    (self->dpu_online_mode == DPU_ONLINE_MUX0) ? (output_dtype = DATA_TYPE_EXT_1N_BYTE) :
+    (self->dpu_online_mode == (GstBmDPUOnlineMode)DPU_ONLINE_MUX0) ? (output_dtype = DATA_TYPE_EXT_1N_BYTE) :
                                   (output_dtype = DATA_TYPE_EXT_U16);
   }else if(self->dpu_mode == GTS_BM_DPU_FGS) {
-    (self->dpu_fgs_mode == DPU_FGS_MUX0) ? (output_dtype = DATA_TYPE_EXT_1N_BYTE) :
+    (self->dpu_fgs_mode == (GstBmDPUFgsMode)DPU_FGS_MUX0) ? (output_dtype = DATA_TYPE_EXT_1N_BYTE) :
                                     (output_dtype = DATA_TYPE_EXT_U16);
   }else {
     GST_ERROR_OBJECT(self, "not support the dpu mode . ret = %d \n", ret);
@@ -1078,7 +1084,7 @@ gst_bm_dpu_process_buffers (GstBmDPU *self, GstBuffer *outBuffer)
     num ++;
     if(num == 1){
       mpad_L = l->data;
-      pad_L = (GstAggregatorPad*)mpad_L;
+    //  pad_L = (GstAggregatorPad*)mpad_L;
       // inBufferL = gst_video_aggregator_pad_get_current_buffer(pad_L);
       // if(inBufferL){
       //   char name[128]="imgL_tmp.bin";
@@ -1088,7 +1094,7 @@ gst_bm_dpu_process_buffers (GstBmDPU *self, GstBuffer *outBuffer)
       // }
     }else if(num == 2){
       mpad_R = l->data;
-      pad_R = (GstAggregatorPad*)mpad_R;
+    //  pad_R = (GstAggregatorPad*)mpad_R;
       // inBufferR = gst_video_aggregator_pad_get_current_buffer(pad_R);
       // if(inBufferR){
       //   char name[128]="imgR_tmp.bin";
@@ -1151,7 +1157,7 @@ gst_bm_dpu_process_buffers (GstBmDPU *self, GstBuffer *outBuffer)
   return ret;
 }
 
-static gint
+static gint __attribute__((unused))
 map_gstformat_to_bmformat(GstVideoFormat gst_format)
 {
   gint format;
@@ -1188,7 +1194,7 @@ map_gstformat_to_bmformat(GstVideoFormat gst_format)
   return format;
 }
 
-static
+static __attribute__((unused))
 GstVideoFormat map_bmformat_to_gstformat(gint bm_format)
 {
   GstVideoFormat format;

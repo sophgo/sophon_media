@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <gst/base/gstbasetransform.h>
+#include <gst/allocators/gstdmabuf.h>
 
 #include "gstbmive.h"
 #include "bmlib_runtime.h"
@@ -18,6 +19,9 @@
 
 GST_DEBUG_CATEGORY (gst_bm_ive_debug);
 #define GST_CAT_DEFAULT gst_bm_ive_debug
+
+extern bm_status_t bm_ive_image_calc_stride(bm_handle_t handle, int img_h, int img_w,
+    bm_image_format_ext image_format, bm_image_data_format_ext data_type, int *stride);
 
 static void gst_bm_ive_init(GstBmIVE *self);
 // static gboolean gst_bm_ive_deinit(GstBaseTransform *transform);
@@ -193,98 +197,98 @@ gst_bm_ive_set_property(GObject *object,
 	v = g_value_get_uint (value);
 	switch (prop_id) {
 		case PROP_MODE1: {
-			gint mode1 = g_value_get_uint (value);
+			gint mode1 = v;
 			if (self->mode1 == mode1)
 				return;
 			self->mode1 = mode1;
 			break;
 		}
 		case PROP_MODE2: {
-			gint mode2 = g_value_get_uint (value);
+			gint mode2 = v;
 			if (self->mode2 == mode2)
 				return;
 			self->mode2 = mode2;
 			break;
 		}
 		case PROP_TYPE: {
-			gint type = g_value_get_uint (value);
+			gint type = v;
 			if (self->type == type)
 				return;
 			self->type = type;
 			break;
 		}
 		case PROP_LOW_THR: {
-			gint low_thr = g_value_get_uint (value);
+			gint low_thr = v;
 			if (self->low_thr == low_thr)
 				return;
 			self->low_thr = low_thr;
 			break;
 		}
 		case PROP_HIGHT_THR: {
-			gint hight_thr = g_value_get_uint (value);
+			gint hight_thr = v;
 			if (self->hight_thr == hight_thr)
 				return;
 			self->hight_thr = hight_thr;
 			break;
 		}
 		case PROP_MIN_VAL: {
-			gint min_val = g_value_get_uint (value);
+			gint min_val = v;
 			if (self->min_val == min_val)
 				return;
 			self->min_val = min_val;
 			break;
 		}
 		case PROP_MID_VAL: {
-			gint mid_val = g_value_get_uint (value);
+			gint mid_val = v;
 			if (self->mid_val == mid_val)
 				return;
 			self->mid_val = mid_val;
 			break;
 		}
 		case PROP_MAX_VAL: {
-			gint max_val = g_value_get_uint (value);
+			gint max_val = v;
 			if (self->max_val == max_val)
 				return;
 			self->max_val = max_val;
 			break;
 		}
 		case PROP_NORM: {
-			gint norm = g_value_get_uint (value);
+			gint norm = v;
 			if (self->norm == norm)
 				return;
 			self->norm = norm;
 			break;
 		}
 		case PROP_INIT_AREA_THR: {
-			gint init_area_thr = g_value_get_uint (value);
+			gint init_area_thr = v;
 			if (self->init_area_thr == init_area_thr)
 				return;
 			self->init_area_thr = init_area_thr;
 			break;
 		}
 		case PROP_STEP: {
-			gint step = g_value_get_uint (value);
+			gint step = v;
 			if (self->step == step)
 				return;
 			self->step = step;
 			break;
 		}
 		case PROP_THR_VALUE: {
-			gint thr_value = g_value_get_uint (value);
+			gint thr_value = v;
 			if (self->thr_value == thr_value)
 				return;
 			self->thr_value = thr_value;
 			break;
 		}
 		case PROP_X: {
-			gint x = g_value_get_uint (value);
+			gint x = v;
 			if (self->x == x)
 				return;
 			self->x = x;
 			break;
 		}
 		case PROP_Y: {
-			gint y = g_value_get_uint (value);
+			gint y = v;
 			if (self->y == y)
 				return;
 			self->y = y;
@@ -553,7 +557,7 @@ gst_bm_ive_hist(GstVideoFilter * filter, struct bm_image *src, struct bm_image *
 	}
 	dst_mem = &self->mem;
 
-	ret = bm_ive_hist(bm_handle, src, dst_mem);
+	ret = bmcv_ive_hist(bm_handle, *src, *dst_mem);
 
 	if (ret) {
 		GST_ERROR("ive_hist fail\n");
@@ -567,14 +571,14 @@ gst_bm_ive_erode(GstVideoFilter * filter, struct bm_image *src, struct bm_image 
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
-	bm_device_mem_t dst_mem;
+	//GstBmIVE *self = GST_BM_IVE (filter);
+	//bm_device_mem_t dst_mem;
 	unsigned char arr3by3[25] = { 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 255, 255,
                  255, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0 };
 
 	bm_dev_request(&bm_handle, 0);
 
-	ret = bm_ive_erode(bm_handle, src, dst, arr3by3);
+	ret = bmcv_ive_erode(bm_handle, *src, *dst, arr3by3);
 
 	if (ret) {
 		GST_ERROR("ive_erode fail\n");
@@ -588,14 +592,14 @@ gst_bm_ive_dilate(GstVideoFilter * filter, struct bm_image *src, struct bm_image
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
-	bm_device_mem_t dst_mem;
+	//GstBmIVE *self = GST_BM_IVE (filter);
+	//bm_device_mem_t dst_mem;
 	unsigned char arr3by3[25] = { 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 255, 255,
                  255, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0 };
 
 	bm_dev_request(&bm_handle, 0);
 
-	ret = bm_ive_dilate(bm_handle, src, dst, arr3by3);
+	ret = bmcv_ive_dilate(bm_handle, *src, *dst, arr3by3);
 
 	if (ret) {
 		GST_ERROR("ive_dilate fail\n");
@@ -622,7 +626,7 @@ gst_bm_ive_thresh(GstVideoFilter * filter, struct bm_image *src, struct bm_image
 
 	bm_dev_request(&bm_handle, 0);
 
-	ret = bm_ive_thresh(bm_handle, src, dst, thresh_mode, thresh_attr);
+	ret = bmcv_ive_thresh(bm_handle, *src, *dst, thresh_mode, thresh_attr);
 
 	if (ret) {
 		GST_ERROR("ive_thresh fail\n");
@@ -637,7 +641,7 @@ gst_bm_ive_map(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
+	//GstBmIVE *self = GST_BM_IVE (filter);
 	bm_device_mem_t map_table;
 
 	static unsigned char FixMap[256] = {
@@ -696,7 +700,7 @@ gst_bm_ive_map(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 	// 	}
 	// }
 
-	ret = bm_ive_map(bm_handle, src, dst, map_table);
+	ret = bmcv_ive_map(bm_handle, *src, *dst, map_table);
 
 	if (ret) {
 		GST_ERROR("ive_map fail\n");
@@ -711,7 +715,7 @@ gst_bm_ive_lbp(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
 	GstBmIVE *self = GST_BM_IVE (filter);
-	bm_device_mem_t dst_mem;
+	//bm_device_mem_t dst_mem;
 	bmcv_ive_lbp_ctrl_attr lbp_ctrl;
 
 	bm_dev_request(&bm_handle, 0);
@@ -719,7 +723,7 @@ gst_bm_ive_lbp(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 	lbp_ctrl.en_mode = self->mode1;
 	lbp_ctrl.un8_bit_thr.s8_val = (self->mode1 == BM_IVE_LBP_CMP_MODE_ABS ? 35 : 41);
 
-	ret = bm_ive_lbp(bm_handle, *src, *dst, lbp_ctrl);
+	ret = bmcv_ive_lbp(bm_handle, *src, *dst, lbp_ctrl);
 	if (ret) {
 		GST_ERROR("ive_lbp fail\n");
 		return FALSE;
@@ -733,7 +737,7 @@ gst_bm_ive_filter(GstVideoFilter * filter, struct bm_image *src, struct bm_image
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
 	GstBmIVE *self = GST_BM_IVE (filter);
-	bm_device_mem_t dst_mem;
+	//bm_device_mem_t dst_mem;
 	signed char arr3by3[25] = { 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 2, 4,
                     2, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0 };
 	bmcv_ive_filter_ctrl filterAttr;
@@ -743,7 +747,7 @@ gst_bm_ive_filter(GstVideoFilter * filter, struct bm_image *src, struct bm_image
 	filterAttr.u8_norm = self->norm;
 	memcpy(filterAttr.as8_mask, arr3by3, 5 * 5 * sizeof(signed char));
 
-	ret = bm_ive_filter(bm_handle, src, dst, filterAttr);
+	ret = bmcv_ive_filter(bm_handle, *src, *dst, filterAttr);
 
 	if (ret) {
 		GST_ERROR("ive_filter fail\n");
@@ -968,7 +972,7 @@ gst_bm_ive_stcandicorner(GstVideoFilter * filter, struct bm_image *src, struct b
 	bm_dev_request(&bm_handle, 0);
 	if (!self->init_mem) {
 		int stride;
-		bm_ive_image_calc_stride(bm_handle, src->height, src->height, src->image_format, DATA_TYPE_EXT_1N_BYTE, stride);
+		bm_ive_image_calc_stride(bm_handle, src->height, src->height, src->image_format, DATA_TYPE_EXT_1N_BYTE, &stride);
 		attr_len = 4 * src->height * stride + sizeof(bmcv_ive_st_max_eig);
 		ret = bm_malloc_device_byte(bm_handle, &self->mem, attr_len * sizeof(unsigned char));
 		self->init_mem = TRUE;
@@ -987,11 +991,11 @@ gst_bm_ive_gradfg(GstVideoFilter * filter, struct bm_image *src, struct bm_image
 	bm_handle_t bm_handle = NULL;
 	GstBmIVE *self = GST_BM_IVE (filter);
 	bmcv_ive_gradfg_attr gradFgAttr;
-	bm_image stCurGrad, stBgGrad, stGragFg;
+	bm_image stCurGrad, stBgGrad;
 	guint height = src->height;
 	guint width = src->width;
 	bm_image_format_ext fmt = FORMAT_GRAY;
-	guint u16Stride;
+	int u16Stride;
 
 	bm_dev_request(&bm_handle, 0);
 	signed char arr3by3[25] = { 0, 0, 0, 0, 0, 0, -1, 0, 1, 0, 0, -2, 0,
@@ -1011,10 +1015,10 @@ gst_bm_ive_gradfg(GstVideoFilter * filter, struct bm_image *src, struct bm_image
     gradFgAttr.u8_edw_dark = 1;
 
     // calc ive image stride && create bm image struct
-    bm_ive_image_calc_stride(bm_handle, height, width, fmt, DATA_TYPE_EXT_U16, u16Stride);
+    bm_ive_image_calc_stride(bm_handle, height, width, fmt, DATA_TYPE_EXT_U16, &u16Stride);
 
-    bm_image_create(bm_handle, height, width, fmt, DATA_TYPE_EXT_U16, &stCurGrad, u16Stride);
-    bm_image_create(bm_handle, height, width, fmt, DATA_TYPE_EXT_U16, &stBgGrad, u16Stride);
+    bm_image_create(bm_handle, height, width, fmt, DATA_TYPE_EXT_U16, &stCurGrad, &u16Stride);
+    bm_image_create(bm_handle, height, width, fmt, DATA_TYPE_EXT_U16, &stBgGrad, &u16Stride);
 
 	bm_image_alloc_dev_mem(stCurGrad, BMCV_HEAP_ANY);
 	bm_image_alloc_dev_mem(stBgGrad, BMCV_HEAP_ANY);
@@ -1041,7 +1045,7 @@ gst_bm_ive_sad(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
 	GstBmIVE *self = GST_BM_IVE (filter);
-	bmcv_ive_sad_mode sadMode = self->mode1;
+	//bmcv_ive_sad_mode sadMode = self->mode1;
 	bmcv_ive_sad_out_ctrl sadOutCtrl = self->mode2;
 	bmcv_ive_sad_attr sadAttr;
     sadAttr.en_out_ctrl = sadOutCtrl;
@@ -1065,7 +1069,7 @@ gst_bm_ive_bgmodel(GstVideoFilter * filter, struct bm_image *src, struct bm_imag
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
+	//GstBmIVE *self = GST_BM_IVE (filter);
 
 	bm_dev_request(&bm_handle, 0);
 	return ret;
@@ -1075,7 +1079,7 @@ gst_bm_ive_gmm(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
+	//GstBmIVE *self = GST_BM_IVE (filter);
 	bm_device_mem_t dst_model;
 	guint width = src->width;
 	guint height = src->height;
@@ -1089,7 +1093,7 @@ gst_bm_ive_gmm(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
     gmmAttr.u8q8_var_thr = (unsigned short)(256 * 6.25);
     gmmAttr.u8_model_num = 3;
 	bm_image_format_ext src_fmt = FORMAT_GRAY;
-	guint stride[4];
+	int stride[4];
     guint u32FrameNumMax = 32;
     guint u32FrmCnt = 0;
 	guint model_len = width * height * gmmAttr.u8_model_num * 8;
@@ -1108,7 +1112,7 @@ gst_bm_ive_gmm(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 
     bm_ive_image_calc_stride(bm_handle, height, width, src_fmt, DATA_TYPE_EXT_1N_BYTE, stride);
 
-    bm_image_create(bm_handle, height, width, src_fmt, DATA_TYPE_EXT_1N_BYTE, &src, stride);
+    bm_image_create(bm_handle, height, width, src_fmt, DATA_TYPE_EXT_1N_BYTE, src, stride);
     bm_image_create(bm_handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &dst_fg, stride);
     bm_image_create(bm_handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &dst_bg, stride);
 
@@ -1164,7 +1168,7 @@ gst_bm_ive_gmm2(GstVideoFilter * filter, struct bm_image *src, struct bm_image *
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
+	//GstBmIVE *self = GST_BM_IVE (filter);
 
 	bm_dev_request(&bm_handle, 0);
 
@@ -1196,7 +1200,7 @@ gst_bm_ive_and(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
+	//GstBmIVE *self = GST_BM_IVE (filter);
 
 
 	bm_dev_request(&bm_handle, 0);
@@ -1233,7 +1237,7 @@ gst_bm_ive_or(GstVideoFilter * filter, struct bm_image *src, struct bm_image *ds
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
+	//GstBmIVE *self = GST_BM_IVE (filter);
 
 	bm_dev_request(&bm_handle, 0);
 
@@ -1249,7 +1253,7 @@ gst_bm_ive_xor(GstVideoFilter * filter, struct bm_image *src, struct bm_image *d
 {
 	gboolean ret;
 	bm_handle_t bm_handle = NULL;
-	GstBmIVE *self = GST_BM_IVE (filter);
+	//GstBmIVE *self = GST_BM_IVE (filter);
 
 	bm_dev_request(&bm_handle, 0);
 
@@ -1270,8 +1274,8 @@ gst_bm_ive_sobel(GstVideoFilter * filter, struct bm_image *src, struct bm_image 
     sobelAtt.sobel_mode = self->mode1;
 
 	/* 5 by 5*/
-	signed char arr5by5[25] = { -1, -2, 0,  2,  1, -4, -8, 0,  8,  4, -6, -12, 0,
-					12, 6,  -4, -8, 0, 8,  4,  -1, -2, 0, 2, 1 };
+	//signed char arr5by5[25] = { -1, -2, 0,  2,  1, -4, -8, 0,  8,  4, -6, -12, 0,
+	//				12, 6,  -4, -8, 0, 8,  4,  -1, -2, 0, 2, 1 };
 	/* 3 by 3*/
 	signed char arr3by3[25] = { 0, 0, 0, 0,  0, 0, -1, 0, 1, 0, 0, -2, 0,
 					2, 0, 0, -1, 0, 1, 0,  0, 0, 0, 0, 0 };
@@ -1287,9 +1291,9 @@ gst_bm_ive_sobel(GstVideoFilter * filter, struct bm_image *src, struct bm_image 
 	}
 	return ret;
 }
-static void
-gst_bm_ive_transform_frame_handle(struct GstVideoFilter *filter, struct bm_image *src
-		, struct bm_image *dst)
+static void __attribute__((unused))
+gst_bm_ive_transform_frame_handle(GstVideoFilter *filter, bm_image *src
+		, bm_image *dst)
 {
 	GstBmIVE *self = GST_BM_IVE (filter);
 	guint type = self->type;
@@ -1394,7 +1398,7 @@ gst_bm_ive_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
 	GstFlowReturn ret = GST_FLOW_OK;
 	bm_image_format_ext bm_in_format, bm_out_format;
 	int in_height, in_width, out_height, out_width;
-	guint *src_in_ptr[4], *dst_in_ptr[4];
+	//guint *src_in_ptr[4], *dst_in_ptr[4];
 	bm_handle_t bm_handle = NULL;
 	GstBmIVE *self = GST_BM_IVE (filter);
 
@@ -1441,6 +1445,7 @@ gst_bm_ive_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
 	bm_image_create(bm_handle, out_height, out_width, bm_out_format, DATA_TYPE_EXT_1N_BYTE, dst, NULL);
 
 	if (g_type_is_a(G_OBJECT_TYPE(inmem->allocator), GST_TYPE_BM_ALLOCATOR)) {
+		#if define USE_BM_ALLOCATOR
 		fb_dma_buffer = gst_bm_allocator_get_bm_buffer(inmem);
 		unsigned long long base_addr = bm_mem_get_device_addr(*fb_dma_buffer);
 		int plane_num = GST_VIDEO_FRAME_N_PLANES(inframe);
@@ -1454,6 +1459,7 @@ gst_bm_ive_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
 		input_addr_phy[i] = base_addr + GST_VIDEO_FRAME_PLANE_OFFSET(inframe, i);
 		input_addr[i] = bm_mem_from_device(input_addr_phy[i], plane_size[i]);
 		}
+		#endif
 	} else {
 		GST_DEBUG_OBJECT(self, "inframe->buffer isn't bm_allocator");
 		bm_image_alloc_dev_mem(*src, BMCV_HEAP_ANY);
@@ -1542,7 +1548,7 @@ gst_gstformat_to_bmformat(GstVideoFormat gst_format)
 }
 
 
-static GstVideoFormat gst_bmformat_to_gstformat(int bm_format)
+static GstVideoFormat __attribute__((unused)) gst_bmformat_to_gstformat(int bm_format)
 {
   GstVideoFormat format;
   switch (bm_format)

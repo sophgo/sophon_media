@@ -13,7 +13,7 @@ G_BEGIN_DECLS
 
 #define GST_VIDEO_CAPS_MAKE_FORMATS \
     "video/x-raw, " \
-    "format = (string) { I420, Y42B, Y444, GRAY8, NV12, NV21, NV16, RGB, BGR }, " \
+    "format = (string) { I420, Y42B, Y444, GRAY8, NV12, NV21, NV16, NV61, RGB, BGR, YUY2, YVYU, UYVY, VYUY}, " \
     "width = (int) [ 16, 8192 ], " \
     "height = (int) [ 16, 8192 ], " \
     "framerate = " GST_VIDEO_FPS_RANGE

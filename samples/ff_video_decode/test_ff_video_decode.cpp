@@ -32,8 +32,8 @@ struct timeval tv1[MAX_INST_NUM];
 #endif
 int quit_flag = 0;
 int g_thread_num = 0;
-unsigned int count_dec[MAX_INST_NUM];
-long  time_dec[MAX_INST_NUM];
+uint64_t count_dec[MAX_INST_NUM];
+uint64_t  time_dec[MAX_INST_NUM];
 
 #define INTERVAL 1
 
@@ -51,7 +51,7 @@ typedef struct MultiInstTest
     int thread_num;
 } THREAD_ARG;
 
-static void usage(char *program_name)
+static void usage(const char *program_name)
 {
 
     av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s [api_version] [yuv_format] [pre_allocation_frame] [codec_name] [sophon_idx] [zero_copy] [input_file/url] [input_file/url] ...\n", program_name);
@@ -91,7 +91,7 @@ void *stat_pthread(void *arg)
 #else
     struct timeval tv2;
     unsigned int time;
-    unsigned int count;
+    unsigned int count = 0;
 #endif
 
     int dis_mode = 0;
@@ -115,7 +115,7 @@ void *stat_pthread(void *arg)
                     gettimeofday(&tv2, NULL);
                     time = (tv2.tv_sec - tv1[i].tv_sec) * 1000 + (tv2.tv_usec - tv1[i].tv_usec) / 1000 + time_dec[i];
 #endif
-                    fps_dec[i] = (count_dec[i] * 1000.0) / (float)time;
+                    fps_dec[i] = (count_dec[i] * 1000.0) / (double)time;
                 }
 
                 printf("thread_ID[%d] ,DEC_FRM[%10lld], DEC_FPS update_per_second[%5.2f], update_per_100frames[%5.2f]\n", \
@@ -130,7 +130,7 @@ void *stat_pthread(void *arg)
             uint64_t count_sum = 0;
             for (int i = 0; i < thread_num; i++)
               count_sum += count_dec[i];
-            printf("dec_thread nums %d, frame %lld, dec_fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
+            printf("dec_thread nums %d, frame %ld, dec_fps %2.2f", thread_num, count_sum, ((double)(count_sum-last_count_sum))/INTERVAL);
             last_count_sum = count_sum;
         }
         printf("\r");
@@ -141,7 +141,7 @@ void *stat_pthread(void *arg)
     g_thread_num--;
 
     for (int i = 0; i < thread_num; i++)
-        printf("%3dth thread Decode %3d frame in total, avg: %5.4f, time: %ldms!\n", i, count_dec[i], (float)count_dec[i] * 1000 / (float)time_dec[i], time_dec[i]);
+        printf("%3dth thread Decode %3ld frame in total, avg: %5.4lf, time: %ldms!\n", i, count_dec[i], (double)count_dec[i] * 1000 / (double)time_dec[i], time_dec[i]);
 
     return NULL;
 }

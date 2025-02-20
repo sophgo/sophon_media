@@ -191,7 +191,6 @@ int VideoEnc_FFMPEG::openEnc(const char* filename, int soc_idx, int codecId, int
 int VideoEnc_FFMPEG::writeFrame(const uint8_t* data, int step, int width, int height)
 {
     int ret = 0 ;
-    int got_output = 0;
     if (step % STEP_ALIGNMENT != 0) {
         av_log(NULL, AV_LOG_ERROR, "input step must align with STEP_ALIGNMENT\n");
         return -1;
@@ -285,8 +284,20 @@ int VideoEnc_FFMPEG::writeFrame(const uint8_t* data, int step, int width, int he
         }
     }
 
-    av_image_fill_arrays(picture->data, picture->linesize, (uint8_t *) data, enc_ctx->pix_fmt, width, height, 1);
+    // av_image_fill_arrays(picture->data, picture->linesize, (uint8_t *) data, enc_ctx->pix_fmt, width, height, 1);
+    memset(picture->data, 0, sizeof(picture->data[0]) * 4);
+    memset(picture->linesize, 0, sizeof(picture->linesize[0]) * 4);
+    picture->data[0] = (uint8_t *)data;
     picture->linesize[0] = step;
+    if (enc_ctx->pix_fmt == AV_PIX_FMT_YUV420P) {
+        picture->data[1] = (uint8_t *)data + step * height;
+        picture->linesize[1] = step / 2;
+        picture->data[2] = (uint8_t *)data + step * height + step / 2 * height / 2;
+        picture->linesize[2] = step / 2;
+    } else {
+        picture->data[1] = (uint8_t *)data + step * height;
+        picture->linesize[1] = step;
+    }
 
     picture->pts = frame_idx;
     frame_idx++;
@@ -499,9 +510,19 @@ int main(int argc, char **argv)
     }
 
     while(1) {
-        for (int y = 0; y < height*3/2; y++) {
-            ret = fread(aligned_input + y*stride, 1, width, in_file);
-            if (ret < width) {
+        int factor = 1;
+        bool read_twice = false;
+
+        for (int y = 0; y < height * 3 / 2; y++) {
+            if (y >= height && inputformat == AV_PIX_FMT_YUV420P) {
+                factor = 2;
+                read_twice = true;
+            }
+
+            ret = fread(aligned_input + y * stride, sizeof(uint8_t), width / factor, in_file);
+            if (read_twice)
+                ret = fread(aligned_input + y * stride + stride / factor, sizeof(uint8_t), width / factor, in_file);
+            if (ret < width / factor) {
                 if (ferror(in_file))
                     av_log(NULL, AV_LOG_ERROR, "Failed to read raw data!\n");
                 else if (feof(in_file))

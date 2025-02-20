@@ -79,6 +79,9 @@ static int bmvpu_malloc_device_byte_heap(AVHWDeviceContext *ctx, bm_handle_t bm_
     int ret = 0;
     int i = 0;
     int heap_num = 0;
+    int available_heap_mask = 0;
+    int enable_heap_mask = 0;
+
     ret = bm_get_gmem_total_heap_num(bm_handle, &heap_num);
     if (ret != 0)
     {
@@ -86,12 +89,11 @@ static int bmvpu_malloc_device_byte_heap(AVHWDeviceContext *ctx, bm_handle_t bm_
         return -1;
     }
 
-    int available_heap_mask = 0;
     for (i=0; i<heap_num; i++){
         available_heap_mask = available_heap_mask | (0x1 << i);
     }
 
-    int enable_heap_mask = available_heap_mask & heap_id_mask;
+    enable_heap_mask = available_heap_mask & heap_id_mask;
     if (enable_heap_mask == 0x0)
     {
         av_log(ctx, AV_LOG_ERROR, "bmvpu_malloc_device_byte_heap failed(heap_mask is 0x0)!\n");
@@ -135,6 +137,8 @@ static int bmcv_get_csc_type_by_colorinfo(int color_space, int color_range, int 
 {
     int ret = 0;
     int inRGB = 0;
+    int outRGB = 0;
+
     if (infmt == FORMAT_BGR_PACKED ||
         infmt == FORMAT_BGRP_SEPARATE ||
         infmt == FORMAT_RGB_PACKED ||
@@ -144,7 +148,6 @@ static int bmcv_get_csc_type_by_colorinfo(int color_space, int color_range, int 
         inRGB = 1;
     }
 
-    int outRGB = 0;
     if (outfmt == FORMAT_BGR_PACKED ||
         outfmt == FORMAT_BGRP_SEPARATE ||
         outfmt == FORMAT_RGB_PACKED ||
@@ -176,6 +179,7 @@ static int bmvpp_scale_bmcv(bm_handle_t handle, bm_image src,
                             bmcv_resize_algorithm resize_method,
                             csc_type_t csc_type){
     int ret = 0;
+    int num = 1;
     bmcv_padding_attr_t padding_attr;
     padding_attr.dst_crop_stx = left;
     padding_attr.dst_crop_sty = top;
@@ -185,7 +189,6 @@ static int bmvpp_scale_bmcv(bm_handle_t handle, bm_image src,
     padding_attr.padding_g = 0;
     padding_attr.padding_r = 0;
     padding_attr.if_memset = 0;
-    int num = 1;
     ret = (int)bmcv_image_vpp_basic(handle, 1, &src, dst, &num, loca, &padding_attr, resize_method, csc_type, NULL);
     return ret;
 }
@@ -316,7 +319,7 @@ struct bmscale_csc_table_s {
     struct bmscale_csc_stage_s stages[BMVPP_MAX_CONVERT_STAGE_NUM];
 };
 
-static int bmscale_csc_table_key_compare(const void* a1, const void* a2) {
+static int __attribute__((unused)) bmscale_csc_table_key_compare(const void* a1, const void* a2) {
     struct bmscale_csc_table_s *key1 = (struct bmscale_csc_table_s*)a1;
     struct bmscale_csc_table_s *key2 = (struct bmscale_csc_table_s*)a2;
     uint32_t ck1 = (uint16_t)key1->src_format << 16 | (uint16_t)key1->dst_format;
@@ -440,13 +443,13 @@ static int bmscale_get_auto_pad(BmScaleContext *ctx, AVFrame* src, AVFrame *dst,
 
 static void bmscale_avbuffer_release(struct bmscale_avbuffer_ctx_s *avbuffer_ctx)
 {
-    int soc_idx = 0;
+    //int soc_idx = 0;
     // list detach
     if (avbuffer_ctx->ctx != NULL) {
         list_del(&avbuffer_ctx->entry);
     }
     // do real free.
-    soc_idx = avbuffer_ctx->soc_idx;
+    //soc_idx = avbuffer_ctx->soc_idx;
     if (avbuffer_ctx->ion_buff->size != 0) {
         bm_free_device(avbuffer_ctx->handle, *(avbuffer_ctx->ion_buff));
         bm_dev_free(avbuffer_ctx->handle);
@@ -502,7 +505,7 @@ static int bmscale_avimage_get_buffer_size(enum AVPixelFormat pix_fmt,
 static struct bmscale_avbuffer_ctx_s* bmscale_buffer_pool_alloc(BmScaleContext *ctx, int format, int width, int height)
 {
     int ret = 0;
-    int soc_idx = ctx->soc_idx;
+    //int soc_idx = ctx->soc_idx;
     struct bmscale_avbuffer_ctx_s* hwpic = NULL;
     int found = 0;
     int total_buffer_size = 0;
@@ -540,7 +543,7 @@ static struct bmscale_avbuffer_ctx_s* bmscale_buffer_pool_alloc(BmScaleContext *
 
     hwpic->handle = handle;
 
-    ret = bmvpu_malloc_device_byte_heap(ctx, handle, hwpic->ion_buff, total_buffer_size, HEAP_MASK_1_2, 1);
+    ret = bmvpu_malloc_device_byte_heap((AVHWDeviceContext *)ctx, handle, hwpic->ion_buff, total_buffer_size, HEAP_MASK_1_2, 1);
     if(ret != BM_SUCCESS)
     {
         av_log(NULL, AV_LOG_ERROR, "[%s, %d] bmvpu_malloc_device_byte_heap() failed!\n", __FILE__, __LINE__);
@@ -564,9 +567,6 @@ static struct bmscale_avbuffer_ctx_s* bmscale_buffer_pool_alloc(BmScaleContext *
 static int bmscale_init(AVFilterContext *ctx)
 {
     BmScaleContext *s = ctx->priv;
-    bm_handle_t handle;
-    unsigned int chipid;
-    int ret;
 
     av_log(s, AV_LOG_TRACE, "[%s,%d] enter\n", __func__, __LINE__);
 
@@ -1079,6 +1079,11 @@ static int bmscale_config_props_hwaccel(AVFilterLink *outlink)
     else
         outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
 
+    // if padding enable, keeping sar unchanged
+    if (s->opt == BMSCALE_OPT_PAD) {
+        outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
+    }
+
     outlink->w = out_w;
     outlink->h = out_h;
 
@@ -1158,6 +1163,11 @@ static int bmscale_config_props(AVFilterLink *outlink)
                 inlink->sample_aspect_ratio);
     else
         outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
+
+    // if padding enable, keeping sar unchanged
+    if (s->opt == BMSCALE_OPT_PAD) {
+        outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
+    }
 
     outlink->w = out_w;
     outlink->h = out_h;
@@ -1251,6 +1261,7 @@ static int bmscale_hw_bmimg_from_avframe(bm_handle_t handle, AVHWFramesContext* 
     int stride[4] = {src->linesize[0], src->linesize[1], src->linesize[2], src->linesize[3]};
     uint64_t pa[4]={0};
     int size[4] = {0};
+    bm_device_mem_t mem[4]={0};
     if(is_compressed){
         pa[0]   = (uint64_t)src->data[2]; // y table
         pa[1]   = (uint64_t)src->data[0]; // y base
@@ -1290,7 +1301,6 @@ static int bmscale_hw_bmimg_from_avframe(bm_handle_t handle, AVHWFramesContext* 
         }
         bm_image_create(handle, avimg->height, avimg->width, format, DATA_TYPE_EXT_1N_BYTE, image, stride);
     }
-    bm_device_mem_t mem[4]={0};
     for(int i = 0; i < 4; i++){
         bm_set_device_mem(&mem[i], size[i], pa[i]);
     }
@@ -1304,18 +1314,19 @@ static int bmscale_copy(BmScaleContext* ctx, AVFrame* dst, AVFrame* src)
     AVHWFramesContext* dst_frm_ctx = (AVHWFramesContext*)dst->hw_frames_ctx->data;
     AVBmCodecFrame*          hwsrc = (AVBmCodecFrame*)src->data[4];
     AVBmCodecFrame*          hwdst = (AVBmCodecFrame*)dst->data[4];
-    bm_device_mem_t*    ion_buffer = (bm_device_mem_t*)hwdst->buffer;
-    bm_device_mem_t*    src_buffer = (bm_device_mem_t*)hwsrc->buffer;
+    //bm_device_mem_t*    ion_buffer = (bm_device_mem_t*)hwdst->buffer;
+    //bm_device_mem_t*    src_buffer = (bm_device_mem_t*)hwsrc->buffer;
     bm_handle_t handle;
     int dev_id = ctx->soc_idx;
+    bm_image bmsrc, bmdst;
+    bmcv_rect_t crop;
+    csc_type_t csc_type;
     int ret = bm_dev_request(&handle, dev_id);
     if (ret != BM_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "Create bm handle failed. ret = %d\n", ret);
         return ret;
     }
     av_log(ctx, AV_LOG_TRACE, "soc_idx %d\n", ctx->soc_idx);
-    bm_image bmsrc, bmdst;
-    bmcv_rect_t crop;
     if (src_frm_ctx->sw_format != dst_frm_ctx->sw_format ||
         src_frm_ctx->format != AV_PIX_FMT_BMCODEC ||
         dst_frm_ctx->format != AV_PIX_FMT_BMCODEC) {
@@ -1364,7 +1375,6 @@ static int bmscale_copy(BmScaleContext* ctx, AVFrame* dst, AVFrame* src)
     crop.start_y = 0;
     crop.crop_w = bmsrc.width;
     crop.crop_h = bmsrc.height;
-    csc_type_t csc_type;
     ret = bmcv_get_csc_type_by_colorinfo(src->colorspace, src->color_range, bmsrc.data_type, bmdst.data_type, &csc_type);
     if(ret != BM_SUCCESS){
         goto fail;
@@ -1392,18 +1402,19 @@ static int bmscale_J422ToJ420_hwaccel(BmScaleContext* ctx, AVFrame* dst, AVFrame
     AVHWFramesContext* dst_frm_ctx = (AVHWFramesContext*)dst->hw_frames_ctx->data;
     AVBmCodecFrame*          hwsrc = (AVBmCodecFrame*)src->data[4];
     AVBmCodecFrame*          hwdst = (AVBmCodecFrame*)dst->data[4];
-    bm_device_mem_t*    ion_buffer = (bm_device_mem_t*)hwdst->buffer;
-    bm_device_mem_t*    src_buffer = (bm_device_mem_t*)hwsrc->buffer;
+    //bm_device_mem_t*    ion_buffer = (bm_device_mem_t*)hwdst->buffer;
+    //bm_device_mem_t*    src_buffer = (bm_device_mem_t*)hwsrc->buffer;
     bm_handle_t handle;
     int dev_id = ctx->soc_idx;
+    bm_image bmsrc, bmdst;
+    bmcv_rect_t crop;
+    csc_type_t csc_type;
     int ret = bm_dev_request(&handle, dev_id);
     if (ret != BM_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "Create bm handle failed. ret = %d\n", ret);
         return ret;
     }
     av_log(ctx, AV_LOG_TRACE, "soc_idx %d\n", ctx->soc_idx);
-    bm_image bmsrc, bmdst;
-    bmcv_rect_t crop;
     if (src_frm_ctx->format != AV_PIX_FMT_BMCODEC ||
         dst_frm_ctx->format != AV_PIX_FMT_BMCODEC) {
         return AVERROR(EINVAL);
@@ -1447,7 +1458,6 @@ static int bmscale_J422ToJ420_hwaccel(BmScaleContext* ctx, AVFrame* dst, AVFrame
     crop.start_y = 0;
     crop.crop_w = bmsrc.width;
     crop.crop_h = bmsrc.height;
-    csc_type_t csc_type;
     ret = bmcv_get_csc_type_by_colorinfo(src->colorspace, src->color_range, bmsrc.data_type, bmdst.data_type, &csc_type);
     if(ret != BM_SUCCESS){
         goto fail;
@@ -1475,22 +1485,22 @@ static int bmscale_filtering_hwaccel(BmScaleContext* ctx, int opt, AVFrame* dst,
     AVBmCodecFrame*          hwsrc = (AVBmCodecFrame*)src->data[4];
     AVBmCodecFrame*          hwdst = (AVBmCodecFrame*)dst->data[4];
 
-    bm_device_mem_t*    ion_buffer = (bm_device_mem_t*)hwdst->buffer;
-    bm_device_mem_t*    src_buffer = (bm_device_mem_t*)hwsrc->buffer;
+    //bm_device_mem_t*    ion_buffer = (bm_device_mem_t*)hwdst->buffer;
+    //bm_device_mem_t*    src_buffer = (bm_device_mem_t*)hwsrc->buffer;
 
     int                    maptype =  hwsrc->maptype;
-
+    int i;
     bm_handle_t handle;
     int dev_id = ctx->soc_idx;
+    bm_image bmsrc, bmdst;
+    bmcv_rect_t crop_rect;
+    csc_type_t csc_type;
     int ret = bm_dev_request(&handle, dev_id);
     if (ret != BM_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "Create bm handle failed. ret = %d\n", ret);
         return ret;
     }
     av_log(ctx, AV_LOG_TRACE, "soc_idx %d\n", dev_id);
-    bm_image bmsrc, bmdst;
-    bmcv_rect_t crop_rect;
-    int i;
     if (src_frm_ctx->format != AV_PIX_FMT_BMCODEC ||
         dst_frm_ctx->format != AV_PIX_FMT_BMCODEC) {
         return AVERROR(EINVAL);
@@ -1515,16 +1525,16 @@ static int bmscale_filtering_hwaccel(BmScaleContext* ctx, int opt, AVFrame* dst,
     av_log(ctx, AV_LOG_TRACE, "dst width : %d\n", dst->width);
     av_log(ctx, AV_LOG_TRACE, "dst height: %d\n", dst->height);
 
-    bm_image_data_format_ext s_data_type = get_format_from_avformat(src_frm_ctx->sw_format);
-    int s_width    = hwsrc->coded_width > 0 ? hwsrc->coded_width:src->width;
-    int s_height   = hwsrc->coded_height > 0 ? hwsrc->coded_height:src->height;
+    //bm_image_data_format_ext s_data_type = get_format_from_avformat(src_frm_ctx->sw_format);
+    //int s_width    = hwsrc->coded_width > 0 ? hwsrc->coded_width:src->width;
+    //int s_height   = hwsrc->coded_height > 0 ? hwsrc->coded_height:src->height;
     crop_rect.start_x = 0;
     crop_rect.start_y = 0;
     crop_rect.crop_w = src->width;
     crop_rect.crop_h = src->height;
-    int s_stride[4]={hwsrc->linesize[0], hwsrc->linesize[1], hwsrc->linesize[2], hwsrc->linesize[3]};
-    uint64_t s_pa[4]={0};
-    int s_size[4]={0};
+    //int s_stride[4]={hwsrc->linesize[0], hwsrc->linesize[1], hwsrc->linesize[2], hwsrc->linesize[3]};
+    //uint64_t s_pa[4]={0};
+    //int s_size[4]={0};
 
     ret = bmscale_hw_bmimg_from_avframe(handle, src_frm_ctx, hwsrc, src, &bmsrc, maptype);
     if(ret != BM_SUCCESS){
@@ -1535,7 +1545,6 @@ static int bmscale_filtering_hwaccel(BmScaleContext* ctx, int opt, AVFrame* dst,
         goto fail;
     }
 
-    csc_type_t csc_type;
     ret = bmcv_get_csc_type_by_colorinfo(src->colorspace, src->color_range, bmsrc.data_type, bmdst.data_type, &csc_type);
     if(ret != BM_SUCCESS){
         goto fail;
@@ -1839,7 +1848,6 @@ static int bmscale_avframe_download(BmScaleContext *ctx, AVFrame *frame)
 static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, AVFrame *src, bm_image *bmsrc, int *is_compressed)
 {
     bm_image_format_ext format = get_format_from_avformat(src->format);
-    int num_comp;
     // vppmat->color_range = src->color_range;
     // vppmat->colorspace  = src->colorspace;
     int width    = src->width;
@@ -1849,9 +1857,12 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
     int size[4]={0};
     // vppmat->soc_idx  = ctx->soc_idx;
     bm_device_mem_t src_mem[4]={0};
+    void* in_ptr[4]={0};
     if (src->data[4] != NULL) {
         // this avframe has physical address
         if (src->format == AV_PIX_FMT_NV12) {
+            #pragma GCC diagnostic push
+            #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
             if (101 == src->channel_layout) {
                 AVBmCodecFrame* hwpic;
                 if (src->buf[4] && src->buf[4]->size == sizeof(AVBmCodecFrame)){
@@ -1864,7 +1875,6 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
                 }
 
                 if (is_compressed) *is_compressed = 1;
-                num_comp = 2;
                 /* compressed format */
                 pa[0] = (uint64_t) src->data[2 + 4]; // y table
                 pa[1] = (uint64_t) src->data[0 + 4]; // y base
@@ -1882,8 +1892,8 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
                 size[0] = src->linesize[4] * src->height; //Y
                 size[1] = src->linesize[5] * src->height/2; //UV
             }
+            #pragma GCC diagnostic pop
         }else if (AV_PIX_FMT_YUV420P == src->format || AV_PIX_FMT_YUVJ420P == src->format) {
-            num_comp = 3;
             pa[0] = (uint64_t) src->data[4]; // y
             pa[1] = (uint64_t) src->data[5]; // cb
             pa[2] = (uint64_t) src->data[6]; // cr
@@ -1892,7 +1902,6 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
             size[1] = src->linesize[5] * src->height / 2; //U
             size[2] = src->linesize[6] * src->height / 2; //V
         }else if (AV_PIX_FMT_RGBP == src->format || AV_PIX_FMT_BGRP == src->format || AV_PIX_FMT_YUV444P == src->format) {
-            num_comp = 3;
             pa[0] = (uint64_t) src->data[4]; // R/B
             pa[1] = (uint64_t) src->data[5]; // G
             pa[2] = (uint64_t) src->data[6]; // B/R
@@ -1901,15 +1910,12 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
             size[1] =  src->linesize[5] * src->height;
             size[2] =  src->linesize[6] * src->height;
         } else if (AV_PIX_FMT_RGB24 == src->format || AV_PIX_FMT_BGR24 == src->format) {
-            num_comp = 3;
             pa[0] = (uint64_t) src->data[4]; // RGB24
             size[0] =  src->linesize[4] * src->height;
         } else if (AV_PIX_FMT_GRAY8 == src->format) {
-            num_comp = 1;
             pa[0] = (uint64_t) src->data[4]; // Y only
             size[0] =  src->linesize[4] * src->height;
         }else if (AV_PIX_FMT_YUVJ422P == src->format || AV_PIX_FMT_YUV422P == src->format) {
-            num_comp = 1;
             pa[0] = (uint64_t) src->data[4]; // Y
             size[0] =  src->linesize[4] * src->height;
 
@@ -1946,7 +1952,10 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
             av_log(ctx, AV_LOG_ERROR, "bm_image_alloc() err!\n");
             return -1;
         }
-        void* in_ptr[4] = {(void*)src->data[0], (void*)src->data[1], (void*)src->data[2], (void*)src->data[3]};
+        in_ptr[0] = (void*)src->data[0];
+        in_ptr[1] = (void*)src->data[1];
+        in_ptr[2] = (void*)src->data[2];
+        in_ptr[3] = (void*)src->data[3];
         // copy data from avframe to vpp
         if(bm_image_copy_host_to_device(bmsrc[0], (void **)in_ptr) != BM_SUCCESS){
             av_log(ctx, AV_LOG_ERROR, "bm_image_copy_host_to_device() err!\n");
@@ -1957,7 +1966,7 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
     return 0;
 }
 
-static int bmscale_is_support(struct bmscale_csc_table_s *item, int src_format, int dst_format, int need_scaled, int opt)
+static int __attribute__((unused)) bmscale_is_support(struct bmscale_csc_table_s *item, int src_format, int dst_format, int need_scaled, int opt)
 {
     if (item != NULL)
     {
@@ -1979,12 +1988,17 @@ static int bmscale_filtering(BmScaleContext* ctx, int opt, AVFrame *src, AVFrame
 {
     bm_handle_t handle = NULL;
     int dev_id = ctx->soc_idx;
+    int is_compressed_nv12 = 0;
+    bm_image bmcv_s;
+    bm_image bmcv_d;
+    bmcv_rect_t rect;
+    int scale_done = 0;
+    csc_type_t csc_type;
     int ret = bm_dev_request(&handle, dev_id);
     if (ret != BM_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "Create bm handle failed. ret = %d\n", ret);
         return ret;
     }
-    int is_compressed_nv12 = 0;
     ret = bmscale_avframe_get_buffer(ctx, dst, opt);
     if (ret != BM_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "bmscale_avframe_get_buffer() failed!\n");
@@ -1993,8 +2007,6 @@ static int bmscale_filtering(BmScaleContext* ctx, int opt, AVFrame *src, AVFrame
         }
         return ret;
     }
-    bm_image bmcv_s;
-    bm_image bmcv_d;
     memset(&bmcv_s, 0, sizeof(bm_image));
     memset(&bmcv_d, 0, sizeof(bm_image));
     ret = bmscale_bmimg_from_avframe(handle, ctx, src, &bmcv_s, &is_compressed_nv12);
@@ -2005,13 +2017,10 @@ static int bmscale_filtering(BmScaleContext* ctx, int opt, AVFrame *src, AVFrame
     if (ret != BM_SUCCESS) {
         goto fail;
     }
-    bmcv_rect_t rect;
     rect.start_x = 0;
     rect.start_y = 0;
     rect.crop_w = src->width;
     rect.crop_h = src->height;
-    int scale_done = 0;
-    csc_type_t csc_type;
     ret = bmcv_get_csc_type_by_colorinfo(src->colorspace, src->color_range, bmcv_s.data_type, bmcv_d.data_type, &csc_type);
     if (ret != BM_SUCCESS) {
         goto fail;

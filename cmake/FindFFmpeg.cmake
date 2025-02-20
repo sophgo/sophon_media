@@ -40,10 +40,13 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
     #        set(EXTRA_LIBS -lz -lpthread -lharfbuzz -lbz2 -lpng16 -lfreetype -lssl)
     #    else()
     set(PKG_CONFIG_PATH ${CMAKE_SOURCE_DIR}/prebuilt/lib/pkgconfig)
-	set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
-	if("${GCC_VERSION}" STREQUAL "930")
-		set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
-	endif()
+    if("${GCC_VERSION}" STREQUAL "930")
+        set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+    elseif("${GCC_VERSION}" STREQUAL "1131")
+        set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-none-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+    else()
+        set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+    endif()
 
     set(EXTRA_LDFLAGS -L${CMAKE_SOURCE_DIR}/prebuilt/lib -Wl,-rpath=${CMAKE_SOURCE_DIR}/prebuilt/lib)
     #    endif()
@@ -58,6 +61,9 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         -I${LIBSOPHAV_TOP}/bmcv/include
                         -I${LIBSOPHAV_TOP}/3rdparty/osdrv
                         -I${LIBSOPHAV_TOP}/3rdparty/libisp/include
+                        -I${LIBSOPHAV_TOP}/3rdparty/libdrm/include
+                        -I${LIBSOPHAV_TOP}/3rdparty/libdrm/include/libdrm
+                        -I${LIBSOPHAV_TOP}/3rdparty/libdrm/include/libkms
                         -I${CMAKE_SOURCE_DIR}/prebuilt/include
                         -I${CMAKE_SOURCE_DIR}/prebuilt/include/gbclient)
 
@@ -79,6 +85,12 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                             -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib930/soc
                             -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib930/${platform}
                             )
+    elseif("${GCC_VERSION}" STREQUAL "1131")
+        set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
+                            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}
+                            -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib1131/soc
+                            -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib1131/${platform}
+                            )
     else()
         set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
                             -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}
@@ -97,13 +109,13 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         --disable-hwaccel=h263_vaapi  --disable-hwaccel=h264_vaapi  --disable-hwaccel=hevc_vaapi
                         --disable-hwaccel=mjpeg_vaapi --disable-hwaccel=mpeg2_vaapi --disable-hwaccel=mpeg4_vaapi
                         --disable-hwaccel=vc1_vaapi   --disable-hwaccel=vp8_vaapi   --disable-hwaccel=wmv3_vaapi
-			--enable-encoder=h264_bm      --enable-encoder=h265_bm      --enable-bmcodec)
+            --enable-encoder=h264_bm      --enable-encoder=h265_bm      --enable-bmcodec)
 
     # basic config for different chips
 #if("${chip_name}" STREQUAL "bm1686")
         #set(EXTRA_LDFLAGS ${EXTRA_LDFLAGS} -L${LIBSOPHAV_OUT_PATH}/bmcv -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib/${platform})
-    set(EXTRA_LIBS ${EXTRA_LIBS} -lispv4l2_helper -lae -laf -lawb -lcvi_bin -lcvi_bin_isp -lcvi_ispd2 -lisp -lisp_algo -lispv4l2_adapter -ljson-c -lsns_full)#set mw lib
-    set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv )
+    set(EXTRA_LIBS ${EXTRA_LIBS} -lispv4l2_helper -lae -laf -lawb -lcvi_bin -lcvi_bin_isp -lisp -lisp_algo -lispv4l2_adapter -lsns_full)#set mw lib
+    set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lbo -ldrm -lkms)
 
     # TODO: depend on chip name?
     set(EXTRA_CFLAGS ${EXTRA_CFLAGS} -DBM1684)
@@ -149,11 +161,7 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
         set(EXTRA_CFLAGS ${EXTRA_CFLAGS} -DBOARD_FPGA=1)
     endif()
 
-    if("${platform}" STREQUAL "soc" OR NOT ${enable_sdl})
-        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --disable-sdl2 --disable-ffplay)
-    else()
-        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay)
-    endif()
+    set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay)
 
     set(FFMPEG_BUILD_TARGETS all)
 
@@ -265,15 +273,18 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
                                     "${yuv_abs_path}/libyuv/lib"
                                     "${bmcv_abs_path}/bmcv")
 
-	if("${GCC_VERSION}" STREQUAL "930")
+    if("${GCC_VERSION}" STREQUAL "930")
         set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
                                     "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}")
+    elseif("${GCC_VERSION}" STREQUAL "1131")
+        set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}")
     else()
         set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
                                     "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
     endif()
 
-    if (${platform} STREQUAL "pcie_sw64" OR ${platform} STREQUAL "pcie_loongarch64"  OR ${platform} STREQUAL "pcie_riscv64") 
+    if (${platform} STREQUAL "pcie_sw64" OR ${platform} STREQUAL "pcie_loongarch64"  OR ${platform} STREQUAL "pcie_riscv64")
         set(BUILD_JPEG                  ON)
     else()
         set(BUILD_JPEG                  OFF)
@@ -321,9 +332,11 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
         set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
         set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
         set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain.cmake)
-		if("${GCC_VERSION}" STREQUAL "930")
-		    set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-930.cmake)
-		endif()
+        if("${GCC_VERSION}" STREQUAL "930")
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-930.cmake)
+        elseif("${GCC_VERSION}" STREQUAL "1131")
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-1131.cmake)
+        endif()
 
     elseif(${platform} STREQUAL "pcie")
 
@@ -408,8 +421,8 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
         #        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/bin)
         #        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/dist-packages/numpy/core/include)
         #        set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
-        #	set(HAVE_opencv_python2         ON)
-        #	set(BUILD_opencv_python2        ON)
+        #    set(HAVE_opencv_python2         ON)
+        #    set(BUILD_opencv_python2        ON)
         #        set(PYTHON2_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/include/python2.7)
         #        set(PYTHON2_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/lib/libpython2.7.so)
         #        set(PYTHON2_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/dist-packages/numpy/core/include)
@@ -447,8 +460,8 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
         #        set(ENABLE_NEON                 OFF)
         #
         #        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
-        #	set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/riscv64/lib/libfreetype.a)
-        #	set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
+        #    set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/riscv64/lib/libfreetype.a)
+        #    set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
         #        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
         #        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/riscv64.toolchain.cmake)
     endif()
@@ -639,7 +652,7 @@ endfunction(ADD_TARGET_OPENCV_LIB)
 #        PATTERN "pkgconfig" EXCLUDE)
 #
 #    list(APPEND install_libs FF_LIBS JPU_LIBS VPU_LIBS ION_LIBS VPP_LIBS YUV_LIBS BMCV_LIBS THIRD_PARTY_LIBS)
-#    list(APPEND install_src_paths ${ffmpeg_abs_path}/usr/local/lib/ ${jpu_abs_path}/lib/ ${vpu_abs_path}/lib/ 
+#    list(APPEND install_src_paths ${ffmpeg_abs_path}/usr/local/lib/ ${jpu_abs_path}/lib/ ${vpu_abs_path}/lib/
 #        ${ion_abs_path}/lib/ ${vpp_abs_path}/lib/ ${yuv_abs_path}/lib/ ${bmcv_abs_path}/lib/
 #        ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libbmcv/lib/soc/)
 #    list(LENGTH install_libs len1)

@@ -199,20 +199,20 @@ int VideoDec_FFMPEG::grabFrame2(AVFrame * frame)
         av_packet_unref(&pkt);
         ret = av_read_frame(ifmt_ctx, &pkt);
         if (ret < 0) {
-            return NULL; // TODO
+            return ret; // TODO
         }
         if (pkt.stream_index != video_stream_idx) {
             continue;
         }
         if (!frame) {
             av_log(video_dec_ctx, AV_LOG_ERROR, "Could not allocate frame\n");
-            return NULL;
+            return ret;
         }
         ret = avcodec_send_packet(video_dec_ctx, &pkt);
         if (ret < 0)
         {
             printf( "Error sending a packet for decoding\n");
-            return NULL;
+            return ret;
         }
         while(1) {
             ret = avcodec_receive_frame(video_dec_ctx, frame);
@@ -249,6 +249,7 @@ int VideoDec_FFMPEG::grabFrame2(AVFrame * frame)
 
         break;
     }
+    return ret;
 }
 
 int VideoDec_FFMPEG::flushFrame(AVFrame *frame){
@@ -256,7 +257,7 @@ int VideoDec_FFMPEG::flushFrame(AVFrame *frame){
 
     ret = avcodec_send_packet(video_dec_ctx, NULL);
     while(1) {
-        AVPacket *out_pkt = av_packet_alloc();
+        //AVPacket *out_pkt = av_packet_alloc();
         ret = avcodec_receive_frame(video_dec_ctx, frame);
         if (ret == AVERROR(EAGAIN)) {
             break;

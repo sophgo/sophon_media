@@ -250,7 +250,7 @@ int VideoDec_FFMPEG::flushFrame(AVFrame *frame) {
             break;
         } else if (ret < 0) {
             if (ret != AVERROR_EOF) {
-                av_log(NULL, AV_LOG_ERROR, "Error receiving decoded frame: %s\n", __func__, ret);
+                av_log(NULL, AV_LOG_ERROR, "Error receiving decoded frame: %s, ret = %d\n", __func__, ret);
             }
             else {
                 av_log(NULL, AV_LOG_DEBUG, "%s : flush finish !!\n",__func__);

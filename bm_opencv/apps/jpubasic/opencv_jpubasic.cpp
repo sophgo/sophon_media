@@ -12,8 +12,8 @@
 using namespace std;
 using namespace cv;
 
-int dumpFile(char *filename, cv::Mat & image);
-int dumpFile(char *filename, cv::Mat & image){
+int dumpFile(const char *filename, cv::Mat & image);
+int dumpFile(const char *filename, cv::Mat & image){
 
 #if (defined HAVE_BMCV)
 
@@ -115,16 +115,16 @@ int main(int argc, char *argv[])
 #endif
     cout << "decoder time(ms): " << t/loop << endl;
     try{
-        cv::Mat image;
-        cv::imdecode(pic, flags, &image, card);
+        cv::Mat output_image;
+        cv::imdecode(pic, flags, &output_image, card);
 
-        if (image.empty())
+        if (output_image.empty())
             cout << "Warning! decoded image is empty" << endl;
         else {
             if(dump_enable == 1){
-                dumpFile("dump", image);
+                dumpFile("dump", output_image);
             }
-            cv::imwrite("out1.jpg", image);
+            cv::imwrite("out1.jpg", output_image);
         }
     }
     catch (const cv::Exception& e){

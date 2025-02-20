@@ -40,6 +40,7 @@ set(SAMPLE_TARGETS test_bm_restart test_ff_video_encode
                 test_ff_sns_xcode
 		test_gst_vcmulti
 		test_gst_transcode
+		test_gst_xcode
                 )
 
 
@@ -61,8 +62,7 @@ add_subdirectory(ocv_video_xcode)
 add_subdirectory(ocv_vidmulti)
 add_subdirectory(gst/gst_bm_vcmulti)
 add_subdirectory(gst/gst_bm_transcode)
-
-
+add_subdirectory(gst/gst_bm_v4l2xcode)
 
 
 
@@ -82,8 +82,11 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ff_bmcv_transcode/water.bin
     DESTINATION ${LOCATION_PREFIX}/bin
     COMPONENT sophon-sample)
 
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ff_bmcv_transcode/water.bin
+    DESTINATION ${LOCATION_PREFIX}/samples/ff_bmcv_transcode
+    COMPONENT sophon-sample)
+
 set(BMMW_SAMPLES_SOURCE
-    water.bin
     ocv_vidmulti
     ocv_jpumulti
     ocv_vidbasic
@@ -97,6 +100,7 @@ set(BMMW_SAMPLES_SOURCE
     ff_scale_transcode
     gst/gst_bm_vcmulti
     gst/gst_bm_transcode
+    gst/gst_bm_v4l2xcode
     )
 
 set(BMMW_SAMPLES_SOURCE_DIR ${BMMW_SAMPLES_SOURCE})
@@ -108,7 +112,7 @@ math(EXPR size_minus_1 "${size} - 1")
 foreach(index RANGE ${size_minus_1})
     list(GET BMMW_SAMPLES_SOURCE ${index} src_dir_name)
     list(GET BMMW_SAMPLES_SOURCE_DIR ${index} abs_dir_name)
-    FILE(GLOB srcs ${abs_dir_name}/*.cpp ${abs_dir_name}/*.c ${abs_dir_name}/*.h ${abs_dir_name}/*.hpp ${abs_dir_name}/water.bin ${abs_dir_name}/CMakeLists.txt ${abs_dir_name}/Makefile)
+    FILE(GLOB srcs ${abs_dir_name}/*.cpp ${abs_dir_name}/*.c ${abs_dir_name}/*.h ${abs_dir_name}/*.hpp ${abs_dir_name}/CMakeLists.txt ${abs_dir_name}/Makefile)
     UNSET(INSTALL_SRCS)
     foreach(f ${srcs})
         get_filename_component(real_f ${f} REALPATH)
@@ -119,11 +123,12 @@ foreach(index RANGE ${size_minus_1})
         PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ GROUP_WRITE WORLD_READ WORLD_WRITE
         COMPONENT sophon-sample)
 
-    #install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.template
-    #    DESTINATION ${LOCATION_PREFIX}/samples/${src_dir_name}
-    #    PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ GROUP_WRITE WORLD_READ WORLD_WRITE
-    #    COMPONENT ${component}
-    #    RENAME CMakeLists.txt)
+    set(template_file ${abs_dir_name}/CMakeLists.template)
+    install(FILES ${template_file}
+        DESTINATION ${LOCATION_PREFIX}/samples/${src_dir_name}
+        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ GROUP_WRITE WORLD_READ WORLD_WRITE
+        COMPONENT sophon-sample
+        RENAME CMakeLists.txt)
 endforeach()
 
 

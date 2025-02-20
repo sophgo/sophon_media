@@ -454,6 +454,12 @@ gst_bm_enc_apply_properties (GstVideoEncoder * encoder)
   gint fps_num = GST_VIDEO_INFO_FPS_N (info);
   gint fps_denorm = GST_VIDEO_INFO_FPS_D (info);
   gint fps = fps_num / fps_denorm;
+  if (fps == 0) {
+      // set default fps to 30.
+      fps = DEFAULT_FPS;
+      fps_num = DEFAULT_FPS;
+      fps_denorm = 1 ;
+  }
 
   if (!self->prop_dirty)
     return TRUE;
@@ -461,8 +467,9 @@ gst_bm_enc_apply_properties (GstVideoEncoder * encoder)
   self->prop_dirty = FALSE;
   self->params.intra_period = self->gop < 0 ? fps : self->gop;
 
-  if (!self->bps)
+  if (!self->bps) {
     self->bps = GST_VIDEO_INFO_WIDTH (info) * GST_VIDEO_INFO_HEIGHT (info) / 8 * fps;
+  }
 
   self->params.bitrate = self->bps;
   self->params.intra_period = self->gop;
@@ -738,8 +745,9 @@ gst_bm_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
   GST_DEBUG_OBJECT (self, "setting format: %" GST_PTR_FORMAT, state->caps);
 
   if (self->input_state) {
-    if (gst_caps_is_strictly_equal (self->input_state->caps, state->caps))
+    if (gst_caps_is_strictly_equal (self->input_state->caps, state->caps)) {
       return TRUE;
+    }
 
     gst_bm_enc_reset (encoder, TRUE, FALSE);
 
@@ -751,8 +759,9 @@ gst_bm_enc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
 
   *info = state->info;
 
-  if (!gst_bm_enc_video_info_align (info))
+  if (!gst_bm_enc_video_info_align (info)) {
     return FALSE;
+  }
 
   width = GST_VIDEO_INFO_WIDTH (info);
   height = GST_VIDEO_INFO_HEIGHT (info);
@@ -1178,6 +1187,12 @@ gst_bm_enc_handle_frame (GstVideoEncoder * encoder, GstVideoCodecFrame * frame)
 
   GST_BM_ENC_LOCK (encoder);
   if (!self->is_enc_open) {
+    if (!gst_bm_enc_apply_properties (encoder)) {
+      GST_DEBUG_OBJECT (self,"apply fail \n");
+      return GST_FLOW_ERROR;
+    }
+
+
     if (bmvpu_enc_open(&self->bmVenc, &self->params, NULL, &(self->initial_info))) {
       g_print("bmvpu_enc_open open failed!\n");
       GST_BM_ENC_UNLOCK (encoder);

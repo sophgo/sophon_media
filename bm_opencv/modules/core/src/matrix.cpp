@@ -338,7 +338,6 @@ Mat::Mat() CV_NOEXCEPT
       datalimit(0), allocator(0), u(0), size(&rows), step(0), card(0), fromhardware(0)
 {}
 
-inline
 Mat::Mat(SophonDevice device)
     : flags(MAGIC_VAL), dims(0), rows(0), cols(0), data(0), datastart(0), dataend(0),
       datalimit(0), allocator(0), u(0), size(&rows), step(0), fromhardware(0)

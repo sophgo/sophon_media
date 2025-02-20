@@ -141,7 +141,6 @@ int main(int argc, char **argv)
     AVFrame * frame = NULL;
     unsigned int frame_nums = 0;
     int cur = 0;
-    int decode_cnt = 0;
     frame = reader.grabFrame();
     if(frame)
         frame_nums++;
