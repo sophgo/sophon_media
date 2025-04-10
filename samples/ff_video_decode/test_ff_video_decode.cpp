@@ -283,6 +283,8 @@ int main(int argc, char **argv)
     if (is_compress != 0 && is_compress != 1)
     {
         usage(argv[0]);
+        if(thread_arg)
+            free(thread_arg);
         return -1;
     }
     if (is_compress == 0)
@@ -295,6 +297,8 @@ int main(int argc, char **argv)
     if (is_pre_allocation_frame < 0 && is_pre_allocation_frame > 64)
     {
         usage(argv[0]);
+        if(thread_arg)
+            free(thread_arg);
         return -1;
     }
     thread_arg->pre_allocation_frame = is_pre_allocation_frame;
@@ -314,6 +318,8 @@ int main(int argc, char **argv)
     else
     {
         usage(argv[0]);
+        if(thread_arg)
+            free(thread_arg);
         return -1;
     }
     arg_index++;
@@ -331,6 +337,8 @@ int main(int argc, char **argv)
     if (zero_copy != 0 && zero_copy != 1)
     {
         usage(argv[0]);
+        if(thread_arg)
+            free(thread_arg);
         return -1;
     }
     thread_arg->zero_copy = zero_copy;

@@ -15,7 +15,7 @@ G_BEGIN_DECLS
 
 #define GST_BM_V4L2SRC_SRC_FORMATS \
     "video/x-raw, " \
-    "format = (string) {NV21, YUYV}, " \
+    "format = (string) {NV21, YUYV, YUY2}, " \
     "width = (int) [ 16, 8192 ], " \
     "height = (int) [ 16, 8192 ], " \
     "framerate = " GST_VIDEO_FPS_RANGE

@@ -25,9 +25,11 @@ set(MIDDELWARE_SOC_PLATFORM ${PLATFORM})
 
 set(FIRMWARE_CORE_SRCS_C "" CACHE INTERNAL "FIRMWARE_CORE_SRCS_C" )
 set(SAMPLE_TARGETS test_bm_restart test_ff_video_encode
+                test_bm_api_transcode
                 test_ff_bmcv_transcode
                 test_ff_hw_bmcv_transcode
                 test_ff_scale_transcode
+                test_ff_overlay_transcode
                 test_ff_video_xcode
                 test_ff_resize_transcode
                 test_ff_bmjpeg
@@ -37,21 +39,23 @@ set(SAMPLE_TARGETS test_bm_restart test_ff_video_encode
                 test_ocv_vidbasic
                 test_ocv_video_xcode
                 test_ocv_vidmulti
-                test_ff_sns_xcode
-		test_gst_vcmulti
-		test_gst_transcode
-		test_gst_xcode
+                test_gst_vcmulti
+                test_gst_transcode
+                test_gst_xcode
                 )
-
+if("${PLATFORM}" STREQUAL "soc")
+    list(APPEND SAMPLE_TARGETS test_ff_sns_xcode)
+endif()
 
 # add sub-modules
 add_subdirectory(ff_video_decode)
 add_subdirectory(ff_video_encode)
 add_subdirectory(ff_video_xcode)
-add_subdirectory(ff_sns_xcode)
+add_subdirectory(bm_api_transcode)
 add_subdirectory(ff_bmcv_transcode)
 add_subdirectory(ff_hw_bmcv_transcode)
 add_subdirectory(ff_scale_transcode)
+add_subdirectory(ff_overlay_transcode)
 add_subdirectory(ff_resize_transcode)
 add_subdirectory(ff_bmjpeg)
 add_subdirectory(ff_bmjpeg_dec_recycle)
@@ -63,6 +67,9 @@ add_subdirectory(ocv_vidmulti)
 add_subdirectory(gst/gst_bm_vcmulti)
 add_subdirectory(gst/gst_bm_transcode)
 add_subdirectory(gst/gst_bm_v4l2xcode)
+if("${PLATFORM}" STREQUAL "soc")
+    add_subdirectory(ff_sns_xcode)
+endif()
 
 
 
@@ -94,14 +101,18 @@ set(BMMW_SAMPLES_SOURCE
     ocv_video_xcode
     ff_video_decode
     ff_video_encode
+    bm_api_transcode
     ff_bmcv_transcode
     ff_video_xcode
-    ff_sns_xcode
     ff_scale_transcode
+    ff_overlay_transcode
     gst/gst_bm_vcmulti
     gst/gst_bm_transcode
     gst/gst_bm_v4l2xcode
     )
+if("${PLATFORM}" STREQUAL "soc")
+    list(APPEND BMMW_SAMPLES_SOURCE ff_sns_xcode)
+endif()
 
 set(BMMW_SAMPLES_SOURCE_DIR ${BMMW_SAMPLES_SOURCE})
 list(TRANSFORM BMMW_SAMPLES_SOURCE_DIR PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
@@ -136,4 +147,3 @@ endforeach()
 #  message
 message(STATUS "INSTALL PATH: " ${CMAKE_INSTALL_PREFIX})
 message(STATUS "USING_CMODEL " ${USING_CMODEL})
-

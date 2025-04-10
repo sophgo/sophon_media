@@ -1846,7 +1846,8 @@ bool CvCapture_FFMPEG::open(const char* _filename, const VideoCaptureParameters&
 #if LIBAVFORMAT_VERSION_MICRO >= 100  && LIBAVFORMAT_BUILD >= CALC_FFMPEG_VERSION(55, 48, 100)
         av_dict_set(&dict, "rtsp_flags", "prefer_tcp", 0);
 #else
-        av_dict_set_int(&dict, "stimeout", 20000000, 0);
+        // av_dict_set_int(&dict, "stimeout", 20000000, 0); //Deprecate in ffmpeg 6.0
+        av_dict_set_int(&dict, "timeout", 20000000, 0);
 #endif
     }
     else
@@ -4913,7 +4914,8 @@ bool CvVideoWriter_FFMPEG::open( const char * filename, int fourcc,
 
         /* write the stream header, if any */
         av_dict_set(&dict, "rtsp_transport", "tcp", 0);
-        av_dict_set(&dict, "stimeout", "5000000", 0);
+        // av_dict_set(&dict, "stimeout", "5000000", 0);   //Deprecate in ffmpeg 6.0
+        av_dict_set(&dict, "timeout", "5000000", 0);
 
         err=avformat_write_header(oc, &dict);
         if (dict != NULL)

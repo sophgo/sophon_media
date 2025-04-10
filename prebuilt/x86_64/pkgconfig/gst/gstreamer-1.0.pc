@@ -1,0 +1,11 @@
+prefix=../../../../prebuilt
+libdir=${prefix}/x86_64/gst
+includedir=${prefix}/include/gst/gstreamer-1.0
+
+Name: GStreamer
+Description: Streaming media framework
+Version: 1.16.3
+Requires: glib-2.0, gobject-2.0
+Requires.private: gmodule-no-export-2.0  
+Libs: -L${libdir} -lgstreamer-1.0
+Cflags: -I${includedir}

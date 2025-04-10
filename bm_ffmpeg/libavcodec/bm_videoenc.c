@@ -40,6 +40,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/hwcontext_bmcodec.h"
+#include "libavutil/time.h"
 #include "libavcodec/avcodec.h"
 #include "libavcodec/decode.h"
 #include "libavcodec/encode.h"
@@ -194,6 +195,7 @@ static void* bm_queue_pop(bm_queue_t* q);
 static bool bm_queue_is_full(bm_queue_t* q);
 static bool bm_queue_is_empty(bm_queue_t* q);
 static bool bm_queue_show(bm_queue_t* q);
+bm_handle_t bmvpu_enc_get_bmlib_handle(int soc_idx);
 
 static bm_queue_t* bm_queue_create(size_t nmemb, size_t size)
 {
@@ -472,12 +474,42 @@ static int bm_image_upload(BmVpuEncoder* video_encoder,
                "plane %d: bwidth %zd, dst_linesize %zd, src_linesize %zd\n",
                i, bwidth, dst_linesize, src_linesize);
 
-        ret = bmvpu_upload_data(video_encoder->soc_idx, src, src_linesize,
-                                dst, dst_linesize, bwidth, h);
-        // ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(video_encoder->soc_idx), dst, src, bwidth*h);
-        if (ret != BM_SUCCESS) {
-            av_log(NULL, AV_LOG_ERROR, "bm_memcpy_s2d_partial failed\n");
-            return -1;
+        //ret = bmvpu_upload_data(video_encoder->soc_idx, src, src_linesize,
+        //                        dst, dst_linesize, bwidth, h);
+        if (dst_linesize != src_linesize) {
+            /*if width exceeds stride, when memcpy i == height,
+            *  will cause out of bounds access.
+            */
+            if (bwidth > dst_linesize || bwidth > src_linesize) {
+                av_log(NULL, AV_LOG_ERROR, "width exceeds stride!");
+                return -1;
+            }
+
+            uint8_t *buffer = calloc(dst_linesize * h, sizeof(uint8_t));
+            if (!buffer) {
+                av_log(NULL, AV_LOG_ERROR, "calloc failed\n");
+                return -1;
+            }
+
+            for (int row = 0; row < h; row++) {
+                memcpy(buffer + row * dst_linesize, src + row * src_linesize, bwidth);
+            }
+
+            bm_device_mem_t dst_mem = bm_mem_from_device(dst, dst_linesize * h);
+            ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(video_encoder->soc_idx), dst_mem, buffer, dst_linesize * h);
+            if (ret != BM_SUCCESS) {
+                av_log(NULL, AV_LOG_ERROR, "bm_memcpy_s2d_partial failed\n");
+                free(buffer);
+                return -1;
+            }
+            free(buffer);
+        } else {
+            bm_device_mem_t dst_mem = bm_mem_from_device(dst, dst_linesize*h);
+            ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(video_encoder->soc_idx), dst_mem, src, dst_linesize*h);
+            if (ret != BM_SUCCESS) {
+                av_log(NULL, AV_LOG_ERROR, "bm_memcpy_s2d_partial failed\n");
+                return -1;
+            }
         }
     }
 
@@ -788,10 +820,23 @@ static av_cold int bm_videoenc_init(AVCodecContext *avctx)
                 av_log(avctx, AV_LOG_ERROR, "bmvpu_enc_dma_buffer_allocate failed! line=%d\n", __LINE__);
                 return AVERROR_EXTERNAL;
             }
+#ifdef BM_PCIE_MODE
+            char * pzero = (char*)malloc(ctx->initial_info.src_fb.size);
+            memset(pzero, 0, ctx->initial_info.src_fb.size);
+            bm_device_mem_t dst_mem = bm_mem_from_device(ctx->src_fb_dmabuffers[i]->phys_addr, ctx->initial_info.src_fb.size);
+            ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(ctx->video_encoder->soc_idx), dst_mem, pzero, ctx->initial_info.src_fb.size);
+            if (pzero != NULL) {
+                free(pzero);
+            }
+            if (ret != BM_SUCCESS) {
+                av_log(NULL, AV_LOG_ERROR, "bm_memcpy_s2d_partial failed\n");
+                return -1;
+            }
+#else
             bmvpu_dma_buffer_map(ctx->core_idx, ctx->src_fb_dmabuffers[i], BM_VPU_ENC_MAPPING_FLAG_READ|BM_VPU_ENC_MAPPING_FLAG_WRITE);
             memset(ctx->src_fb_dmabuffers[i]->virt_addr, 0, ctx->src_fb_dmabuffers[i]->size);
             bmvpu_dma_buffer_unmap(ctx->core_idx, ctx->src_fb_dmabuffers[i]);
-
+#endif
             bmvpu_fill_framebuffer_params(&(ctx->src_fb_list[i]),
                                           &(ctx->initial_info.src_fb),
                                           ctx->src_fb_dmabuffers[i],
@@ -1045,6 +1090,7 @@ static av_cold int bm_videoenc_close(AVCodecContext *avctx)
 static int SetMapData(AVCodecContext *avctx, BmCustomMapOpt **roi_map, int picWidth, int picHeight, AVBMRoiInfo *roi)
 {
     int i, sumQp = 0;
+    int ret = 0;
     int h, w, ctuPos, initQp;
     BmVpuEncContext* ctx = (BmVpuEncContext *)(avctx->priv_data);
     *roi_map = get_roi_buffer(avctx);
@@ -1085,13 +1131,24 @@ static int SetMapData(AVCodecContext *avctx, BmCustomMapOpt **roi_map, int picWi
 
         unsigned int roi_size = (sizeof(EncCustomMap)*BM_MAX_CTU_NUM) > (sizeof(AvcEncCustomMap)*BM_MAX_MB_NUM)?
                                 (sizeof(EncCustomMap)*BM_MAX_CTU_NUM) : (sizeof(AvcEncCustomMap)*BM_MAX_MB_NUM);
+
+
         BmVpuEncDMABuffer dma_buf;
         dma_buf.phys_addr = (*roi_map)->addrCustomMap;
         dma_buf.size      = roi_size;
+#ifdef BM_PCIE_MODE
+        bm_device_mem_t dst_mem = bm_mem_from_device(dma_buf.phys_addr, sizeof(AvcEncCustomMap)*BM_MAX_MB_NUM);
+        ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(ctx->video_encoder->soc_idx), dst_mem, customMapBuf, sizeof(AvcEncCustomMap)*BM_MAX_MB_NUM);
+        if (ret != BM_SUCCESS) {
+            av_log(NULL, AV_LOG_ERROR, "bm_memcpy_s2d_partial failed\n");
+            return -1;
+        }
+#else
         bmvpu_dma_buffer_map(ctx->core_idx, &dma_buf, BM_VPU_ENC_MAPPING_FLAG_READ|BM_VPU_ENC_MAPPING_FLAG_WRITE);
         memset(dma_buf.virt_addr, 0, roi_size);
         memcpy(dma_buf.virt_addr, customMapBuf, sizeof(AvcEncCustomMap)*BM_MAX_MB_NUM);
         bmvpu_dma_buffer_unmap(ctx->core_idx, &dma_buf);
+#endif
 
 
     } else if (avctx->codec_id == AV_CODEC_ID_H265) {
@@ -1154,11 +1211,19 @@ static int SetMapData(AVCodecContext *avctx, BmCustomMapOpt **roi_map, int picWi
         BmVpuEncDMABuffer dma_buf;
         dma_buf.phys_addr = (*roi_map)->addrCustomMap;
         dma_buf.size      = roi_size;
+#ifdef BM_PCIE_MODE
+        bm_device_mem_t dst_mem = bm_mem_from_device(dma_buf.phys_addr, sizeof(EncCustomMap)*BM_MAX_CTU_NUM);
+        ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(ctx->video_encoder->soc_idx), dst_mem, customMapBuf, sizeof(EncCustomMap)*BM_MAX_CTU_NUM);
+        if (ret != BM_SUCCESS) {
+            av_log(NULL, AV_LOG_ERROR, "bm_memcpy_s2d_partial failed\n");
+            return -1;
+        }
+#else
         bmvpu_dma_buffer_map(ctx->core_idx, &dma_buf, BM_VPU_ENC_MAPPING_FLAG_READ|BM_VPU_ENC_MAPPING_FLAG_WRITE);
         memset(dma_buf.virt_addr, 0, roi_size);
         memcpy(dma_buf.virt_addr, customMapBuf, sizeof(EncCustomMap)*BM_MAX_CTU_NUM);
         bmvpu_dma_buffer_unmap(ctx->core_idx, &dma_buf);
-
+#endif
     }
 
     return 0;
@@ -1241,6 +1306,7 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         ctx->src_fb = get_src_framebuffer(avctx);
         if (ctx->src_fb == NULL) {
             av_log(avctx, AV_LOG_ERROR, "get_src_framebuffer failed\n");
+            av_frame_free(&pic);
             av_packet_unref(avpkt);
             return AVERROR_UNKNOWN;
         }
@@ -1266,6 +1332,7 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 av_log(avctx, AV_LOG_ERROR,
                        "For now, video encoder does NOT support compressed frame data!\n"
                        "Please use scale_bm to decompresse the data to uncompressed data first!\n");
+                av_frame_free(&pic);
                 return AVERROR_EXTERNAL;
             }
 
@@ -1284,10 +1351,12 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             for (i=0; i<(((sw_format==AV_PIX_FMT_YUV420P)||(sw_format==AV_PIX_FMT_YUVJ420P))?3:2); i++) {
                 if (pic->data[i] == NULL) {
                     av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid pic data[%d](%p)!\n", i, pic->data[i]);
+                    av_frame_free(&pic);
                     return AVERROR_EXTERNAL;
                 }
                 if (pic->linesize[i] <= 0) {
                     av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid pic linesize[%d](%d]!\n", i, pic->linesize[i]);
+                    av_frame_free(&pic);
                     return AVERROR_EXTERNAL;
                 }
             }
@@ -1330,12 +1399,14 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             if (pic->data[0] == NULL || pic->data[1] == NULL ||
                 (((pic->format == AV_PIX_FMT_YUV420P)||(pic->format == AV_PIX_FMT_YUVJ420P)) && pic->data[2] == NULL)) {
                 av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid pic data!\n");
+                av_frame_free(&pic);
                 return AVERROR(EINVAL);;
             }
 
             if (pic->linesize[0] <= 0 || pic->linesize[1] <= 0 ||
                ((pic->format == AV_PIX_FMT_YUV420P ||(pic->format == AV_PIX_FMT_YUVJ420P)) && pic->linesize[2] <= 0)) {
                 av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid pic line size!\n");
+                av_frame_free(&pic);
                 return AVERROR(EINVAL);;
             }
 
@@ -1344,12 +1415,14 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             addr = (uint8_t*)bmvpu_enc_dma_buffer_get_physical_address(ctx->src_fb->dma_buffer);
             if (addr == NULL) {
                 av_log(avctx, AV_LOG_ERROR, "bm_mem_get_device_addr failed\n");
+                av_frame_free(&pic);
                 return AVERROR_EXTERNAL;
             }
 #else
             ret = bmvpu_dma_buffer_map(ctx->core_idx, ctx->src_fb->dma_buffer, BM_VPU_ENC_MAPPING_FLAG_READ|BM_VPU_ENC_MAPPING_FLAG_WRITE);
             if (ret != BM_SUCCESS) {
                 av_log(avctx, AV_LOG_ERROR, "bmvpu_dma_buffer_map failed\n");
+                av_frame_free(&pic);
                 return AVERROR_EXTERNAL;
             }
             addr = (uint8_t *)(ctx->src_fb->dma_buffer->virt_addr);
@@ -1385,6 +1458,7 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                                       width, height);
                 if (ret < 0) {
                     av_log(avctx, AV_LOG_ERROR, "bm_image_upload failed\n");
+                    av_frame_free(&pic);
                     return AVERROR_EXTERNAL;
                 }
 #else
@@ -1412,12 +1486,14 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             if (pic->data[4] == NULL || pic->data[5] == NULL ||
                ((pic->format == AV_PIX_FMT_YUV420P ||(pic->format == AV_PIX_FMT_YUVJ420P)) && pic->data[6] == NULL)) {
                 av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid pic data!\n");
+                av_frame_free(&pic);
                 return AVERROR_EXTERNAL;
             }
 
             if (pic->linesize[4] <= 0 || pic->linesize[5] <= 0 ||
                ((pic->format == AV_PIX_FMT_YUV420P||(pic->format == AV_PIX_FMT_YUVJ420P)) && pic->linesize[6] <= 0)) {
                 av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid pic line size!\n");
+                av_frame_free(&pic);
                 return AVERROR_EXTERNAL;
             }
 
@@ -1503,7 +1579,7 @@ re_send:
         send_frame_status = bmvpu_enc_send_frame(ctx->video_encoder, &(ctx->input_frame), &(ctx->enc_params));
     }
     if (enc_ret == 0) {
-        usleep(1000);
+        av_usleep(1000);
         goto enc_end;
     }
 
@@ -1593,7 +1669,7 @@ get_stream:
         av_packet_unref(avpkt);
         if (ctx->first_pkt_recevie_flag == 1) {
             if (get_stream_times < GET_STREAM_TIMEOUT) {
-                usleep(1000*5);
+                av_usleep(1000*5);
                 get_stream_times++;
                 goto get_stream;
             }
@@ -1602,7 +1678,7 @@ get_stream:
 
 enc_end:
     if ((ctx->input_frame.framebuffer != NULL) && (send_frame_status != BM_VPU_ENC_RETURN_CODE_OK)) {
-        usleep(10);
+        av_usleep(10);
         goto re_send;
     }
 
@@ -1610,14 +1686,13 @@ enc_end:
     if ((ctx->input_frame.framebuffer == NULL) && (*got_packet == 0) && (ctx->is_end == 0)) {
         if (get_stream_times < GET_STREAM_TIMEOUT) {
             av_packet_unref(avpkt);
-            usleep(100);
+            av_usleep(100);
             get_stream_times++;
             goto get_stream;
         }
     }
 
     av_log(avctx, AV_LOG_TRACE, "Leave %s\n", __func__);
-
     return ret;
 }
 

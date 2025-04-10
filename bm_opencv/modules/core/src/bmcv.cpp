@@ -315,8 +315,11 @@ bm_status_t toBMI(Mat &m, bm_image *image, bool update)
 
 static void download(bm_handle_t handle, Mat &m, bm_image *image)
 {
-//  uchar *p = m.data;
+#ifdef USING_SOC
   UNUSED(m);
+#else
+  uchar *p = m.data;
+#endif
   bm_device_mem_t mem[4];
 
   memset(mem, 0, sizeof(mem));
@@ -328,7 +331,7 @@ static void download(bm_handle_t handle, Mat &m, bm_image *image)
       bm_mem_invalidate_device_mem(handle, &mem[i]);
 #else
       bm_memcpy_d2s(handle, p, mem[i]);
-    //  p += mem[i].size;
+      p += mem[i].size;
 #endif
     }
   }

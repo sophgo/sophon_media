@@ -546,7 +546,7 @@ int main(int argc, char *argv[]) {
         { "codec_type", 'c', 0, G_OPTION_ARG_INT, &code_type,
             "h26x codec format type 1:h264 2:h265 3:JPEG", "type" },
         { "is_enc", 'e', 0, G_OPTION_ARG_INT, &is_enc,
-            "if enc multi test set 1 or is dec multi test", "enc" },
+            "if enc multi test set 1, if dec multi test set 2, if trans multi test set 2", "enc" },
         { "num_chl", 'n', 0, G_OPTION_ARG_INT, &num_chnl,
             "the num of codec chnl", "chl" },
         { "disp", 'd', 0, G_OPTION_ARG_INT, &disp,

@@ -151,11 +151,13 @@ static av_cold int bm_jpegenc_init(AVCodecContext *avctx)
     else
         sw_pix_fmt = avctx->pix_fmt;
 
-    if (sw_pix_fmt == AV_PIX_FMT_YUVJ420P)
+    if (sw_pix_fmt == AV_PIX_FMT_YUV420P || sw_pix_fmt == AV_PIX_FMT_YUVJ420P ||
+        sw_pix_fmt == AV_PIX_FMT_NV12 || sw_pix_fmt == AV_PIX_FMT_NV21)
         raw_size = avctx->width * avctx->height * 3/2;
-    else if (sw_pix_fmt == AV_PIX_FMT_YUVJ422P)
+    else if (sw_pix_fmt == AV_PIX_FMT_YUV422P || sw_pix_fmt == AV_PIX_FMT_YUVJ422P ||
+        sw_pix_fmt == AV_PIX_FMT_NV16)
         raw_size = avctx->width * avctx->height * 2;
-    else if (sw_pix_fmt == AV_PIX_FMT_YUVJ444P)
+    else if (sw_pix_fmt == AV_PIX_FMT_YUV444P || sw_pix_fmt == AV_PIX_FMT_YUVJ444P)
         raw_size = avctx->width * avctx->height * 3;
     else /* if (sw_pix_fmt == AV_PIX_FMT_GRAY8) */
         raw_size = avctx->width * avctx->height;
@@ -282,12 +284,18 @@ static int bm_jpegenc_encode_frame(AVCodecContext *avctx,
         return AVERROR(ENOMEM);
 #endif
 
-    if (frame->format != avctx->pix_fmt) {
+    /* Check if input format is compatible with encoder */
+    if (frame->format != avctx->pix_fmt &&
+        !((frame->format == AV_PIX_FMT_YUVJ420P && avctx->pix_fmt == AV_PIX_FMT_YUV420P) ||
+          (frame->format == AV_PIX_FMT_YUV420P && avctx->pix_fmt == AV_PIX_FMT_YUVJ420P) ||
+          (frame->format == AV_PIX_FMT_YUVJ422P && avctx->pix_fmt == AV_PIX_FMT_YUV422P) ||
+          (frame->format == AV_PIX_FMT_YUV422P && avctx->pix_fmt == AV_PIX_FMT_YUVJ422P) ||
+          (frame->format == AV_PIX_FMT_YUVJ444P && avctx->pix_fmt == AV_PIX_FMT_YUV444P) ||
+          (frame->format == AV_PIX_FMT_YUV444P && avctx->pix_fmt == AV_PIX_FMT_YUVJ444P))) {
         snprintf(buf, sizeof(buf), "%d", frame->format);
-        av_log(avctx, AV_LOG_ERROR,
+        av_log(avctx, AV_LOG_WARNING,
                "A. Specified pixel format %s is not supported\n",
                (char *)av_x_if_null(av_get_pix_fmt_name(frame->format), buf));
-        return AVERROR_EXTERNAL;
     }
     if (ctx->hw_accel && frame->hw_frames_ctx != NULL) {
         AVHWFramesContext* frm_ctx = (AVHWFramesContext*)frame->hw_frames_ctx->data;
@@ -310,11 +318,17 @@ static int bm_jpegenc_encode_frame(AVCodecContext *avctx,
         format = frame->format;
     }
 
-    if (format == AV_PIX_FMT_YUVJ420P) {
+    if (format == AV_PIX_FMT_YUV420P || format == AV_PIX_FMT_YUVJ420P) {
         out_image_format = BM_JPU_IMAGE_FORMAT_YUV420P;
-    } else if (format == AV_PIX_FMT_YUVJ422P) {
+    } else if (format == AV_PIX_FMT_NV12) {
+        out_image_format = BM_JPU_IMAGE_FORMAT_NV12;
+    } else if (format == AV_PIX_FMT_NV21) {
+        out_image_format = BM_JPU_IMAGE_FORMAT_NV21;
+    } else if (format == AV_PIX_FMT_YUV422P || format == AV_PIX_FMT_YUVJ422P) {
         out_image_format = BM_JPU_IMAGE_FORMAT_YUV422P;
-    } else if (format == AV_PIX_FMT_YUVJ444P) {
+    } else if (format == AV_PIX_FMT_NV16) {
+        out_image_format = BM_JPU_IMAGE_FORMAT_NV16;
+    } else if (format == AV_PIX_FMT_YUV444P || format == AV_PIX_FMT_YUVJ444P) {
         out_image_format = BM_JPU_IMAGE_FORMAT_YUV444P;
     } else if (format == AV_PIX_FMT_GRAY8) {
         if (frame->color_range == AVCOL_RANGE_MPEG) {
@@ -345,54 +359,97 @@ static int bm_jpegenc_encode_frame(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_TRACE, "data %d: %p, line size %d: %d\n",
                i, frame->data[i], i, frame->linesize[i]);
 
-    if (ctx->hw_accel) {
+    av_log(avctx, AV_LOG_DEBUG, "hw_accel=%d\n", ctx->hw_accel);
+    if (ctx->hw_accel || ctx->is_dma_buffer) {
         //AVBmCodecFrame* hwpic = (AVBmCodecFrame*)frame->data[4];
         int y_size, c_size, total_size;
+        int channel_idx = ctx->hw_accel ? 0 : 4;
 
-        if (format == AV_PIX_FMT_GRAY8) {
-            if (frame->data[0]==NULL) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame data[0]!\n");
-                return AVERROR_EXTERNAL;
-            }
-            if (frame->linesize[0]<=0) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame linesize[0]!\n");
-                return AVERROR_EXTERNAL;
-            }
-            y_size = frame->linesize[0] * frame->height;
-            c_size = 0;
-        } else {
-            if (frame->data[0]==NULL || frame->data[1]==NULL || frame->data[2]==NULL) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame data!\n");
-                return AVERROR_EXTERNAL;
-            }
-            if (frame->linesize[0]<=0 || frame->linesize[1]<=0 || frame->linesize[2]<=0) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame linesize!\n");
-                return AVERROR_EXTERNAL;
-            }
-            y_size = frame->data[1] - frame->data[0];
-            c_size = frame->data[2] - frame->data[1];
+        switch (format) {
+            case AV_PIX_FMT_GRAY8:
+                if (frame->data[channel_idx] == NULL) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame data!\n");
+                    return AVERROR_EXTERNAL;
+                }
+                if (frame->linesize[channel_idx] <= 0) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame linesize!\n");
+                    return AVERROR_EXTERNAL;
+                }
+                y_size = frame->linesize[channel_idx] * frame->height;
+                c_size = 0;
+
+                framebuffer.y_stride    = frame->linesize[channel_idx];
+                framebuffer.y_offset    = 0;
+
+                break;
+            case AV_PIX_FMT_NV12:
+            case AV_PIX_FMT_NV21:
+            case AV_PIX_FMT_NV16:
+                if (frame->data[channel_idx] == NULL || frame->data[channel_idx + 1] == NULL) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame data!\n");
+                    return AVERROR_EXTERNAL;
+                }
+                if (frame->linesize[channel_idx] <= 0 || frame->linesize[channel_idx + 1] <= 0) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame linesize!\n");
+                    return AVERROR_EXTERNAL;
+                }
+                y_size = frame->data[channel_idx + 1] - frame->data[channel_idx];
+                c_size = frame->linesize[channel_idx + 1] * frame->height / 2;
+
+                framebuffer.y_stride    = frame->linesize[channel_idx];
+                framebuffer.cbcr_stride = frame->linesize[channel_idx + 1];
+                framebuffer.y_offset    = 0;
+                if (format == AV_PIX_FMT_NV21) {
+                    framebuffer.cb_offset   = y_size + 1;
+                    framebuffer.cr_offset   = y_size;
+                } else {
+                    framebuffer.cb_offset   = y_size;
+                    framebuffer.cr_offset   = y_size + 1;
+                }
+
+                break;
+            case AV_PIX_FMT_YUV420P:
+            case AV_PIX_FMT_YUVJ420P:
+            case AV_PIX_FMT_YUV422P:
+            case AV_PIX_FMT_YUVJ422P:
+            case AV_PIX_FMT_YUV444P:
+            case AV_PIX_FMT_YUVJ444P:
+            default:
+                if (frame->data[channel_idx] == NULL ||
+                    frame->data[channel_idx + 1] == NULL ||
+                    frame->data[channel_idx + 2] == NULL) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame data!\n");
+                    return AVERROR_EXTERNAL;
+                }
+                if (frame->linesize[channel_idx] <= 0 ||
+                    frame->linesize[channel_idx + 1] <= 0 ||
+                    frame->linesize[channel_idx + 2] <= 0) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame linesize!\n");
+                    return AVERROR_EXTERNAL;
+                }
+                y_size = frame->data[channel_idx + 1] - frame->data[channel_idx];
+                c_size = frame->data[channel_idx + 2] - frame->data[channel_idx + 1];
+
+                framebuffer.y_stride    = frame->linesize[channel_idx];
+                framebuffer.cbcr_stride = frame->linesize[channel_idx + 1];
+                framebuffer.y_offset    = 0;
+                framebuffer.cb_offset   = y_size;
+                framebuffer.cr_offset   = y_size + c_size;
+
+                break;
         }
 
         total_size = y_size;
         if (format != AV_PIX_FMT_GRAY8)
             total_size += c_size*2;
 
-        wrapped_mem.u.device.device_addr = (unsigned long long)frame->data[0];
+        wrapped_mem.u.device.device_addr = (unsigned long long)frame->data[channel_idx];
         wrapped_mem.u.device.dmabuf_fd = 1;
         wrapped_mem.size = total_size;
         wrapped_mem.flags.u.mem_type = BM_MEM_TYPE_DEVICE;
 
-        framebuffer.y_stride    = frame->linesize[0];
-        if (format != AV_PIX_FMT_GRAY8)
-            framebuffer.cbcr_stride = frame->linesize[1];
-        else
-            framebuffer.cbcr_stride = 0;
-        framebuffer.y_offset    = 0;
-        framebuffer.cb_offset   = y_size;
-        framebuffer.cr_offset   = y_size + c_size;
-
         framebuffer.dma_buffer = &wrapped_mem;
-    } else if (!ctx->is_dma_buffer) { // TODO
+    } else { // TODO
         /* The input frames come in Non-DMA memory */
         uint8_t* p_virt_addr;
         uint8_t *src_y, *src_u, *src_v;
@@ -453,16 +510,12 @@ static int bm_jpegenc_encode_frame(AVCodecContext *avctx,
             return AVERROR(ENOMEM);
         }
 #else
-    #ifdef BOARD_FPGA
-        p_virt_addr = bm_jpu_devm_map(framebuffer.dma_buffer->u.device.device_addr, calculated_sizes.total_size);
-    #else
         ret = bm_mem_mmap_device_mem(ctx->handle, framebuffer.dma_buffer, &p_virt_addr);
         if (ret != BM_SUCCESS) {
             av_log(avctx, AV_LOG_ERROR,
                    "bm_mem_mmap_device_mem failed!\n");
             return AVERROR(ENOMEM);
         }
-    #endif
 #endif
         dst_y = p_virt_addr + framebuffer. y_offset;
         dst_u = p_virt_addr + framebuffer.cb_offset;
@@ -498,9 +551,6 @@ static int bm_jpegenc_encode_frame(AVCodecContext *avctx,
         }
         av_free(p_virt_addr);
 #else
-    #ifdef BOARD_FPGA
-        bm_jpu_devm_unmap(p_virt_addr, framebuffer.dma_buffer->size);
-    #else
         /* Flush cache to DMA buffer */
         ret = bm_mem_flush_device_mem(ctx->handle, framebuffer.dma_buffer);
         if (ret != BM_SUCCESS) {
@@ -515,54 +565,7 @@ static int bm_jpegenc_encode_frame(AVCodecContext *avctx,
                    "bm_mem_unmap_device_mem failed!\n");
             return AVERROR(ENOMEM);
         }
-    #endif
 #endif
-    } else { /* The input frames come from DMA memory defined by user */
-        int y_size, c_size, total_size;
-
-        if (format == AV_PIX_FMT_GRAY8) {
-            if (frame->data[4]==NULL) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame data!\n");
-                return AVERROR_EXTERNAL;
-            }
-            if (frame->linesize[4]<=0) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame linesize!\n");
-                return AVERROR_EXTERNAL;
-            }
-            y_size = frame->linesize[4] * frame->height;
-            c_size = 0;
-        } else {
-            if (frame->data[4]==NULL || frame->data[5]==NULL || frame->data[6]==NULL) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame data!\n");
-                return AVERROR_EXTERNAL;
-            }
-            if (frame->linesize[4]<=0 || frame->linesize[5]<=0 || frame->linesize[6]<=0) {
-                av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid frame linesize!\n");
-                return AVERROR_EXTERNAL;
-            }
-            y_size = frame->data[5] - frame->data[4];
-            c_size = frame->data[6] - frame->data[5];
-        }
-
-        total_size = y_size;
-        if (format != AV_PIX_FMT_GRAY8)
-            total_size += c_size*2;
-
-        wrapped_mem.u.device.device_addr = (unsigned long long)frame->data[4];
-        wrapped_mem.u.device.dmabuf_fd = 1;
-        wrapped_mem.size = total_size;
-        wrapped_mem.flags.u.mem_type = BM_MEM_TYPE_DEVICE;
-
-        framebuffer.y_stride    = frame->linesize[4];
-        if (format != AV_PIX_FMT_GRAY8)
-            framebuffer.cbcr_stride = frame->linesize[5];
-        else
-            framebuffer.cbcr_stride = 0;
-        framebuffer.y_offset    = 0;
-        framebuffer.cb_offset   = y_size;
-        framebuffer.cr_offset   = y_size + c_size;
-
-        framebuffer.dma_buffer = &wrapped_mem;
     }
 
     bs_buffer.avctx = avctx;
@@ -673,6 +676,12 @@ const FFCodec  ff_jpeg_bm_encoder = {
         AV_PIX_FMT_YUVJ422P,
         AV_PIX_FMT_YUVJ444P,
         AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_NV12,
+        AV_PIX_FMT_NV21,
+        AV_PIX_FMT_NV16,
+        AV_PIX_FMT_YUV420P,
+        AV_PIX_FMT_YUV422P,
+        AV_PIX_FMT_YUV444P,
         AV_PIX_FMT_NONE
     },
     .p.wrapper_name   = "bm"

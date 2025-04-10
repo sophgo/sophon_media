@@ -257,8 +257,8 @@ int main (int argc, char **argv) {
     caps = gst_caps_new_empty_simple ("image/jpeg");
     break;
   case CODEC_BIN:
-    caps = gst_caps_from_string("video/x-h264, stream-format=(string)byte-stream, alignment=(string)au; "
-                                "video/x-h265, stream-format=(string)byte-stream, alignment=(string)au; "
+    caps = gst_caps_from_string("video/x-h264; "
+                                "video/x-h265; "
                                 "image/jpeg;");
     break;
   default:

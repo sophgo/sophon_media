@@ -55,6 +55,9 @@ static const enum AVPixelFormat supported_sw_formats[] = {
     AV_PIX_FMT_GRAY8,
     AV_PIX_FMT_RGBP,
     AV_PIX_FMT_BGRP,
+    AV_PIX_FMT_NV16,
+    AV_PIX_FMT_YUV422P,
+    AV_PIX_FMT_YUV444P
 };
 
 static int bmvpu_malloc_device_byte_heap(AVHWDeviceContext *ctx, bm_handle_t bm_handle,

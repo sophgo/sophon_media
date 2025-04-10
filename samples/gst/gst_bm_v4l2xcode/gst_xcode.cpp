@@ -25,6 +25,8 @@ typedef struct _codec_param {
     int trans_type;
     int num_chn;
     gchar **outname;
+    gchar **width;
+    gchar **height;
 }codec_param;
 
 static GstPadProbeReturn realsink_on_buffer(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)  {
@@ -99,10 +101,12 @@ bus_call (GstBus G_GNUC_UNUSED *bus, GstMessage * msg, gpointer data)
 }
 
 // Function to add a codec branch to the tee
-static gboolean add_dec_enc_branch(GstElement *tee, const gchar *enc_name, GstElement *pipeline, gint *chn_id, gchar *out_name) {
-    GstElement *sink, *enc;
+static gboolean add_dec_enc_branch(GstElement *tee, const gchar *enc_name, GstElement *pipeline, gint *chn_id, gchar *out_name, gint width, gint height) {
+    GstElement *queue, *sink, *enc, *vpss;
+    GstPad *tee_src_pad, *queue_sink_pad;
 
     // Create elements for the new branch
+    vpss = gst_element_factory_make("bmvpss", NULL);
     enc = gst_element_factory_make(enc_name, NULL);
     sink = gst_element_factory_make("filesink", NULL);
     g_object_set(sink, "location", out_name, NULL);
@@ -113,21 +117,40 @@ static gboolean add_dec_enc_branch(GstElement *tee, const gchar *enc_name, GstEl
     if (strcmp(enc_name, "bmjpegenc"))
         g_object_set(G_OBJECT(enc), "gop", 50, "bps", 2000000, NULL);
 
-    if (!enc || !sink) {
+    if (!vpss || !enc || !sink) {
         g_printerr("Failed to create elements for the branch with codec.\n");
         return FALSE;
     }
+    GstCaps *caps = gst_caps_new_simple("video/x-raw",
+                                        "format", G_TYPE_STRING, "I420",
+                                        "width",  G_TYPE_INT, width,
+                                        "height", G_TYPE_INT, height,
+                                        NULL);
+
 
     // Add elements to the pipeline
-    gst_bin_add_many(GST_BIN(pipeline), enc, sink, NULL);
+    gst_bin_add_many(GST_BIN(pipeline), vpss, enc, sink, NULL);
+
+    if (!gst_element_link(tee, vpss)) {
+        g_printerr("Failed to link tee and vpss.\n");
+        return FALSE;
+    }
+
+    if (!gst_element_link_filtered(vpss, enc, caps)) {
+        g_printerr("Failed to link vpss and encoder with specified caps.\n");
+        gst_caps_unref(caps);
+        return FALSE;
+    }
+    gst_caps_unref(caps);
 
     // Link elements in the branch
-    if (!gst_element_link_many(tee, enc, sink, NULL)) {
+    if (!gst_element_link(enc, sink)) {
         g_printerr("Failed to link elements in the branch with codec.\n");
         return FALSE;
     }
 
     // Release the pads
+    gst_element_sync_state_with_parent(vpss);
     gst_element_sync_state_with_parent(enc);
     gst_element_sync_state_with_parent(sink);
     return TRUE;
@@ -144,7 +167,7 @@ void *multi_dec_enc (void *arg) {
     // Create the elements
     for (gint i = 0; i < num_chn; i++)
     {
-        g_print("In multi_dec_enc, in_name %s, trans_type %d, num_chn %d, out_name %s\n", param->name[i], param->trans_type, i, param->outname[i]);
+        g_print("In multi_dec_enc, in_name = %s, trans_type = %d, num_chn = %d, out_name = %s\n", param->name[i], param->trans_type, i, param->outname[i]);
     }
 
     GstElement *sources[MAX_PIPELINE];
@@ -194,7 +217,9 @@ void *multi_dec_enc (void *arg) {
     for (gint i = 0; i < num_chn; i++)
     {
         chn[i] = i;
-        if (!add_dec_enc_branch(sources[i], codec_name, pipelines[i], &chn[i], param->outname[i])) {
+        g_print("param->width[%d] = %d, param->height[%d] = %d \n", i, std::stoi(param->width[i]), i, std::stoi(param->height[i]));
+
+        if (!add_dec_enc_branch(sources[i], codec_name, pipelines[i], &chn[i], param->outname[i], std::stoi(param->width[i]), std::stoi(param->height[i]))) {
             g_printerr("Could not add decoder branch.\n");
             gst_object_unref(pipeline);
             return NULL;
@@ -294,6 +319,8 @@ int main(int argc, char *argv[]) {
     // Initialize GStreamer
     gchar **video_paths = NULL;
     gchar **out_paths = NULL;
+    gchar **out_width = NULL;
+    gchar **out_height = NULL;
     GOptionContext *ctx;
     GError *err = NULL;
     gint trans_type = 0, num_chnl = 0, is_enc = 0, disp = 0;
@@ -313,6 +340,10 @@ int main(int argc, char *argv[]) {
     GOptionEntry entries[] = {
         { "video_path", 'v', 0, G_OPTION_ARG_STRING_ARRAY, &video_paths,
             "The path of the video file.", "FILE" },
+        { "out_width", 'w', 0, G_OPTION_ARG_STRING_ARRAY, &out_width,
+            "The width of the output video.", "WIDTH" },
+        { "out_height", 'h', 0, G_OPTION_ARG_STRING_ARRAY, &out_height,
+            "The height of the output video.", "HEIGHT" },
         { "is_enc", 'e', 0, G_OPTION_ARG_INT, &is_enc,
             "if enc multi test set 1 or is dec multi test", "enc" },
         { "num_chl", 'n', 0, G_OPTION_ARG_INT, &num_chnl,
@@ -340,7 +371,7 @@ int main(int argc, char *argv[]) {
 
     int num_video_paths = g_strv_length(video_paths);
     int num_out_paths = g_strv_length(out_paths);
-    g_print("num_video_paths %d, num_out_paths %d, num_chnl = %d \n", num_video_paths, num_out_paths, num_chnl);
+    g_print("num_video_paths = %d, num_out_paths = %d, num_chnl = %d \n", num_video_paths, num_out_paths, num_chnl);
     if (num_chnl != num_video_paths || num_chnl != num_out_paths || num_video_paths != num_out_paths) {
         g_print("Error: The number of channels does not match the number of input or output paths.\n");
         exit(1);
@@ -363,10 +394,12 @@ int main(int argc, char *argv[]) {
     param.num_chn = num_chnl;
     param.trans_type = trans_type;
     param.outname = out_paths;
+    param.width = out_width;
+    param.height = out_height;
 
     for (gint i = 0; i < param.num_chn; i++)
     {
-        g_print("in_name %s, out_name %s\n", param.name[i], param.outname[i]);
+        g_print("i = %d, in_name = %s, out_name = %s, param.width = %d, param.height = %d\n", i, param.name[i], param.outname[i], std::stoi(param.width[i]), std::stoi(param.height[i]));
     }
 
     pthread_create(&codec_th, &attr, multi_dec_enc, &param);
