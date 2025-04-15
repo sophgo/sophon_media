@@ -389,6 +389,8 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
             set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-930.cmake)
         elseif("${GCC_VERSION}" STREQUAL "1131")
             set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-1131.cmake)
+        else()
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain.cmake)
         endif()
 
     elseif(${platform} STREQUAL "pcie")
@@ -452,6 +454,8 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
             set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-930.cmake)
         elseif("${GCC_VERSION}" STREQUAL "1131")
             set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-1131.cmake)
+        else()
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain.cmake)
         endif()
 
     #elseif(${platform} STREQUAL "pcie_mips64")
