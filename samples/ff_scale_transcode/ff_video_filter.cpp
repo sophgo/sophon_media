@@ -1,7 +1,7 @@
 #include "ff_video_filter.h"
 #include "bmlib_runtime.h"
 
-int initFilter(ffmpegFilterContext *filter, int src_width, int src_height, int dst_width, int dst_height, int src_pix_fmt, int fps, int sophon_idx){
+int initFilter(ffmpegFilterContext *filter, int src_width, int src_height, int dst_width, int dst_height, int src_pix_fmt, int fps, int sophon_idx, int zero_copy){
     char args[512]                = {};
     char str_out_desc[128]        = {};
     //AVBufferSinkParams *params    = NULL;
@@ -11,7 +11,7 @@ int initFilter(ffmpegFilterContext *filter, int src_width, int src_height, int d
     AVFilterInOut *filterInOutOut = NULL;
     enum AVPixelFormat pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE };
 
-    snprintf(str_out_desc,sizeof(str_out_desc),"scale_bm=%d:%d:sophon_idx=%d",dst_width,dst_height,sophon_idx);
+    snprintf(str_out_desc,sizeof(str_out_desc),"scale_bm=%d:%d:sophon_idx=%d:zero_copy=%d", dst_width, dst_height, sophon_idx, zero_copy);
 
     // Create video filter graph
     filter->filterGraph = avfilter_graph_alloc();

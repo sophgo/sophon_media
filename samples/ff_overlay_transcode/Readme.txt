@@ -1,5 +1,5 @@
 Usage:
-    test_ff_video_overlay [src_filename] [output_filename] [encode_pixel_format] [encoder_name] [height] [width] [frame_rate] [bitrate] [thread_num] [zero_copy] [sophon_idx]
+    test_ff_video_overlay [src_filename] [output_filename] [encoder_name] [zero_copy] [sophon_idx] [overlay_num] [overlay_filepath_1] [x] [y] [overlay_filepath_2] [x] [y]
 
     [src_filename]            input file name x.mp4 x.ts...
     [output_filename]         encode output file name x.mp4,x.ts...

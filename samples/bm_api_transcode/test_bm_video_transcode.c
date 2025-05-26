@@ -721,7 +721,7 @@ int main(int argc, char **argv)
     memset(&testConfigOption, 0, sizeof(BMTestConfig));
     parse_args(argc, argv, &testConfigOption);
     bmvpu_dec_set_logging_threshold(testConfigOption.log_level);
-    bmvpu_enc_set_logging_function(logging_fn);
+    bmvpu_enc_set_logging_function(bmvpu_enc_logging_fn);
 
     unsigned int chipid = 0;
     int ret = 0;

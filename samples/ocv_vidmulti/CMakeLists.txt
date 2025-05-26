@@ -56,6 +56,9 @@ SET(SRCS
 )
 
 add_executable(test_ocv_vidmulti EXCLUDE_FROM_ALL ${SRCS})
+if("${PLATFORM}" STREQUAL "soc")
+    target_compile_definitions(test_ocv_vidmulti PRIVATE USING_SOC=1)
+endif()
 if("${GCC_VERSION}" STREQUAL "930")
     set(EXTRA_LIB yuv bmlib bmjpeg bmvd bmvenc bmcv avutil avcodec avformat swscale swresample opencv_imgproc)
     target_link_libraries(test_ocv_vidmulti opencv_core opencv_imgcodecs opencv_videoio ${SYSTEM_LIB} ${EXTRA_LIB})

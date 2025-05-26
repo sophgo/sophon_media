@@ -25,6 +25,7 @@
 #define UNUSED(x) (void)(x)
 int g_thread_num   = 0;
 
+int g_imagequeue_nums = IMAGE_MATQUEUE_NUM;
 using namespace cv;
 using namespace std;
 
@@ -226,7 +227,7 @@ DWORD WINAPI videoLoadThread(void* arg){
             imageQueue_lock[index].unlock();
             count_load[index]++;
 
-            if (threadPara->imageQueue->size() >= IMAGE_MATQUEUE_NUM && is_stream)
+            if (threadPara->imageQueue->size() >= g_imagequeue_nums && is_stream)
             {
                 imageQueue_lock[index].lock();
                 toEncImage = threadPara->imageQueue->front();
@@ -237,7 +238,7 @@ DWORD WINAPI videoLoadThread(void* arg){
             }
 
             if(threadPara->startWrite){
-                while(threadPara->imageQueue->size() >= IMAGE_MATQUEUE_NUM){
+                while(threadPara->imageQueue->size() >= g_imagequeue_nums){
                     uwait(2);
                     if(exit_flag[index])
                         break;
@@ -693,12 +694,14 @@ void usage(char *argv_0){
     cout << "\t" << "              if roi_enable is 1, you should set null/Null in outputname and set roi_enable=1 in encodeparams." << endl;
     cout << "\t" << "<thread_num>: thread number you want to create, MAX thread_num is 32, default value is 0. " << endl;
     cout << "\t" << "<encodeparams>: gop=30:bitrate=800:gop_preset=2:mb_rc=1:delta_qp=3:min_qp=20:max_qp=40:roi_enable=1:enc_cmd_queue=1:push_stream=rtmp/rtsp." << endl;
+    cout << "\t" << "set env for display:" << "[export DISPLAY_FRAMERATE=0]  display only frames. " << endl;
+    cout << "\t" << "                    " << "[export DISPLAY_FRAMERATE=1]  display frame rate for each channel." << endl;
+    cout << "\t" << "set env for quesize:" << "[export IMAGEQUEUE_NUMS=2]    set queue max size is 2,default is 20. " << endl;
     cout << "\t" << "Tip: if there is only one optional parameter, thread_num takes precedence." << endl;
     cout << "\t" << "Tip: When the output is xxx.xx file, the new file name is xxx_threadnum.xx;  eg：when thread_num is 1:\n"
                     "                                     rtmp://172.28.141.136/live/room1——》 rtmp://172.28.141.136/live/room1_0 \n"
                     "                                     rtsp://172.28.141.136/test.ts——》 rtsp://172.28.141.136/test_0.ts"<< endl;
 }
-
 
 int main(int argc, char* argv[])
 {
@@ -714,6 +717,8 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    char *queue_nums = getenv("IMAGEQUEUE_NUMS");
+    if (queue_nums) g_imagequeue_nums = atoi(queue_nums);
 #ifdef USING_SOC
     if (argc == 7) {
         encodeParams = NULL;

@@ -306,7 +306,7 @@ static void test_video(const char *url)
   bmcv::print(frame, true);
 
   Mat m;
-  bmcv::toMAT(frame, m, false);
+  bmcv::toMAT(frame, m, true);
   imwrite("video_in.png", m);
 
   Rect rt0(0, 0, 1920, 1080);
@@ -381,13 +381,30 @@ static int bmimage_copyto_bmimage(bm_image in, bm_image out)
     int height = out.height;
     bm_handle_t handle = bm_image_get_handle(&in);
     int total_copy = 0;
+    bm_status_t ret;
 
     assert(width <= in.width);
     assert(height <= in.height);
-    assert(bm_image_get_device_mem(in, src_mem) == BM_SUCCESS);
-    assert(bm_image_get_device_mem(out, dst_mem) == BM_SUCCESS);
-    assert(bm_image_get_stride(in, src_stride) == BM_SUCCESS);
-    assert(bm_image_get_stride(out, dst_stride) == BM_SUCCESS);
+    ret = bm_image_get_device_mem(in, src_mem);
+    if (ret != BM_SUCCESS) {
+        printf("bm_image_get_device_mem failed, ret = %d.\n", ret);
+        exit(-1);
+    }
+    ret = bm_image_get_device_mem(out, dst_mem);
+    if (ret != BM_SUCCESS) {
+        printf("bm_image_get_device_mem failed, ret = %d.\n", ret);
+        exit(-1);
+    }
+    ret = bm_image_get_stride(in, src_stride);
+    if (ret != BM_SUCCESS) {
+        printf("bm_image_get_stride failed, ret = %d.\n", ret);
+        exit(-1);
+    }
+    ret = bm_image_get_stride(out, dst_stride);
+    if (ret != BM_SUCCESS) {
+        printf("bm_image_get_stride failed, ret = %d.\n", ret);
+        exit(-1);
+    }
 
     for (i = 0; i < plane_num; i++){
         int dst_offset = 0;

@@ -285,7 +285,7 @@ void *startOneInst(void *arg){
 
 static void usage(char *program_name)
 {
-    av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s [src_filename] [output_filename] [encode_pixel_format] [encoder_name] [height] [width] [frame_rate] [bitrate] [thread_num] [zero_copy] [sophon_idx]\n", program_name);
+    av_log(NULL, AV_LOG_ERROR, "Usage: \n\t%s [src_filename] [output_filename] [encoder_name] [zero_copy] [sophon_idx] [overlay_num] [overlay_filepath_1] [x] [y] [overlay_filepath_2] [x] [y]\n", program_name);
     av_log(NULL, AV_LOG_ERROR, "\t[src_filename]            input file name x.mp4 x.ts...\n");
     av_log(NULL, AV_LOG_ERROR, "\t[output_filename]         encode output file name x.mp4,x.ts...\n");
     av_log(NULL, AV_LOG_ERROR, "\t[encoder_name]            encode h264_bm,hevc_bm,h265_bm\n");

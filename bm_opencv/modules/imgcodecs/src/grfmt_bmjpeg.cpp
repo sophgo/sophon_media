@@ -456,6 +456,13 @@ void  BMJpegDecoder::close(int decode_status)
         jpeg_decoder = NULL;
         bm_jpu_dec_unload(BM_CARD_ID(m_device_id));
     }
+#else
+    if (jpeg_decoder && decode_status == DECODE_SUCCESS && (m_type == -1))
+    {
+        bm_jpu_jpeg_dec_close(jpeg_decoder);
+        jpeg_decoder = NULL;
+        bm_jpu_dec_unload(BM_CARD_ID(m_device_id));
+    }
 #endif
     // for Other
     if( m_state )
@@ -1228,6 +1235,8 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
 
         bm_memcpy_d2d(img.u->hid, dst_mem, 0, src_mem, info.y_offset, info.y_stride*info.actual_frame_height);
         bmcv::downloadMat(img);
+        // when fmt = gray, set m_type to -1, because we need to close decoder after decode
+        m_type = -1;
 #endif
     }
     return 0;

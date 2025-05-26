@@ -56,7 +56,9 @@ SET(SRCS
 )
 
 add_executable(test_ocv_video_xcode EXCLUDE_FROM_ALL ${SRCS})
-target_compile_definitions(test_ocv_video_xcode PRIVATE USING_SOC=1)
+if("${PLATFORM}" STREQUAL "soc")
+    target_compile_definitions(test_ocv_video_xcode PRIVATE USING_SOC=1)
+endif()
 if("${GCC_VERSION}" STREQUAL "930")
     set(EXTRA_LIB yuv bmlib bmjpeg bmvd bmvenc bmcv avutil avcodec avformat swscale swresample opencv_imgcodecs opencv_imgproc)
     target_link_libraries(test_ocv_video_xcode opencv_core opencv_videoio opencv_highgui ${SYSTEM_LIB} ${EXTRA_LIB})

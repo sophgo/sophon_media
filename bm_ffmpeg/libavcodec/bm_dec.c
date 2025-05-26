@@ -1420,6 +1420,11 @@ SEND_PKG:
                 if(ret > 0)
                     ret = 0;
 
+                if (ret == BM_ERR_VDEC_INVALID_CHNID) {
+                    free(bmframe);
+                    return AVERROR_EXTERNAL;
+                }
+
                 if (get_frame == 1) {
                     av_usleep(1000);
                     overtime_cnt++;
@@ -1475,6 +1480,10 @@ GET_FRAME:
         overtime_cnt = 0;
         get_frame = 1;
     }
+    else if(get_frame_state == BM_ERR_VDEC_INVALID_CHNID) {
+        free(bmframe);
+        return AVERROR_EXTERNAL;
+    }
     else {
         if(bmvpu_dec_get_status(handle) == BMDEC_STOP && bmctx->endof_flag == 2) {
             bmctx->endof_flag = 0;
@@ -1504,9 +1513,16 @@ GET_FRAME:
             av_usleep(1000);
             overtime_cnt += 1;
             if(overtime_cnt % bmctx->timeout == 0){
-                if(bmvpu_dec_get_status(handle) == BMDEC_STOP || overtime_cnt / bmctx->timeout > 30){
+                dec_state = bmvpu_dec_get_status(handle);
+                if(dec_state == BMDEC_STOP){
+                    av_log(avctx, AV_LOG_ERROR, "dec_decode fail. dec status:%d\n", dec_state);
+                    free(bmframe);
+                    ret = AVERROR_EOF;
+                    goto DEC_END;
+                }
+                else if(overtime_cnt / bmctx->timeout > 30){
                     av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame. free input buffer:%d dec status:%d\n",
-                        bmvpu_dec_get_all_empty_input_buf_cnt(handle), bmvpu_dec_get_status(handle));
+                        bmvpu_dec_get_all_empty_input_buf_cnt(handle), dec_state);
                     free(bmframe);
                     ret = AVERROR_EXTERNAL;
                     goto DEC_END;

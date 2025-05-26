@@ -241,7 +241,11 @@ void *startOneInst(void *arg){
             av_log(NULL, AV_LOG_WARNING, "encoder input frame must be %d bytes align, change target width from %d to %d\n", ENC_ALIGNMENT, width, width_align);
             width = width_align;
         }
-        initFilter(&filter, frame->width, frame->height, width, height, frame->format, frame_rate, sophon_idx);
+#ifdef BM_PCIE_MODE
+        initFilter(&filter, frame->width, frame->height, width, height, frame->format, frame_rate, sophon_idx, zero_copy);
+#else
+        initFilter(&filter, frame->width, frame->height, width, height, frame->format, frame_rate, sophon_idx, 0);
+#endif
  }
 
 #ifdef BM_PCIE_MODE
