@@ -30,14 +30,14 @@ enum
 
 static gboolean gst_bm_vpss_start (GstBaseTransform * trans);
 static gboolean gst_bm_vpss_stop (GstBaseTransform * trans);
-static GstCaps *gst_bmvpss_transform_caps(GstBaseTransform *trans,
+static GstCaps *gst_bm_vpss_transform_caps(GstBaseTransform *trans,
                                           GstPadDirection direction,
                                           GstCaps *caps, GstCaps *filter);
-static GstCaps *gst_bmvpss_fixate_caps(GstBaseTransform *trans,
+static GstCaps *gst_bm_vpss_fixate_caps(GstBaseTransform *trans,
                                        GstPadDirection direction,
                                        GstCaps *caps,
                                        GstCaps *othercaps);
-static gboolean gst_bmvpss_set_info(GstVideoFilter *filter,
+static gboolean gst_bm_vpss_set_info(GstVideoFilter *filter,
                                     GstCaps *incaps,
                                     GstVideoInfo *in_info,
                                     GstCaps *outcaps,
@@ -173,10 +173,10 @@ gst_bm_vpss_class_init (GstBmVPSSClass * klass)
   gobject_class->dispose = GST_DEBUG_FUNCPTR(gst_bm_vpss_dispose);
   base_transform_class->start = GST_DEBUG_FUNCPTR(gst_bm_vpss_start);
   base_transform_class->stop = GST_DEBUG_FUNCPTR(gst_bm_vpss_stop);
-  base_transform_class->transform_caps = GST_DEBUG_FUNCPTR(gst_bmvpss_transform_caps);
-  base_transform_class->fixate_caps = GST_DEBUG_FUNCPTR(gst_bmvpss_fixate_caps);
+  base_transform_class->transform_caps = GST_DEBUG_FUNCPTR(gst_bm_vpss_transform_caps);
+  base_transform_class->fixate_caps = GST_DEBUG_FUNCPTR(gst_bm_vpss_fixate_caps);
 
-  video_filter_class->set_info = GST_DEBUG_FUNCPTR(gst_bmvpss_set_info);
+  video_filter_class->set_info = GST_DEBUG_FUNCPTR(gst_bm_vpss_set_info);
   video_filter_class->transform_frame = GST_DEBUG_FUNCPTR(gst_bm_vpss_transform_frame);
 
   g_object_class_install_property (gobject_class, PROP_LEFT,
@@ -296,7 +296,7 @@ gst_bm_vpss_stop (GstBaseTransform * trans)
 
 
 static GstCaps *
-gst_bmvpss_transform_caps(GstBaseTransform *trans,
+gst_bm_vpss_transform_caps(GstBaseTransform *trans,
                           GstPadDirection direction,
                           GstCaps *caps, GstCaps *filter)
 {
@@ -330,13 +330,13 @@ gst_bmvpss_transform_caps(GstBaseTransform *trans,
 }
 
 static GstCaps *
-gst_bmvpss_fixate_caps(GstBaseTransform *trans,
+gst_bm_vpss_fixate_caps(GstBaseTransform *trans,
                        GstPadDirection direction,
                        GstCaps *caps,
                        GstCaps *othercaps)
 {
   GstBmVPSS *self = GST_BM_VPSS(trans);
-  GST_DEBUG_OBJECT(self, "gst_bmvpss_fixate_caps begin, direction = %s",
+  GST_DEBUG_OBJECT(self, "gst_bm_vpss_fixate_caps begin, direction = %s",
                    (direction == GST_PAD_SRC) ? "SRC" : "SINK");
 
   // For src pad, just return the proposed caps
@@ -389,6 +389,22 @@ gst_bmvpss_fixate_caps(GstBaseTransform *trans,
     GST_DEBUG_OBJECT(self, "Format already fixed: %s", g_value_get_string(fmt_val));
   }
 
+  // Fixate framerate
+  const GValue *fps_val = gst_structure_get_value(other_s, "framerate");
+  if (!fps_val || !GST_VALUE_HOLDS_FRACTION(fps_val) || !gst_value_is_fixed(fps_val)) {
+    gint ref_fps_n = 0, ref_fps_d = 1;
+    if (gst_structure_get_fraction(ref_s, "framerate", &ref_fps_n, &ref_fps_d) && ref_fps_n > 0) {
+      GST_DEBUG_OBJECT(self, "Fixating framerate to reference: %d/%d", ref_fps_n, ref_fps_d);
+      gst_structure_fixate_field_nearest_fraction(other_s, "framerate", ref_fps_n, ref_fps_d);
+    } else {
+      // fallback to 25/1
+      GST_DEBUG_OBJECT(self, "No valid framerate found, defaulting to 25/1");
+      gst_structure_fixate_field_nearest_fraction(other_s, "framerate", 25, 1);
+    }
+  } else {
+    GST_DEBUG_OBJECT(self, "Framerate already fixed: %s", g_value_get_string(fps_val));
+  }
+
   gchar *caps_str = gst_caps_to_string(result);
   GST_DEBUG_OBJECT(self, "Final fixated src caps: %s", caps_str);
   g_free(caps_str);
@@ -397,7 +413,7 @@ gst_bmvpss_fixate_caps(GstBaseTransform *trans,
 }
 
 static gboolean
-gst_bmvpss_set_info(GstVideoFilter *filter,
+gst_bm_vpss_set_info(GstVideoFilter *filter,
                     GstCaps *incaps,
                     GstVideoInfo *in_info,
                     GstCaps *outcaps,
@@ -650,8 +666,8 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter,
     char dst_filename[50];
     sprintf(src_filename, "src_%d.bin", count);
     sprintf(dst_filename, "dst_%d.bin", count);
-    dump_bmimage(src, src_filename);
-    dump_bmimage(dst, dst_filename);
+    bm_write_bin(*src, src_filename);
+    bm_write_bin(*dst, dst_filename);
     GST_DEBUG_OBJECT(self, "count = %d", count);
     count++;
   }

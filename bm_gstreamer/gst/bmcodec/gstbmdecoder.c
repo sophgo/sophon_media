@@ -1065,6 +1065,7 @@ static void gst_bm_decoder_process_output (GstVideoDecoder *decoder)
     GST_ERROR_OBJECT (self, "create gst buffer failed");
     goto error;
   }
+  out_frame->pts = pframe->pts;
 
   gst_buffer_append_memory (buffer, mem_import);
   // TODO: add metadata
