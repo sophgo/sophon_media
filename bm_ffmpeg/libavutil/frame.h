@@ -214,7 +214,7 @@ enum AVFrameSideDataType {
      * Ambient viewing environment metadata, as defined by H.274.
      */
     AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT,
-	AV_FRAME_DATA_BM_ROI_INFO,
+    AV_FRAME_DATA_BM_ROI_INFO,
 };
 
 enum AVActiveFormatDescription {

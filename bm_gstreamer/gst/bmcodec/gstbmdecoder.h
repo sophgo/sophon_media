@@ -62,13 +62,11 @@ struct _GstBmDecoder
 
   gboolean interlaced;
   gboolean flushing;
-  gboolean draining;
-  gboolean eos_send;
-  gboolean eos_send_cnt;
+  gboolean flushed;
+  gboolean closing;
   /* flow return from pad task */
   GstFlowReturn task_ret;
 
-  guint pending_frames;
   guint frame_mode;
   guint extraFrameBufferNum;
   GList *frames;
@@ -82,6 +80,8 @@ struct _GstBmDecoder
   GstVideoInfo coded_info;
 
   GstBmDecoderOutputType output_type;
+
+  guint system_frame_number;
 };
 
 typedef struct _GstBmDecoderClass
@@ -117,20 +117,6 @@ typedef struct _GstBmDecoderFrame
 
 void gst_bm_decoder_register (GstPlugin * plugin, guint soc_idx, GstCaps * sink_caps, GstCaps * src_caps);
 
-GstBmDecoder * gst_bm_decoder_new (GObject * object);
-
-gboolean gst_bm_decoder_is_configured (GstBmDecoder * decoder);
-
-gboolean gst_bm_decoder_configure (GstBmDecoder * decoder, GstVideoInfo * info,
-    gint coded_width, gint coded_height, guint coded_bitdepth);
-
-gboolean gst_bm_decoder_decode_picture (GstBmDecoder * decoder);
-
-gboolean gst_bm_decoder_get_output (GstBmDecoder * decoder, GstBmDecoderFrame * frame);
-
-const gchar * gst_bm_video_codec_to_string (BmVideoCodecID codec_id);
-
-gboolean gst_bm_decoder_check_device_caps (BmVideoCodecID codec_id, GstCaps ** sink_template, GstCaps ** src_template);
 
 G_END_DECLS
 

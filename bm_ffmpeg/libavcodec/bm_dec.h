@@ -115,9 +115,11 @@ typedef struct _BMDecContext{
     int use_gst_flag;
     int core_idx;
     int first_frame_get;
-    int pts_offset;
+    int dts_offset;
+    int last_dts;
     int dec_cmd_queue;
     int timeout;
+    int pts_calibrate;
 } BMDecContext;
 
 #ifdef __cplusplus

@@ -7,12 +7,16 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../bm_ffmpeg)
 
 # libbmcv
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/include)
-if("${GCC_VERSION}" STREQUAL "930")
-    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib930/${PLATFORM})
-elseif("${GCC_VERSION}" STREQUAL "1131")
-    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib1131/${PLATFORM})
-else()
+if("${PLATFORM}" STREQUAL "pcie" OR "${PLATFORM}" STREQUAL "pcie_arm64")
     link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+elseif("${PLATFORM}" STREQUAL "soc")
+    if("${GCC_VERSION}" STREQUAL "930")
+        link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib930/${PLATFORM})
+    elseif("${GCC_VERSION}" STREQUAL "1131")
+        link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib1131/${PLATFORM})
+    else()
+        link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../libsophav/3rdparty/libbmcv/lib/${PLATFORM})
+    endif()
 endif()
 
 #jpeg
@@ -37,12 +41,12 @@ include_directories(${CMAKE_INSTALL_PREFIX}/ffmpeg/usr/local/include)
 link_directories(${CMAKE_INSTALL_PREFIX}/ffmpeg/usr/local/lib)
 
 # opencv
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../buildit/release/opencv/lib)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../buildit/release/opencv/include/opencv4)
+link_directories(${CMAKE_BINARY_DIR}/release/opencv/lib)
+include_directories(${CMAKE_BINARY_DIR}/release/opencv/include/opencv4)
 
 # libyuv
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../buildit/libsophav/libyuv/lib)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../buildit/libsophav/libyuv/include)
+link_directories(${CMAKE_BINARY_DIR}/libsophav/libyuv/lib)
+include_directories(${CMAKE_BINARY_DIR}/libsophav/libyuv/include)
 
 
 set(SYSTEM_LIB pthread stdc++)
@@ -52,6 +56,9 @@ SET(SRCS
 )
 
 add_executable(test_ocv_vidmulti EXCLUDE_FROM_ALL ${SRCS})
+if("${PLATFORM}" STREQUAL "soc")
+    target_compile_definitions(test_ocv_vidmulti PRIVATE USING_SOC=1)
+endif()
 if("${GCC_VERSION}" STREQUAL "930")
     set(EXTRA_LIB yuv bmlib bmjpeg bmvd bmvenc bmcv avutil avcodec avformat swscale swresample opencv_imgproc)
     target_link_libraries(test_ocv_vidmulti opencv_core opencv_imgcodecs opencv_videoio ${SYSTEM_LIB} ${EXTRA_LIB})
@@ -61,3 +68,4 @@ elseif("${GCC_VERSION}" STREQUAL "1131")
 else()
     target_link_libraries(test_ocv_vidmulti opencv_core opencv_imgcodecs opencv_videoio ${SYSTEM_LIB})
 endif()
+add_dependencies(test_ocv_vidmulti bm_opencv)

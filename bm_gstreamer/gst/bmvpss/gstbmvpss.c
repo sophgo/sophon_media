@@ -5,12 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "gstbmvpss.h"
-#include "bmlib_runtime.h"
 #include "gstbmallocator.h"
 #include <gst/base/gstbasetransform.h>
 #include <gst/allocators/gstdmabuf.h>
-
-#include "bmcv_api_ext_c.h"
 
 GST_DEBUG_CATEGORY (gst_bm_vpss_debug);
 #define GST_CAT_DEFAULT gst_bm_vpss_debug
@@ -33,11 +30,23 @@ enum
 
 static gboolean gst_bm_vpss_start (GstBaseTransform * trans);
 static gboolean gst_bm_vpss_stop (GstBaseTransform * trans);
-static GstCaps *gst_bmvpss_transform_caps(GstBaseTransform *trans,
+static GstCaps *gst_bm_vpss_transform_caps(GstBaseTransform *trans,
                                           GstPadDirection direction,
                                           GstCaps *caps, GstCaps *filter);
+static GstCaps *gst_bm_vpss_fixate_caps(GstBaseTransform *trans,
+                                       GstPadDirection direction,
+                                       GstCaps *caps,
+                                       GstCaps *othercaps);
+static gboolean gst_bm_vpss_set_info(GstVideoFilter *filter,
+                                    GstCaps *incaps,
+                                    GstVideoInfo *in_info,
+                                    GstCaps *outcaps,
+                                    GstVideoInfo *out_info);
+
 static GstFlowReturn gst_bm_vpss_transform_frame(GstVideoFilter *filter,
-    GstVideoFrame *inframe, GstVideoFrame *outframe);
+                                                 GstVideoFrame *inframe,
+                                                 GstVideoFrame *outframe);
+static void gst_bm_vpss_dispose(GObject *object);
 
 static int map_gstformat_to_bmformat(GstVideoFormat gst_format);
 // static GstVideoFormat map_bmformat_to_gstformat(int bm_format);
@@ -161,11 +170,13 @@ gst_bm_vpss_class_init (GstBmVPSSClass * klass)
 
   gobject_class->set_property = GST_DEBUG_FUNCPTR(gst_bm_vpss_set_property);
   gobject_class->get_property = GST_DEBUG_FUNCPTR(gst_bm_vpss_get_property);
-
+  gobject_class->dispose = GST_DEBUG_FUNCPTR(gst_bm_vpss_dispose);
   base_transform_class->start = GST_DEBUG_FUNCPTR(gst_bm_vpss_start);
   base_transform_class->stop = GST_DEBUG_FUNCPTR(gst_bm_vpss_stop);
-  base_transform_class->transform_caps = GST_DEBUG_FUNCPTR(gst_bmvpss_transform_caps);
+  base_transform_class->transform_caps = GST_DEBUG_FUNCPTR(gst_bm_vpss_transform_caps);
+  base_transform_class->fixate_caps = GST_DEBUG_FUNCPTR(gst_bm_vpss_fixate_caps);
 
+  video_filter_class->set_info = GST_DEBUG_FUNCPTR(gst_bm_vpss_set_info);
   video_filter_class->transform_frame = GST_DEBUG_FUNCPTR(gst_bm_vpss_transform_frame);
 
   g_object_class_install_property (gobject_class, PROP_LEFT,
@@ -235,12 +246,26 @@ static void
 gst_bm_vpss_init(GstBmVPSS *self)
 {
   /* initialization logic */
-  self->allocator = gst_bm_allocator_new();
+  gint ret = bm_dev_request(&self->bm_handle, 0);
+  if (ret != BM_SUCCESS) {
+    GST_ERROR_OBJECT(self, "Failed to request device");
+  }
   self->crop_enable = FALSE;
   self->padding_enable = FALSE;
   self->padding_if_memset = 0;
   GST_DEBUG_OBJECT (self, "bmvpss initial");
 }
+
+static void
+gst_bm_vpss_dispose(GObject *object) {
+  /* free bm_handle */
+  GstBmVPSS *self = GST_BM_VPSS (object);
+  if (self->bm_handle) {
+    bm_dev_free(self->bm_handle);
+  }
+  GST_DEBUG_OBJECT (self, "bmvpss dispose");
+}
+
 
 static void
 gst_bm_vpss_subinstance_init(GTypeInstance G_GNUC_UNUSED *instance,
@@ -271,7 +296,7 @@ gst_bm_vpss_stop (GstBaseTransform * trans)
 
 
 static GstCaps *
-gst_bmvpss_transform_caps(GstBaseTransform *trans,
+gst_bm_vpss_transform_caps(GstBaseTransform *trans,
                           GstPadDirection direction,
                           GstCaps *caps, GstCaps *filter)
 {
@@ -279,24 +304,20 @@ gst_bmvpss_transform_caps(GstBaseTransform *trans,
   GstCaps *ret = NULL;
   GstBmVPSS *self = GST_BM_VPSS(trans);
 
-  if (direction == GST_PAD_SRC) {
-    // GstPad *sinkpad = gst_element_get_static_pad(GST_ELEMENT(trans), "sink");
+  if (direction == GST_PAD_SRC) {  // Get sink pad (input)
     GstPad *sinkpad = GST_BASE_TRANSFORM_SINK_PAD(trans);
-    if (sinkpad) {
+    if (sinkpad) {  // Query upstream caps from peer
       GstCaps *upstream_caps = gst_pad_peer_query_caps(sinkpad, filter);
-      // gst_object_unref(sinkpad);
       if (upstream_caps) {
         ret = gst_caps_copy(upstream_caps);
         gst_caps_unref(upstream_caps);
         GST_DEBUG_OBJECT(self, "sinkpad caps: %s", gst_caps_to_string(ret));
       }
     }
-  } else if (direction == GST_PAD_SINK) {
-    // GstPad *srcpad = gst_element_get_static_pad(GST_ELEMENT(trans), "src");
+  } else if (direction == GST_PAD_SINK) {  // Get src pad (output)
     GstPad *srcpad = GST_BASE_TRANSFORM_SRC_PAD(trans);
-    if (srcpad) {
+    if (srcpad) {  // Query downstream caps from peer
       GstCaps *downstream_caps = gst_pad_peer_query_caps(srcpad, filter);
-      // gst_object_unref(srcpad);
       if (downstream_caps) {
         ret = gst_caps_copy(downstream_caps);
         gst_caps_unref(downstream_caps);
@@ -308,16 +329,123 @@ gst_bmvpss_transform_caps(GstBaseTransform *trans,
   return ret;
 }
 
+static GstCaps *
+gst_bm_vpss_fixate_caps(GstBaseTransform *trans,
+                       GstPadDirection direction,
+                       GstCaps *caps,
+                       GstCaps *othercaps)
+{
+  GstBmVPSS *self = GST_BM_VPSS(trans);
+  GST_DEBUG_OBJECT(self, "gst_bm_vpss_fixate_caps begin, direction = %s",
+                   (direction == GST_PAD_SRC) ? "SRC" : "SINK");
+
+  // For src pad, just return the proposed caps
+  if (direction == GST_PAD_SRC) {
+    GST_DEBUG_OBJECT(self, "SRC direction: returning othercaps without change");
+    return gst_caps_ref(othercaps);
+  }
+
+  // If caps are already fixed, return as-is
+  if (gst_caps_is_fixed(othercaps)) {
+    GST_DEBUG_OBJECT(self, "SINK direction: othercaps already fixed, returning as-is");
+    return gst_caps_ref(othercaps);
+  }
+
+  GstCaps *result = gst_caps_copy(othercaps);
+  GstStructure *other_s = gst_caps_get_structure(result, 0);
+  const GstStructure *ref_s = gst_caps_get_structure(caps, 0);
+
+  gint fixed_width = 0, fixed_height = 0;
+  gboolean has_fixed_width = gst_structure_get_int(other_s, "width", &fixed_width);
+  gboolean has_fixed_height = gst_structure_get_int(other_s, "height", &fixed_height);
+
+  if (has_fixed_width && has_fixed_height) {
+    GST_DEBUG_OBJECT(self, "Width and height already fixed: %dx%d", fixed_width, fixed_height);
+  } else {
+    gint ref_width = 0, ref_height = 0;
+    gst_structure_get_int(ref_s, "width", &ref_width);
+    gst_structure_get_int(ref_s, "height", &ref_height);
+
+    if (!has_fixed_width && ref_width > 0) {
+      gst_structure_fixate_field_nearest_int(other_s, "width", ref_width);
+      GST_DEBUG_OBJECT(self, "Fixated width to nearest: %d", ref_width);
+    }
+
+    if (!has_fixed_height && ref_height > 0) {
+      gst_structure_fixate_field_nearest_int(other_s, "height", ref_height);
+      GST_DEBUG_OBJECT(self, "Fixated height to nearest: %d", ref_height);
+    }
+  }
+
+  // Fixate format to I420 if not specified or not fixed
+  const GValue *fmt_val = gst_structure_get_value(other_s, "format");
+  if (!fmt_val) {
+    gst_structure_set(other_s, "format", G_TYPE_STRING, "I420", NULL);
+    GST_DEBUG_OBJECT(self, "Format not present, set default format to I420");
+  } else if (!G_VALUE_HOLDS_STRING(fmt_val)) {
+    gst_structure_fixate_field_string(other_s, "format", "I420");
+    GST_DEBUG_OBJECT(self, "Format is a list or range, fixated to I420");
+  } else {
+    GST_DEBUG_OBJECT(self, "Format already fixed: %s", g_value_get_string(fmt_val));
+  }
+
+  // Fixate framerate
+  const GValue *fps_val = gst_structure_get_value(other_s, "framerate");
+  if (!fps_val || !GST_VALUE_HOLDS_FRACTION(fps_val) || !gst_value_is_fixed(fps_val)) {
+    gint ref_fps_n = 0, ref_fps_d = 1;
+    if (gst_structure_get_fraction(ref_s, "framerate", &ref_fps_n, &ref_fps_d) && ref_fps_n > 0) {
+      GST_DEBUG_OBJECT(self, "Fixating framerate to reference: %d/%d", ref_fps_n, ref_fps_d);
+      gst_structure_fixate_field_nearest_fraction(other_s, "framerate", ref_fps_n, ref_fps_d);
+    } else {
+      // fallback to 25/1
+      GST_DEBUG_OBJECT(self, "No valid framerate found, defaulting to 25/1");
+      gst_structure_fixate_field_nearest_fraction(other_s, "framerate", 25, 1);
+    }
+  } else {
+    GST_DEBUG_OBJECT(self, "Framerate already fixed: %s", g_value_get_string(fps_val));
+  }
+
+  gchar *caps_str = gst_caps_to_string(result);
+  GST_DEBUG_OBJECT(self, "Final fixated src caps: %s", caps_str);
+  g_free(caps_str);
+
+  return result;
+}
+
+static gboolean
+gst_bm_vpss_set_info(GstVideoFilter *filter,
+                    GstCaps *incaps,
+                    GstVideoInfo *in_info,
+                    GstCaps *outcaps,
+                    GstVideoInfo *out_info)
+{
+  GstBmVPSS *self = GST_BM_VPSS(filter);
+
+  self->in_info = *in_info;
+  self->out_info = *out_info;
+
+  GST_DEBUG_OBJECT(self,
+                   "set_info: input format=%s %dx%d, output format=%s %dx%d",
+                   gst_video_format_to_string(in_info->finfo->format),
+                   in_info->width,
+                   in_info->height,
+                   gst_video_format_to_string(out_info->finfo->format),
+                   out_info->width,
+                   out_info->height);
+
+  return TRUE;
+}
+
 static GstFlowReturn
-gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
-    GstVideoFrame * outframe)
+gst_bm_vpss_transform_frame (GstVideoFilter * filter,
+                             GstVideoFrame * inframe,
+                             GstVideoFrame * outframe)
 {
   GstFlowReturn ret = GST_FLOW_OK;
   bm_status_t bm_ret = 0;
   GstBmVPSS *self = GST_BM_VPSS (filter);
 
-  bm_handle_t bm_handle = NULL;
-  bm_dev_request(&bm_handle, 0);
+  bm_handle_t bm_handle = self->bm_handle;
 
   bm_image *src    = NULL;
   bm_image *dst   = NULL;
@@ -363,7 +491,8 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
     in_stride[i] = GST_VIDEO_FRAME_PLANE_STRIDE(inframe, i);
   }
 
-  bm_image_create(bm_handle, in_height, in_width, bmInFormat, DATA_TYPE_EXT_1N_BYTE, src, in_stride);
+  bm_image_create(
+    bm_handle, in_height, in_width, bmInFormat, DATA_TYPE_EXT_1N_BYTE, src, in_stride);
   bm_image_create(bm_handle, out_height, out_width, bmOutFormat, DATA_TYPE_EXT_1N_BYTE, dst, NULL);
 
   if (g_type_is_a(G_OBJECT_TYPE(inmem->allocator), GST_TYPE_BM_ALLOCATOR)) {
@@ -503,7 +632,13 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
         .padding_b     = self->padding_b,
         .if_memset     = self->padding_if_memset
     };
-    bm_ret = bmcv_image_vpp_convert_padding(bm_handle, 1, *src, dst, &padding_attr, &crop_rect, BMCV_INTER_LINEAR);
+    bm_ret = bmcv_image_vpp_convert_padding(bm_handle,
+                                            1,
+                                            *src,
+                                            dst,
+                                            &padding_attr,
+                                            &crop_rect,
+                                            BMCV_INTER_LINEAR);
   } else {
     bm_ret = bmcv_image_vpp_convert(bm_handle, 1, *src, dst, &crop_rect, BMCV_INTER_LINEAR);
   }
@@ -531,8 +666,8 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
     char dst_filename[50];
     sprintf(src_filename, "src_%d.bin", count);
     sprintf(dst_filename, "dst_%d.bin", count);
-    dump_bmimage(src, src_filename);
-    dump_bmimage(dst, dst_filename);
+    bm_write_bin(*src, src_filename);
+    bm_write_bin(*dst, dst_filename);
     GST_DEBUG_OBJECT(self, "count = %d", count);
     count++;
   }
@@ -543,7 +678,6 @@ error:
   bm_image_destroy(dst);
   free(src);
   free(dst);
-  bm_dev_free(bm_handle);
 
   return ret;
 }

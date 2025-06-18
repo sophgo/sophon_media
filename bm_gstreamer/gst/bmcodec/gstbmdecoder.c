@@ -11,12 +11,9 @@ GST_DEBUG_CATEGORY (gst_bm_decoder_debug);
 #define DEFAULT_PROP_EX_BUF 10
 #define DEFAULT_PROP_BS_MODE 1    /* Original */
 
-// static int count = 0;  // for debug
-
 static void gst_bm_decoder_process_output (GstVideoDecoder *decoder);
 
-static void gst_bm_decoder_reset (GstBmDecoder * self, gboolean drain, gboolean final);
-static void gst_bm_decoder_dispose (GObject * object);
+static void gst_bm_decoder_reset (GstBmDecoder * self, gboolean flush);
 
 static gboolean gst_bm_decoder_open (GstVideoDecoder * decoder);
 static gboolean gst_bm_decoder_close (GstVideoDecoder * decoder);
@@ -37,7 +34,6 @@ G_DEFINE_TYPE (GstBmDecoder, gst_bm_decoder, GST_TYPE_VIDEO_DECODER);
     (gst_pad_get_task_state ((decoder)->srcpad) == GST_TASK_STARTED)
 
 #define GST_BM_DEC_MUTEX(decoder) (&GST_BM_DECODER (decoder)->mutex)
-
 #define GST_BM_DEC_LOCK(decoder) \
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder); \
   g_mutex_lock (GST_BM_DEC_MUTEX (decoder)); \
@@ -48,9 +44,8 @@ G_DEFINE_TYPE (GstBmDecoder, gst_bm_decoder, GST_TYPE_VIDEO_DECODER);
 
 struct BmFrameCtx
 {
-  void *handle;
+  GstBmDecoder *self;
   BMVidFrame frame;
-  gint system_num;
 };
 
 struct BmJpuFrameCtx
@@ -262,21 +257,32 @@ static gboolean gst_bm_decoder_set_format(GstVideoDecoder *decoder, GstVideoCode
     if (gst_caps_is_strictly_equal (self->input_state->caps, state->caps))
       return TRUE;
     if(self->codec_id != BmVideoCodecID_JPEG) {
-      gst_bm_decoder_reset (self, FALSE, FALSE);
+      gst_bm_decoder_reset (self, FALSE);
     }
+    gst_video_codec_state_unref(self->input_state);
     self->input_state = NULL;
   }
   self->input_state = gst_video_codec_state_ref (state);
-	return TRUE;
+return TRUE;
 }
 
 static gboolean
 gst_bm_decoder_flush (GstVideoDecoder * decoder)
 {
   GstBmDecoder *self = GST_BM_DECODER (decoder);
+  GST_DEBUG_OBJECT (self, "flushing");
 
-  GST_DEBUG_OBJECT (decoder, "flushing");
-  gst_bm_decoder_reset (self, FALSE, FALSE);
+  if(self->handle){
+    GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+    self->flushing = TRUE;
+    bmvpu_dec_flush(self->handle);
+    while (bmvpu_dec_get_status (self->handle) != BMDEC_STOP) {
+          GST_DEBUG_OBJECT (self, "bmvpu get status loop");
+          g_usleep (2000);
+    }
+    self->flushed = TRUE;
+    GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+  }
   return TRUE;
 }
 
@@ -284,18 +290,59 @@ static GstFlowReturn
 gst_bm_decoder_finish (GstVideoDecoder * decoder)
 {
   GstBmDecoder *self = GST_BM_DECODER (decoder);
+  GST_DEBUG_OBJECT (self, "finishing");
+  gst_bm_decoder_flush(decoder);
 
-  GST_DEBUG_OBJECT (decoder, "finishing");
-  gst_bm_decoder_reset (self, TRUE, FALSE);
   return GST_FLOW_OK;
+}
+
+static GstFlowReturn
+gst_bm_decoder_drain (GstVideoDecoder * decoder)
+{
+  GstBmDecoder *self = GST_BM_DECODER (decoder);
+  GST_DEBUG_OBJECT (self, "draining");
+
+  return GST_FLOW_OK;
+}
+
+static GstStateChangeReturn
+gst_bm_dec_change_state (GstElement * element, GstStateChange transition)
+{
+  GstVideoDecoder *decoder = GST_VIDEO_DECODER (element);
+  GstBmDecoder *self = GST_BM_DECODER (decoder);
+  GstStateChangeReturn ret;
+
+  GST_DEBUG_OBJECT (self, "State change: transition=%d\n", transition);
+
+  switch (transition) {
+    case GST_STATE_CHANGE_PAUSED_TO_READY:
+      GST_DEBUG_OBJECT (self, "Resetting decoder in PAUSED_TO_READY transition\n");
+
+    //  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+      gst_bm_decoder_flush(decoder);
+      gst_bm_decoder_reset(self, TRUE);
+    //  GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+      break;
+
+    default:
+      break;
+  }
+
+  ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+
+  if (ret != GST_STATE_CHANGE_SUCCESS) {
+    GST_ERROR_OBJECT (self, "Parent class state change failed: %d", ret);
+    return ret;
+  }
+
+  return ret;
 }
 
 static void gst_bm_decoder_class_init (GstBmDecoderClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstVideoDecoderClass *video_decoder_class = GST_VIDEO_DECODER_CLASS (klass);
-
-  gobject_class->dispose = GST_DEBUG_FUNCPTR (gst_bm_decoder_dispose);
+  GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
 
   video_decoder_class->open = GST_DEBUG_FUNCPTR (gst_bm_decoder_open);
   video_decoder_class->close = GST_DEBUG_FUNCPTR (gst_bm_decoder_close);
@@ -322,6 +369,8 @@ static void gst_bm_decoder_class_init (GstBmDecoderClass * klass)
           "h26x bs mode (1 = original)",
           0, G_MAXINT, DEFAULT_PROP_BS_MODE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  element_class->change_state = GST_DEBUG_FUNCPTR (gst_bm_dec_change_state);
 }
 
 static void gst_bm_decoder_subclass_init (gpointer g_class, gpointer data)
@@ -355,18 +404,12 @@ static void gst_bm_decoder_init (GstBmDecoder * self)
   self->allocator = gst_bm_allocator_new ();
   self->extraFrameBufferNum =  DEFAULT_PROP_EX_BUF;
   self->frame_mode = DEFAULT_PROP_BS_MODE;
+  self->system_frame_number = 0;
 }
 
 static void gst_bm_decoder_subinstance_init (GTypeInstance G_GNUC_UNUSED * instance, gpointer G_GNUC_UNUSED g_class)
 {
   // TODO: do init
-}
-
-static void gst_bm_decoder_dispose (GObject * object)
-{
-  GstBmDecoder *self = GST_BM_DECODER (object);
-  gst_bm_decoder_reset (self, TRUE, FALSE);
-  G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
 static gboolean gst_bm_decoder_open (GstVideoDecoder * decoder)
@@ -375,6 +418,9 @@ static gboolean gst_bm_decoder_open (GstVideoDecoder * decoder)
 
   GST_DEBUG_OBJECT (self, "opening decoder");
   gst_video_info_init (&self->info);
+  self->closing = 0;
+  self->flushed=0;
+  self->flushing=0;
   g_mutex_init (&self->mutex);
 
   return TRUE;
@@ -388,11 +434,6 @@ static gboolean gst_bm_decoder_close (GstVideoDecoder * decoder)
 
   if (self->codec_id == BmVideoCodecID_H264 || self->codec_id == BmVideoCodecID_HEVC) {
       if (self->handle) {
-        bmvpu_dec_flush (self->handle);
-        while (bmvpu_dec_get_status (self->handle) != BMDEC_STOP) {
-          GST_DEBUG_OBJECT (self, "bmvpu get status loop");
-          g_usleep (2000);
-        }
         bmvpu_dec_delete (self->handle);
         self->handle = NULL;
       }
@@ -415,7 +456,8 @@ static gboolean gst_bm_decoder_close (GstVideoDecoder * decoder)
     self->allocator = NULL;
   }
 
-   g_mutex_clear (&self->mutex);
+  self->closing = 1;
+  g_mutex_clear (&self->mutex);
 
   return TRUE;
 }
@@ -592,7 +634,6 @@ static GstFlowReturn gst_bm_decoder_handle_frame (GstVideoDecoder * decoder, Gst
 
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
   if (self->handle != NULL) {
-    GST_DEBUG_OBJECT (self, "send stream in %d \n", frame->system_frame_number);
     gint time_out_cnt = 1000;
     while ((bm_ret = bmvpu_dec_decode(self->handle, vid_stream)) != 0) {
       g_usleep (1000);
@@ -610,7 +651,6 @@ static GstFlowReturn gst_bm_decoder_handle_frame (GstVideoDecoder * decoder, Gst
   }
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
 
-  self->pending_frames++;
   if (!self->frame_mode) {
     self->frames = g_list_append (self->frames,
                   GUINT_TO_POINTER (frame->system_frame_number));
@@ -642,7 +682,6 @@ error:
 static gboolean gst_bm_decoder_negotiate (GstVideoDecoder * decoder)
 {
   GstBmDecoder *self = GST_BM_DECODER (decoder);
-  //GstVideoCodecState *state;
 
   GST_DEBUG_OBJECT (self, "negotiate");
 
@@ -660,48 +699,6 @@ static gboolean gst_bm_decoder_decide_allocation (GstVideoDecoder * decoder, Gst
   }
 
   return GST_VIDEO_DECODER_CLASS (parent_class)->decide_allocation (decoder, query);
-}
-
-static void gst_bm_decoder_stop_task(GstVideoDecoder *decoder, gboolean drain)
-{
-  GstBmDecoder *self = GST_BM_DECODER (decoder);
-  GstTask *task = decoder->srcpad->task;
-
-  if (!GST_BM_DEC_TASK_STARTED (decoder))
-    return;
-
-  GST_DEBUG_OBJECT (self, "stopping decoder thread");
-
-  /* Discard pending frames */
-  if (!drain)
-    self->pending_frames = 0;
-
-//  GST_BM_DEC_BROADCAST (decoder);
-
-  GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
-  /* Wait for task thread to pause */
-  if (task) {
-    GST_OBJECT_LOCK (task);
-    while (GST_TASK_STATE (task) == GST_TASK_STARTED)
-      GST_TASK_WAIT (task);
-    GST_OBJECT_UNLOCK (task);
-  }
-  gst_pad_stop_task (decoder->srcpad);
-  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
-}
-
-
-static GstFlowReturn gst_bm_decoder_drain (GstVideoDecoder * decoder)
-{
-  GstBmDecoder *self = GST_BM_DECODER (decoder);
-
-  GST_DEBUG_OBJECT (self, "draining decoder");
-
-  if (self->handle != NULL) {
-    bmvpu_dec_get_all_frame_in_buffer(self->handle);
-  }
-
-  return GST_FLOW_OK;
 }
 
 static gboolean gst_bm_decoder_sink_query (GstVideoDecoder * decoder, GstQuery * query)
@@ -722,61 +719,40 @@ static gboolean gst_bm_decoder_src_query (GstVideoDecoder * decoder, GstQuery * 
   return GST_VIDEO_DECODER_CLASS (parent_class)->src_query (decoder, query);
 }
 
-GstBmDecoder * gst_bm_decoder_new (GObject G_GNUC_UNUSED * object)
+static void gst_bm_decoder_stop_task(GstVideoDecoder *decoder)
 {
-  GstBmDecoder *self;
+  GstBmDecoder *self = GST_BM_DECODER (decoder);
+  GstTask *task = decoder->srcpad->task;
 
-  self = g_object_new (GST_TYPE_BM_DECODER, NULL);
-  gst_object_ref_sink (self);
+  if (!GST_BM_DEC_TASK_STARTED (decoder))
+    return;
 
-  return self;
+  GST_DEBUG_OBJECT (self, "stopping decoder thread");
+
+//  GST_BM_DEC_BROADCAST (decoder);
+
+  GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+  /* Wait for task thread to pause */
+  if (task) {
+    GST_OBJECT_LOCK (task);
+    while (GST_TASK_STATE (task) == GST_TASK_STARTED)
+      GST_TASK_WAIT (task);
+    GST_OBJECT_UNLOCK (task);
+  }
+  gst_pad_stop_task (decoder->srcpad);
+  GST_VIDEO_DECODER_STREAM_LOCK (decoder);
 }
 
-gboolean gst_bm_decoder_is_configured (GstBmDecoder * decoder)
-{
-  g_return_val_if_fail (GST_IS_BM_DECODER (decoder), FALSE);
-
-  return decoder->configured;
-}
-
-gboolean gst_bm_decoder_configure (GstBmDecoder * decoder, GstVideoInfo * info,
-    gint coded_width, gint coded_height, guint coded_bitdepth)
-{
-  //GstVideoFormat format;
-  gboolean ret = TRUE;
-
-  g_return_val_if_fail (GST_IS_BM_DECODER (decoder), FALSE);
-  g_return_val_if_fail (info != NULL, FALSE);
-  g_return_val_if_fail (coded_width >= GST_VIDEO_INFO_WIDTH (info), FALSE);
-  g_return_val_if_fail (coded_height >= GST_VIDEO_INFO_HEIGHT (info), FALSE);
-  g_return_val_if_fail (coded_bitdepth >= 8, FALSE);
-
-  gst_bm_decoder_reset (decoder, TRUE, FALSE);
-
-  decoder->info = *info;
-  gst_video_info_set_format (&decoder->coded_info, GST_VIDEO_INFO_FORMAT (info),
-      coded_width, coded_height);
-
- // format = GST_VIDEO_INFO_FORMAT (info);
-
-  decoder->configured = TRUE;
-
-  return ret;
-}
-
-static void gst_bm_decoder_reset (GstBmDecoder * self, gboolean drain, gboolean final)
+static void gst_bm_decoder_reset (GstBmDecoder * self, gboolean final)
 {
   // TODO: handle reset?
   GstVideoDecoder *decoder = &self->parent;
 
   GST_BM_DEC_LOCK (decoder);
   self->flushing = TRUE;
-  self->draining = drain;
-  gst_bm_decoder_stop_task(&self->parent, drain);
+  gst_bm_decoder_stop_task(&self->parent);
   self->flushing = final;
-  self->draining = FALSE;
   self->output_type = GST_BM_DECODER_OUTPUT_TYPE_SYSTEM;
-  self->configured = FALSE;
   if (self->frames) {
     g_list_free (self->frames);
     self->frames = NULL;
@@ -797,10 +773,14 @@ gst_bm_vidframe_quark (void)
 static void gst_bm_vidframe_clear(gpointer ptr) {
 
   struct BmFrameCtx *ctx = (struct BmFrameCtx *)ptr;
+//  GstVideoDecoder *decoder = &(ctx->self->parent);
 
-  GST_DEBUG_OBJECT(NULL, "vidframe_clear in system_num %d \n", ctx->system_num);
-  bmvpu_dec_clear_output (ctx->handle, &ctx->frame);
-  free(ctx);
+  if(!ctx->self->closing){
+    //GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+    bmvpu_dec_clear_output (ctx->self->handle, &ctx->frame);
+    //GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+    free(ctx);
+  }
 }
 
 static GstVideoFormat bm_format_to_gst_format(BMVidFrame* bmframe)
@@ -1014,24 +994,11 @@ static void gst_bm_decoder_process_output (GstVideoDecoder *decoder)
   }
 
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
-  if (self->flushing && !self->eos_send) {
-      BMVidStream vid_stream;
-      memset (&vid_stream, 0, sizeof (BMVidStream));
-      vid_stream.end_of_stream = 1;
-      if (bmvpu_dec_decode(self->handle, vid_stream) == 0) {
-        g_print ("dec send eos ok \n");
-        self->eos_send = TRUE;
-      }
-  }
-
-  if (self->flushing && !self->pending_frames) {
+  if (self->flushed) {
     self->task_ret = GST_FLOW_FLUSHING;
     goto error;
   }
 
-  if (!self->pending_frames) {
-    goto error;
-  }
   pframeCtx = (struct BmFrameCtx *) malloc (sizeof (struct BmFrameCtx));
   if (!pframeCtx) {
     GST_ERROR_OBJECT (self, "frame ctx malloc fail \n");
@@ -1040,7 +1007,7 @@ static void gst_bm_decoder_process_output (GstVideoDecoder *decoder)
   pframe = &pframeCtx->frame;
 
   if ((bm_ret = bmvpu_dec_get_output (self->handle, pframe)) != 0) {
-    GST_DEBUG_OBJECT (self, "bmvpu_dec_get_output failed \n");
+    GST_DEBUG_OBJECT (self, "bmvpu_dec_get_output failed, ret=%d\n", bm_ret);
     free (pframeCtx);
     pframeCtx = NULL;
     goto error;
@@ -1055,7 +1022,8 @@ static void gst_bm_decoder_process_output (GstVideoDecoder *decoder)
       goto error;
     }
   } else {
-    system_frame_number = pframe->dts;
+    system_frame_number = self->system_frame_number;
+    self->system_frame_number++;
   }
 
   GST_DEBUG_OBJECT (self, "system_frame_number = %d frameIdx %d\n",
@@ -1097,6 +1065,7 @@ static void gst_bm_decoder_process_output (GstVideoDecoder *decoder)
     GST_ERROR_OBJECT (self, "create gst buffer failed");
     goto error;
   }
+  out_frame->pts = pframe->pts;
 
   gst_buffer_append_memory (buffer, mem_import);
   // TODO: add metadata
@@ -1118,8 +1087,7 @@ static void gst_bm_decoder_process_output (GstVideoDecoder *decoder)
   }
   out_frame->output_buffer = buffer;
   quark = gst_bm_vidframe_quark();
-  pframeCtx->handle = self->handle;
-  pframeCtx->system_num = system_frame_number;
+  pframeCtx->self = self;
   gst_mini_object_set_qdata (GST_MINI_OBJECT(mem_import), quark, pframeCtx,
 		gst_bm_vidframe_clear);
 
@@ -1128,7 +1096,6 @@ static void gst_bm_decoder_process_output (GstVideoDecoder *decoder)
   if (!self->frame_mode)
     self->frames = g_list_delete_link (self->frames, self->frames);
 
-  self->pending_frames--;
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
 
   goto finish;

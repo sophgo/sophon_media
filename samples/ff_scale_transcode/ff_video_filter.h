@@ -39,7 +39,7 @@ typedef struct ffmpegFilterContext{
     AVFilterContext *filterContextSink{nullptr};
 }ffmpegFilterContext;
 
-int initFilter(ffmpegFilterContext *filter, int f_src_width, int f_src_height, int f_dst_width, int f_dst_height, int src_pix_fmt, int fps, int sophon_idx);
+int initFilter(ffmpegFilterContext *filter, int f_src_width, int f_src_height, int f_dst_width, int f_dst_height, int src_pix_fmt, int fps, int sophon_idx, int zero_copy);
 int getFilterFrame(ffmpegFilterContext filter, AVFrame *in, AVFrame *out);
 int deInitFilter(ffmpegFilterContext filter);
 

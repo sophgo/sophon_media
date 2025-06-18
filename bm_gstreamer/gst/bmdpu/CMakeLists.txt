@@ -5,12 +5,16 @@ project(bmdpu)
 add_compile_options(${GST_VIDEO_CFLAGS} ${GST_PBUTILS_CFLAGS} ${GMODULE_CFLAGS})
 add_compile_options(${GST_VIDEO_LDFLAGS} ${GST_PBUTILS_LDFLAGS} ${GMODULE_LDFLAGS})
 
-if("${GCC_VERSION}" STREQUAL "930")
-    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib930/gst)
-elseif("${GCC_VERSION}" STREQUAL "1131")
-    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib1131/gst)
-else()
-    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/gst)
+if("${PLATFORM}" STREQUAL "pcie")
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/x86_64/gst)
+elseif("${PLATFORM}" STREQUAL "soc" OR "${PLATFORM}" STREQUAL "pcie_arm64")
+    if("${GCC_VERSION}" STREQUAL "930")
+        link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib930/gst)
+    elseif("${GCC_VERSION}" STREQUAL "1131")
+        link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib1131/gst)
+    else()
+        link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../prebuilt/lib/gst)
+    endif()
 endif()
 
 # add header files path
@@ -21,7 +25,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../libsophav/bmcv/include)
 # add library files path
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/../bm_allocator)
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../buildit/libsophav/bmcv)
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../libsophav/3rdparty/libjpeg-turbo/lib/soc)
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../libsophav/3rdparty/libjpeg-turbo/lib/${PLATFORM})
 set(SRCS
     gstbmdpu.c
     plugin.c)

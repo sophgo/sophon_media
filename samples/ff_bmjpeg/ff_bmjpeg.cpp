@@ -1,130 +1,40 @@
 #include <iostream>
 
 extern "C" {
+#include <sys/time.h>
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
 #include "libavformat/avio.h"
+#include <pthread.h>
 #include "libavutil/file.h"
 #include "libavutil/pixfmt.h"
 }
 
 
 using namespace std;
+#define MAX_THREADS 64
 
 typedef struct {
-    uint8_t* start;
-    int      size;
-    int      pos;
-} bs_buffer_t;
+    int total_loops;
+    char input_file[256];
+    int sophon_idx;
+    int zero_copy;
+    int thread_id;
+} ThreadConfig;
+
+typedef struct {
+    pthread_t tid;
+    ThreadConfig config;
+} ThreadInfo;
 
 
-static int read_buffer(void *opaque, uint8_t *buf, int buf_size);
-static int writeJPEG(AVFrame* pFrame, int iIndex, string filename);
+void* decode_thread(void* arg);
+void* encode_thread(void* arg);
 static int saveYUV(AVFrame* pFrame, int iIndex, string filename);
-
-static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
-{
-    bs_buffer_t* bs = (bs_buffer_t*)opaque;
-
-    int r = bs->size - bs->pos;
-    if (r <= 0) {
-        cout << "EOF of AVIO." << endl;
-        return AVERROR_EOF;
-    }
-
-    uint8_t* p = bs->start + bs->pos;
-    int len = (r >= buf_size) ? buf_size : r;
-    memcpy(buf, p, len);
-
-    //cout << "read " << len << endl;
-
-    bs->pos += len;
-
-    return len;
-}
-
-static int writeJPEG(AVFrame* pFrame, int iIndex, string filename)
-{
-    const AVCodec   *pCodec  = nullptr;
-    AVCodecContext  *enc_ctx = nullptr;
-    AVDictionary    *dict    = nullptr;
-    int ret = 0;
-
-    string out_str = filename + "-" + to_string(iIndex) + ".jpg";
-    FILE *outfile = fopen(out_str.c_str(), "wb");
-
-    /* Find HW JPEG encoder: jpeg_bm */
-    pCodec = avcodec_find_encoder_by_name("jpeg_bm");
-    if( !pCodec ) {
-        cerr << "Codec jpeg_bm not found." << endl;
-        return -1;
-    }
-
-    enc_ctx = avcodec_alloc_context3(pCodec);
-    if (enc_ctx == nullptr) {
-        cerr << "Could not allocate video codec context!" << endl;
-        return AVERROR(ENOMEM);
-    }
-
-    enc_ctx->pix_fmt = AVPixelFormat(pFrame->format);
-    enc_ctx->width   = pFrame->width;
-    enc_ctx->height  = pFrame->height;
-    enc_ctx->time_base = (AVRational){1, 25};
-    enc_ctx->framerate = (AVRational){25, 1};
-
-    /* 0: the data stored in virtual memory(pFrame->data[0-2]) */
-    /* 1: the data stored in continuous physical memory(pFrame->data[3-5]) */
-    int64_t value = 1;
-    av_dict_set_int(&dict, "is_dma_buffer", value, 0);
-    /* Open jpeg_bm encoder */
-    ret = avcodec_open2(enc_ctx, pCodec, &dict);
-    if (ret < 0) {
-        cerr << "Could not open codec." << endl;
-        return ret;
-    }
-
-    AVPacket *pkt = av_packet_alloc();
-    if (!pkt) {
-        cerr << "av_packet_alloc failed" << endl;
-        return AVERROR(ENOMEM);
-    }
-
-    ret = avcodec_send_frame(enc_ctx, pFrame);
-    if (ret < 0) {
-        cerr << "Error sending a frame for encoding" << endl;
-        return ret;
-    }
-
-    while (ret >= 0) {
-        ret = avcodec_receive_packet(enc_ctx, pkt);
-        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-            return ret;
-        else if (ret < 0) {
-            cerr << "Error during encoding" << endl;
-            return ret;
-        }
-
-        cout << "packet size=" << pkt->size << endl;
-        fwrite(pkt->data, 1, pkt->size, outfile);
-        av_packet_unref(pkt);
-    }
-
-    av_packet_free(&pkt);
-
-    fclose(outfile);
-
-    av_dict_free(&dict);
-    avcodec_free_context(&enc_ctx);
-
-    cout << "Encode Successful." << endl;
-
-    return 0;
-}
-
 
 static int saveYUV(AVFrame* pFrame, int iIndex, string filename)
 {
-    string yuv_filename = filename + "-" + to_string(iIndex) + ".yuv";
+    string yuv_filename = filename + ".yuv";
     FILE *fp = fopen(yuv_filename.c_str(), "wb+");
     if (fp == nullptr) {
         cerr << "create yuv file failed:" <<  yuv_filename << endl;
@@ -140,9 +50,8 @@ static int saveYUV(AVFrame* pFrame, int iIndex, string filename)
     int u_stride = pFrame->linesize[1];
     int v_stride = pFrame->linesize[2];
 
-    cout << "Y address: " << static_cast<const void *>(pY) << " U address: " << static_cast<const void *>(pU) << " V address: " << static_cast<const void *>(pV) << endl;
     cout << "frame width:" << frameWidth << " frame height:" << frameHeight << endl;
-    cout << "Y num:" << y_stride << " U num:" << u_stride << " V num:" << v_stride << endl;
+    cout << "Y num:" << y_stride << " U num:" << u_stride << " V num:" << v_stride<< endl;
 
     if (AV_PIX_FMT_YUVJ420P == pFrame->format || AV_PIX_FMT_YUV420P == pFrame->format) {
         cout << "Pixel format is YUV420P" << endl;
@@ -197,269 +106,306 @@ static int saveYUV(AVFrame* pFrame, int iIndex, string filename)
     return 0;
 }
 
+void* decode_thread(void* arg)
+{
+    ThreadInfo* info = (ThreadInfo*)arg;
+    AVFormatContext* fmt_ctx = NULL;
+    AVCodecContext* codec_ctx = NULL;
+    AVDictionary *dict = nullptr;
+    AVPacket pkt;
+    AVFrame* frame = NULL;
+    int ret = 0;
+    const char* filename = info->config.input_file;
+
+    if (avformat_open_input(&fmt_ctx, filename, NULL, NULL) != 0) {
+        cerr << "Thread " << info->config.thread_id << ": open input failed" << endl;
+        return NULL;
+    }
+
+    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
+        cerr << "Thread " << info->config.thread_id << ": find stream failed" << endl;
+        avformat_close_input(&fmt_ctx);
+        return NULL;
+    }
+
+    const AVCodec*  codec = avcodec_find_decoder_by_name("jpeg_bm");
+    if (!codec) {
+        cerr << "Thread " << info->config.thread_id << ": codec not found" << endl;
+        avformat_close_input(&fmt_ctx);
+        return NULL;
+    }
+
+    codec_ctx = avcodec_alloc_context3(codec);
+
+    #ifdef BM_PCIE_MODE
+        av_dict_set_int(&dict, "zero_copy", info->config.zero_copy, 0);
+        av_dict_set_int(&dict, "sophon_idx", info->config.sophon_idx, 0);
+    #endif
+
+    if (avcodec_open2(codec_ctx, codec, &dict) < 0) {
+        cerr << "Thread " << info->config.thread_id << ": open codec failed" << endl;
+        avformat_close_input(&fmt_ctx);
+        avcodec_free_context(&codec_ctx);
+        return NULL;
+    }
+
+    av_init_packet(&pkt);
+    if (av_read_frame(fmt_ctx, &pkt) < 0) {
+        cerr << "Thread " << info->config.thread_id << ": read frame failed" << endl;
+    }
+
+    for (int i = 0; i < info->config.total_loops; ++i) {
+
+        ret = avcodec_send_packet(codec_ctx, &pkt);
+        if (ret < 0) {
+            cerr << "Thread " << info->config.thread_id << ": send packet failed" << endl;
+            break;
+        }
+
+        while (ret >= 0) {
+            frame = av_frame_alloc();
+            ret = avcodec_receive_frame(codec_ctx, frame);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                av_frame_free(&frame);
+                break;
+            }
+
+            if (i == info->config.total_loops - 1) {
+                char output_file[256];
+                snprintf(output_file, sizeof(output_file),
+                        "dec-thread%d",
+                        info->config.thread_id);
+                saveYUV(frame, i, output_file);
+            }
+
+            av_frame_free(&frame);
+        }
+    }
+
+    av_packet_unref(&pkt);
+    avformat_close_input(&fmt_ctx);
+    avcodec_free_context(&codec_ctx);
+    return NULL;
+}
+
+void* encode_thread(void* arg)
+{
+    ThreadInfo* info = (ThreadInfo*)arg;
+    AVFormatContext* dec_fmt_ctx = NULL;
+    AVCodecContext* dec_ctx = NULL, *enc_ctx = NULL;
+    AVPacket dec_pkt, enc_pkt;
+    AVDictionary *dec_dict = nullptr;
+    AVDictionary *enc_dict = nullptr;
+    AVFrame* frame = NULL;
+    int ret = 0;
+    const char* filename = info->config.input_file;
+
+    if (avformat_open_input(&dec_fmt_ctx, filename, NULL, NULL) != 0) {
+        cerr << "Encoder thread " << info->config.thread_id << ": open input failed" << endl;
+        return NULL;
+    }
+
+    if (avformat_find_stream_info(dec_fmt_ctx, NULL) < 0) {
+        cerr << "Encoder thread " << info->config.thread_id << ": find stream failed" << endl;
+        avformat_close_input(&dec_fmt_ctx);
+        return NULL;
+    }
+
+    const AVCodec*  dec_codec = avcodec_find_decoder_by_name("jpeg_bm");
+    if (!dec_codec) {
+        cerr << "Encoder thread " << info->config.thread_id << ": decoder not found" << endl;
+        avformat_close_input(&dec_fmt_ctx);
+        return NULL;
+    }
+
+    dec_ctx = avcodec_alloc_context3(dec_codec);
+    #ifdef BM_PCIE_MODE
+        av_dict_set_int(&dec_dict, "zero_copy", info->config.zero_copy, 0);
+        av_dict_set_int(&dec_dict, "sophon_idx", info->config.sophon_idx, 0);
+    #endif
+
+    if (avcodec_open2(dec_ctx, dec_codec, &dec_dict) < 0) {
+        cerr << "Encoder thread " << info->config.thread_id << ": open decoder failed" << endl;
+        avformat_close_input(&dec_fmt_ctx);
+        avcodec_free_context(&dec_ctx);
+        return NULL;
+    }
+
+    av_init_packet(&dec_pkt);
+
+    if (av_read_frame(dec_fmt_ctx, &dec_pkt) < 0) {
+        cerr << "Encoder thread " << info->config.thread_id << ": read frame failed" << endl;
+        av_packet_unref(&dec_pkt);
+    }
+
+    ret = avcodec_send_packet(dec_ctx, &dec_pkt);
+
+    frame = av_frame_alloc();
+    ret = avcodec_receive_frame(dec_ctx, frame);
+
+    av_packet_unref(&dec_pkt);
+
+    const AVCodec* enc_codec = avcodec_find_encoder_by_name("jpeg_bm");
+    if (!enc_codec) {
+        cerr << "Encoder thread " << info->config.thread_id << ": encoder not found" << endl;
+        avformat_close_input(&dec_fmt_ctx);
+        avcodec_free_context(&dec_ctx);
+        return NULL;
+    }
+
+    enc_ctx = avcodec_alloc_context3(enc_codec);
+    if (enc_ctx == nullptr) {
+        cerr << "Could not allocate video codec context!" << endl;
+        return NULL;
+    }
+
+    enc_ctx->pix_fmt = AVPixelFormat(frame->format);
+    enc_ctx->width   = frame->width;
+    enc_ctx->height  = frame->height;
+    enc_ctx->time_base = (AVRational){1, 25};
+    enc_ctx->framerate = (AVRational){25, 1};
+
+    int64_t value = info->config.zero_copy;
+    av_dict_set_int(&enc_dict, "is_dma_buffer", value, 0);
+
+    if (avcodec_open2(enc_ctx, enc_codec, &enc_dict) < 0) {
+        cerr << "Encoder thread " << info->config.thread_id << ": open encoder failed" << endl;
+        avcodec_free_context(&enc_ctx);
+        avformat_close_input(&dec_fmt_ctx);
+        avcodec_free_context(&dec_ctx);
+        return NULL;
+    }
+
+    for (int loop = 0; loop < info->config.total_loops; ++loop) {
+        av_init_packet(&enc_pkt);
+        enc_pkt.data = NULL;
+        enc_pkt.size = 0;
+
+        ret = avcodec_send_frame(enc_ctx, frame);
+        if (ret < 0) {
+            cerr << "Encoder thread " << info->config.thread_id << ": send frame failed" << endl;
+            av_packet_unref(&enc_pkt);
+            break;
+        }
+
+        while (ret >= 0) {
+            ret = avcodec_receive_packet(enc_ctx, &enc_pkt);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                av_packet_unref(&enc_pkt);
+                break;
+            }
+
+            if (loop == info->config.total_loops - 1) {
+                char output_file[256];
+                snprintf(output_file, sizeof(output_file),
+                        "enc_t%d_final.jpg",
+                        info->config.thread_id);
+
+                FILE* fp = fopen(output_file, "wb");
+                if (fp) {
+                    fwrite(enc_pkt.data, 1, enc_pkt.size, fp);
+                    fclose(fp);
+                }
+            }
+
+            av_packet_unref(&enc_pkt);
+        }
+    }
+    av_frame_free(&frame);
+
+    avformat_close_input(&dec_fmt_ctx);
+    avcodec_free_context(&dec_ctx);
+    avcodec_free_context(&enc_ctx);
+    return NULL;
+}
+
 int main(int argc, char* argv[])
 {
-    const AVInputFormat *iformat = nullptr;
-    AVFormatContext *pFormatCtx = nullptr;
-    AVCodecContext *dec_ctx = nullptr;
-    const AVCodec *pCodec = nullptr;
-    AVDictionary *dict = nullptr;
-    AVIOContext *avio_ctx = nullptr;
-    AVFrame *pFrame = nullptr;
-    AVPacket pkt;
-    FILE *infile;
-    int numBytes;
-    uint8_t *aviobuffer = nullptr;
-    int aviobuf_size = 32*1024; // 32K
-    uint8_t *bs_buffer = nullptr;
-    int bs_size;
-    bs_buffer_t bs_obj = {0, 0, 0};
-    int ret = 0;
-    int loop_num = 0;
-    int frame_idx = 0;
-    string output_file_name = "output";
-    string input_name;
+    ThreadInfo threads[MAX_THREADS];
+    int thread_count = 0;
+    int mode = 1;
+    int total_threads = 1;
+    ThreadConfig base_cfg;
 
 #ifdef BM_PCIE_MODE
-    int zero_copy = 0;
-    int sophon_idx = 0;
-
-    if (argc != 5) {
-        cerr << "Usage: "<< argv[0] << " sophon_idx:[0-63] zero_copy:[0-1] loop_num:[1-n] xxx.jpg" << endl;
+    if (argc != 7) {
+        cerr << "pcie mode:\n"
+             << argv[0]
+             << " input.jpg mode threads loops sophon_idx zero_copy" << endl;
         return -1;
     }
 
-    sophon_idx = atoi(argv[1]);
-    if (sophon_idx < 0 || sophon_idx >= 64)
-    {
-        cerr << "Error: sophon_idx = " << sophon_idx << " , must be 0-63" << endl;
-        return -1;
-    }
-    output_file_name += "-sophon";
-    output_file_name += to_string(sophon_idx);
-
-    zero_copy = atoi(argv[2]);
-    if (zero_copy != 0 && zero_copy != 1)
-    {
-        cerr << "Error: zero_copy = " << zero_copy << " , must be 0 or 1" << endl;
-        return -1;
-    }
-
-    loop_num = atoi(argv[3]);
-    if (loop_num < 1)
-    {
-        cerr << "Error: loop_num = " << loop_num << " , must be greater than 0" << endl;
-        return -1;
-    }
-
-    input_name = argv[4];
+    strncpy(base_cfg.input_file, argv[1], 255);
+    base_cfg.input_file[255] = '\0';
+    base_cfg.total_loops = atoi(argv[4]);
+    base_cfg.sophon_idx = atoi(argv[5]);
+    base_cfg.zero_copy = atoi(argv[6]);
 #else
-    if (argc != 3) {
-        cerr << "Usage: "<< argv[0] << " loop_num:[1-n] xxx.jpg" << endl;
+    if (argc != 5) {
+        cerr << "soc mode:\n"
+             << argv[0]
+             << " input.jpg mode threads loops" << endl;
         return -1;
     }
 
-    loop_num = atoi(argv[1]);
-    if (loop_num < 1)
-    {
-        cerr << "Error: loop_num = " << loop_num << " , must be greater than 0" << endl;
-        return -1;
-    }
-
-    input_name = argv[2];
+    strncpy(base_cfg.input_file, argv[1], 255);
+    base_cfg.input_file[255] = '\0';
+    base_cfg.total_loops = atoi(argv[4]);
+    base_cfg.sophon_idx = 0;
+    base_cfg.zero_copy = 0;
 #endif
 
-    auto pos1 = input_name.find(".jpg");
-    auto pos2 = input_name.find(".jpeg");
-    if (pos1 == string::npos && pos2 == string::npos) {
-        cerr << "The input file is invalid jpeg file: " << input_name << endl;
+    mode = atoi(argv[2]);
+    total_threads = atoi(argv[3]);
+
+    if (mode < 1 || mode > 3) {
+        cerr << "Invalid mode! (1/2/3)" << endl;
         return -1;
     }
 
-    infile = fopen(input_name.c_str(), "rb+");
-    if (infile == nullptr) {
-        cerr << "open file1 failed" << endl;
-        goto finish;
+    int decode_threads = 0, encode_threads = 0;
+    switch (mode) {
+    case 1:
+        decode_threads = total_threads;
+        break;
+    case 2:
+        encode_threads = total_threads;
+        break;
+    case 3:
+        decode_threads = total_threads / 2 + 1;
+        encode_threads = total_threads - decode_threads;
+        break;
     }
 
-    fseek(infile, 0, SEEK_END);
-    numBytes = ftell(infile);
-    cout << "infile size: " << numBytes << endl;
-    fseek(infile, 0, SEEK_SET);
+    struct timeval tv1, tv2;
+    unsigned int time;
+    double fps;
+    gettimeofday(&tv1, NULL);
 
-    bs_buffer = (uint8_t *)av_malloc(numBytes);
-    if (bs_buffer == nullptr) {
-        cerr << "av_malloc for bs buffer failed" << endl;
-        goto finish;
+    for (int i = 0; i < decode_threads; ++i) {
+        threads[thread_count].config = base_cfg;
+        threads[thread_count].config.thread_id = thread_count;
+        pthread_create(&threads[thread_count].tid, NULL, decode_thread, &threads[thread_count]);
+        thread_count++;
     }
 
-    fread(bs_buffer, sizeof(uint8_t), numBytes, infile);
-    fclose(infile);
-    infile = nullptr;
-
-    for (int i = 0; i < loop_num; i++) {
-        cout << "loop " << i << " of " << loop_num << endl;
-
-        aviobuffer = (uint8_t *)av_malloc(aviobuf_size); //32k
-        if (aviobuffer == nullptr) {
-            cerr << "av_malloc for avio failed" << endl;
-            goto loop_exit;
-        }
-
-        bs_obj.start = bs_buffer;
-        bs_obj.size  = numBytes;
-        bs_obj.pos   = 0;
-        avio_ctx = avio_alloc_context(aviobuffer, aviobuf_size, 0,
-                                    (void*)(&bs_obj), read_buffer, nullptr, nullptr);
-        if (avio_ctx == nullptr)
-        {
-            cerr << "avio_alloc_context failed" << endl;
-            ret = AVERROR(ENOMEM);
-            goto loop_exit;
-        }
-
-        pFormatCtx = avformat_alloc_context();
-        pFormatCtx->pb = avio_ctx;
-
-        /* mjpeg demuxer */
-        iformat = av_find_input_format("mjpeg");
-        if (iformat == nullptr) {
-            cerr << "av_find_input_format failed." << endl;
-            ret = AVERROR_DEMUXER_NOT_FOUND;
-            goto loop_exit;
-        }
-
-        /* Open an input stream */
-        ret = avformat_open_input(&pFormatCtx, nullptr, iformat, nullptr);
-        if (ret != 0) {
-            cerr << "Couldn't open input stream.\n" << endl;
-            goto loop_exit;
-        }
-
-        //av_dump_format(pFormatCtx, 0, 0, 0);
-
-        /* HW JPEG decoder: jpeg_bm */
-        pCodec = avcodec_find_decoder_by_name("jpeg_bm");
-        if (pCodec == nullptr) {
-            cerr << "Codec not found." << endl;
-            ret = AVERROR_DECODER_NOT_FOUND;
-            goto loop_exit;
-        }
-
-        dec_ctx = avcodec_alloc_context3(pCodec);
-        if (dec_ctx == nullptr) {
-            cerr << "Could not allocate video codec context!" << endl;
-            ret = AVERROR(ENOMEM);
-            goto loop_exit;
-        }
-
-        /* Set parameters for jpeg_bm decoder */
-        /* The output of bm jpeg decoder is chroma-separated,for example, YUVJ420P */
-        av_dict_set_int(&dict, "chroma_interleave", 0, 0);
-        /* The bitstream buffer size (KB) */
-    #define BS_MASK (1024*16-1)
-        bs_size = (numBytes+BS_MASK)&(~BS_MASK); /* in unit of 16k */
-    #undef  BS_MASK
-    #define JPU_PAGE_UNIT_SIZE 256 /* each page unit of jpu is 256 byte */
-        /* Avoid the false alarm that bs buffer is empty (SA3SW-252) */
-        if (bs_size - numBytes < JPU_PAGE_UNIT_SIZE)
-            bs_size += 16*1024;  /* in unit of 16k */
-    #undef JPU_PAGE_UNIT_SIZE
-        bs_size /= 1024;
-        cout << "bs buffer size: " << bs_size << "K" << endl;
-        av_dict_set_int(&dict, "bs_buffer_size", bs_size, 0);
-        /* Extra frame buffers: "0" for still jpeg, at least "2" for mjpeg */
-        av_dict_set_int(&dict, "num_extra_framebuffers", 0, 0);
-    #ifdef BM_PCIE_MODE
-        av_dict_set_int(&dict, "zero_copy", zero_copy, 0);
-        av_dict_set_int(&dict, "sophon_idx", sophon_idx, 0);
-    #endif
-        ret = avcodec_open2(dec_ctx, pCodec, &dict);
-        if (ret < 0) {
-            cerr << "Could not open codec." << endl;
-            ret = AVERROR_UNKNOWN;
-            goto loop_exit;
-        }
-
-        pFrame = av_frame_alloc();
-        if (pFrame == nullptr) {
-            cerr << "av frame malloc failed" << endl;
-            goto loop_exit;
-        }
-
-        frame_idx = 0;
-        while (av_read_frame(pFormatCtx, &pkt) >= 0) {
-            ret = avcodec_send_packet(dec_ctx, &pkt);
-            if (ret != 0) {
-                cerr << "avcodec_send_packet error." << endl;
-                goto loop_exit;
-            }
-
-            while (ret >= 0) {
-                ret = avcodec_receive_frame(dec_ctx, pFrame);
-                if (ret != 0) {
-                    cerr << "avcodec_receive_frame error." << endl;
-                    goto loop_exit;
-                }
-
-                //save YUV data
-                ret = saveYUV(pFrame, frame_idx, output_file_name.c_str());
-                if (ret < 0) {
-                    break;
-                }
-
-                //convert AVFrame to JPEG
-                cout << "pixel format: " << pFrame->format << endl;
-                cout << "frame width : " << pFrame->width << endl;
-                cout << "frame height: " << pFrame->height << endl;
-                ret = writeJPEG(pFrame, frame_idx, output_file_name.c_str());
-                if (ret < 0) {
-                    break;
-                }
-
-                frame_idx++;
-            }
-            av_packet_unref(&pkt);//free mem because av_read_frame had applied for mem
-            av_init_packet(&pkt);
-        }
-
-    loop_exit:
-        av_packet_unref(&pkt);
-
-        if (pFrame) {
-            av_frame_free(&pFrame);
-            pFrame = nullptr;
-        }
-
-        avformat_close_input(&pFormatCtx);
-        pFormatCtx = nullptr;
-
-        if (avio_ctx) {
-            av_freep(&avio_ctx->buffer);
-            av_freep(&avio_ctx);
-            avio_ctx = nullptr;
-        }
-
-        if (dict) {
-            av_dict_free(&dict);
-            dict = nullptr;
-        }
-
-        if (dec_ctx) {
-            avcodec_close(dec_ctx);
-            dec_ctx = nullptr;
-        }
+    for (int i = 0; i < encode_threads; ++i) {
+        threads[thread_count].config = base_cfg;
+        threads[thread_count].config.thread_id = thread_count;
+        pthread_create(&threads[thread_count].tid, NULL, encode_thread, &threads[thread_count]);
+        thread_count++;
     }
 
-finish:
-    if (bs_buffer) {
-        av_free(bs_buffer);
+    for (int i = 0; i < thread_count; ++i) {
+        pthread_join(threads[i].tid, NULL);
     }
 
-    if (infile) {
-        fclose(infile);
-    }
+    gettimeofday(&tv2, NULL);
+    time = (tv2.tv_sec - tv1.tv_sec)*1000 + (tv2.tv_usec - tv1.tv_usec)/1000;
+    fps = double (total_threads * base_cfg.total_loops) / (double)time * 1000;
 
+    printf("Total time: %d ms, Frame %d, FPS: %.0f\n", time, total_threads * base_cfg.total_loops, fps);
+    cout << "All threads completed!" << endl;
     return 0;
 }
 

@@ -43,6 +43,7 @@ VideoDec_FFMPEG::VideoDec_FFMPEG()
 VideoDec_FFMPEG::~VideoDec_FFMPEG()
 {
     av_packet_unref(&pkt);
+    av_packet_unref(&tempPacket);
     closeDec();
 
     printf("#VideoDec_FFMPEG exit \n");
@@ -62,7 +63,8 @@ int VideoDec_FFMPEG::openDec(const char *filename, int codec_name_flag,
     AVDictionary *dict = NULL;
 
     av_dict_set(&dict, "rtsp_flags", "prefer_tcp", 0);
-    av_dict_set(&dict, "stimeout", "5*1000*1000", 0); //Returns (Connection timed out) every  5 seconds ,when disconnect
+    // av_dict_set(&dict, "stimeout", "5*1000*1000", 0);   //Deprecate in ffmpeg 6.0
+    av_dict_set(&dict, "timeout", "5*1000*1000", 0);    //Returns (Connection timed out) every  5 seconds ,when disconnect
     ret = avformat_open_input(&ifmt_ctx, filename, NULL, &dict);
 
     if (ret < 0)
@@ -254,6 +256,7 @@ int VideoDec_FFMPEG::openCodecContext(int *stream_idx, AVCodecContext **dec_ctx,
     {
         av_log(NULL, AV_LOG_FATAL, "Failed to open %s codec\n",
                av_get_media_type_string(type));
+        av_dict_free(&opts);
         return ret;
     }
     *stream_idx = stream_index;

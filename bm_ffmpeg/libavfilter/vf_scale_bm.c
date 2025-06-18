@@ -195,27 +195,41 @@ static int bmvpp_scale_bmcv(bm_handle_t handle, bm_image src,
 
 static const enum AVPixelFormat supported_in_formats[] = {
         AV_PIX_FMT_NV12,
+        AV_PIX_FMT_NV21,
+        AV_PIX_FMT_NV16,
         AV_PIX_FMT_YUV420P,
         AV_PIX_FMT_YUVJ420P,
         AV_PIX_FMT_YUVJ422P, // TODO HW VPP don't support J422 input
         AV_PIX_FMT_YUVJ444P,
         AV_PIX_FMT_RGB24,
         AV_PIX_FMT_BGR24,
+        AV_PIX_FMT_RGBP,
+        AV_PIX_FMT_BGRP,
         AV_PIX_FMT_GRAY8,
         AV_PIX_FMT_YUV422P,
-        AV_PIX_FMT_YUV444P
+        AV_PIX_FMT_YUV444P,
+        AV_PIX_FMT_YUYV422,
+        AV_PIX_FMT_YVYU422,
+        AV_PIX_FMT_UYVY422
 };
 static const enum AVPixelFormat supported_out_formats[] = {
+        AV_PIX_FMT_NV12,
+        AV_PIX_FMT_NV21,
+        AV_PIX_FMT_NV16,
         AV_PIX_FMT_YUV420P,
         AV_PIX_FMT_YUVJ420P,
         AV_PIX_FMT_YUV422P,
         AV_PIX_FMT_YUVJ422P,
         AV_PIX_FMT_YUV444P,
+        AV_PIX_FMT_YUVJ444P,
         AV_PIX_FMT_RGBP,
         AV_PIX_FMT_BGRP,
         AV_PIX_FMT_RGB24,
         AV_PIX_FMT_BGR24,
-        AV_PIX_FMT_GRAY8
+        AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_YUYV422,
+        AV_PIX_FMT_YVYU422,
+        AV_PIX_FMT_UYVY422
 };
 
 enum {
@@ -1252,6 +1266,24 @@ static bm_image_format_ext get_format_from_avformat(int sw_format){
     if (sw_format == AV_PIX_FMT_NV12)
         return FORMAT_NV12;
 
+    if (sw_format == AV_PIX_FMT_NV21)
+        return FORMAT_NV21;
+
+    if (sw_format == AV_PIX_FMT_NV16)
+        return FORMAT_NV16;
+
+    if (sw_format == AV_PIX_FMT_YUYV422)
+        return FORMAT_YUV422_YUYV;
+
+    if (sw_format == AV_PIX_FMT_YVYU422)
+        return FORMAT_YUV422_YVYU;
+
+    if (sw_format == AV_PIX_FMT_UYVY422)
+        return FORMAT_YUV422_UYVY;
+
+    if (sw_format == AV_PIX_FMT_GRAY8)
+        return FORMAT_GRAY;
+
     av_log(NULL, AV_LOG_ERROR, "avformat %d is not supported!\n", sw_format);
     return -1;
 }
@@ -1282,6 +1314,7 @@ static int bmscale_hw_bmimg_from_avframe(bm_handle_t handle, AVHWFramesContext* 
         case FORMAT_YUV420P:
             size[2] = stride[2] * avimg->height / 2;
         case FORMAT_NV12:
+        case FORMAT_NV21:
             size[1] = stride[1] * avimg->height / 2;
             size[0] = stride[0] * avimg->height;
             break;
@@ -1289,10 +1322,15 @@ static int bmscale_hw_bmimg_from_avframe(bm_handle_t handle, AVHWFramesContext* 
         case FORMAT_YUV444P:
         case FORMAT_RGBP_SEPARATE:
         case FORMAT_BGRP_SEPARATE:
-            size[1] = stride[1] * avimg->height;
             size[2] = stride[2] * avimg->height;
+        case FORMAT_NV16:
+            size[1] = stride[1] * avimg->height;
         case FORMAT_RGB_PACKED:
         case FORMAT_BGR_PACKED:
+        case FORMAT_YUV422_YVYU:
+        case FORMAT_YUV422_YUYV:
+        case FORMAT_YUV422_UYVY:
+        case FORMAT_GRAY:
             size[0] = stride[0] * avimg->height;
             break;
         default:
@@ -1727,7 +1765,7 @@ fail:
 
 static void fill_black_frame(AVFrame * frame)
 {
-    if (frame->format == AV_PIX_FMT_YUVJ420P ) {
+    if (frame->format == AV_PIX_FMT_YUVJ420P) {
         memset(frame->data[0], 0,  frame->linesize[0] * frame->height);
         memset(frame->data[1], 0x80, frame->linesize[1] * (frame->height >>1));
         memset(frame->data[2], 0x80, frame->linesize[2] * (frame->height >>1));
@@ -1735,22 +1773,28 @@ static void fill_black_frame(AVFrame * frame)
         memset(frame->data[0], 16,  frame->linesize[0] * frame->height);
         memset(frame->data[1], 0x80, frame->linesize[1] * (frame->height >>1));
         memset(frame->data[2], 0x80, frame->linesize[2] * (frame->height >>1));
+    } else if (frame->format == AV_PIX_FMT_NV12 || frame->format == AV_PIX_FMT_NV21) {
+        memset(frame->data[0], 16,  frame->linesize[0] * frame->height);
+        memset(frame->data[1], 0x80, frame->linesize[1] * (frame->height >>1));
     } else if (frame->format == AV_PIX_FMT_BGR24 || frame->format == AV_PIX_FMT_RGB24 ||
                frame->format == AV_PIX_FMT_ABGR || frame->format == AV_PIX_FMT_ARGB) {
         memset(frame->data[0], 0,  frame->linesize[0] * frame->height);
-    }else if (frame->format == AV_PIX_FMT_BGRP || frame->format == AV_PIX_FMT_RGBP ||
+    } else if (frame->format == AV_PIX_FMT_BGRP || frame->format == AV_PIX_FMT_RGBP ||
               frame->format == AV_PIX_FMT_YUV444P) {
         memset(frame->data[0], 0,  frame->linesize[0] * frame->height);
         memset(frame->data[1], 0, frame->linesize[1] * frame->height);
         memset(frame->data[2], 0, frame->linesize[2] * frame->height);
-    }else if (frame->format == AV_PIX_FMT_GRAY8) {
+    } else if (frame->format == AV_PIX_FMT_GRAY8 || frame->format == AV_PIX_FMT_YUYV422 ||
+            frame->format == AV_PIX_FMT_YVYU422 || frame->format == AV_PIX_FMT_UYVY422) {
         memset(frame->data[0], 0, frame->linesize[0] * frame->height);
-    }else if (frame->format == AV_PIX_FMT_YUVJ422P || frame->format == AV_PIX_FMT_YUV422P) {
+    } else if (frame->format == AV_PIX_FMT_YUVJ422P || frame->format == AV_PIX_FMT_YUV422P) {
         memset(frame->data[0], 0, frame->linesize[0] * frame->height);
         memset(frame->data[1], 0x80, frame->linesize[1] * frame->height);
         memset(frame->data[2], 0x80, frame->linesize[2] * frame->height);
-    }
-    else {
+    } else if (frame->format == AV_PIX_FMT_NV16) {
+        memset(frame->data[0], 0, frame->linesize[0] * frame->height);
+        memset(frame->data[1], 0x80, frame->linesize[1] * frame->height);
+    } else {
         av_log(NULL, AV_LOG_ERROR, "ERROR:fill_back_frame() not support format=%s\n", av_get_pix_fmt_name(frame->format));
     }
 }
@@ -1860,7 +1904,8 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
     void* in_ptr[4]={0};
     if (src->data[4] != NULL) {
         // this avframe has physical address
-        if (src->format == AV_PIX_FMT_NV12) {
+        if (src->format == AV_PIX_FMT_NV12 || src->format == AV_PIX_FMT_NV21 ||
+            src->format == AV_PIX_FMT_NV16) {
             #pragma GCC diagnostic push
             #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
             if (101 == src->channel_layout) {
@@ -1891,9 +1936,11 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
                 pa[1] = (uint64_t) src->data[5]; // cb cr
                 size[0] = src->linesize[4] * src->height; //Y
                 size[1] = src->linesize[5] * src->height/2; //UV
+                if (src->format == AV_PIX_FMT_NV16)
+                    size[1] = src->linesize[5] * src->height; //UV
             }
             #pragma GCC diagnostic pop
-        }else if (AV_PIX_FMT_YUV420P == src->format || AV_PIX_FMT_YUVJ420P == src->format) {
+        } else if (AV_PIX_FMT_YUV420P == src->format || AV_PIX_FMT_YUVJ420P == src->format) {
             pa[0] = (uint64_t) src->data[4]; // y
             pa[1] = (uint64_t) src->data[5]; // cb
             pa[2] = (uint64_t) src->data[6]; // cr
@@ -1901,7 +1948,8 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
             size[0] = src->linesize[4] * src->height; //Y
             size[1] = src->linesize[5] * src->height / 2; //U
             size[2] = src->linesize[6] * src->height / 2; //V
-        }else if (AV_PIX_FMT_RGBP == src->format || AV_PIX_FMT_BGRP == src->format || AV_PIX_FMT_YUV444P == src->format) {
+        } else if (AV_PIX_FMT_RGBP == src->format || AV_PIX_FMT_BGRP == src->format ||
+            AV_PIX_FMT_YUV444P == src->format) {
             pa[0] = (uint64_t) src->data[4]; // R/B
             pa[1] = (uint64_t) src->data[5]; // G
             pa[2] = (uint64_t) src->data[6]; // B/R
@@ -1909,13 +1957,15 @@ static int bmscale_bmimg_from_avframe(bm_handle_t handle, BmScaleContext *ctx, A
             size[0] =  src->linesize[4] * src->height;
             size[1] =  src->linesize[5] * src->height;
             size[2] =  src->linesize[6] * src->height;
-        } else if (AV_PIX_FMT_RGB24 == src->format || AV_PIX_FMT_BGR24 == src->format) {
+        } else if (AV_PIX_FMT_RGB24 == src->format || AV_PIX_FMT_BGR24 == src->format ||
+            AV_PIX_FMT_YUYV422 == src->format || AV_PIX_FMT_YVYU422 == src->format ||
+            AV_PIX_FMT_UYVY422 == src->format) {
             pa[0] = (uint64_t) src->data[4]; // RGB24
             size[0] =  src->linesize[4] * src->height;
         } else if (AV_PIX_FMT_GRAY8 == src->format) {
             pa[0] = (uint64_t) src->data[4]; // Y only
             size[0] =  src->linesize[4] * src->height;
-        }else if (AV_PIX_FMT_YUVJ422P == src->format || AV_PIX_FMT_YUV422P == src->format) {
+        } else if (AV_PIX_FMT_YUVJ422P == src->format || AV_PIX_FMT_YUV422P == src->format) {
             pa[0] = (uint64_t) src->data[4]; // Y
             size[0] =  src->linesize[4] * src->height;
 

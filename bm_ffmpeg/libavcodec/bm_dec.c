@@ -32,9 +32,9 @@
 #define USLEEP_CLOCK             1000 // here 1ms helpful for bm1684 decoding performance at small thread number
 
 //externs
-#ifdef BM_PCIE_MODE
-extern int vdi_read_memory(unsigned long core_idx,unsigned long long addr,unsigned char *data,int len,int endian);
-#endif
+//#ifdef BM_PCIE_MODE
+//extern int vdi_read_memory(unsigned long core_idx,unsigned long long addr,unsigned char *data,int len,int endian);
+//#endif
 typedef struct BMCodecBuffer {
     BMDecContext   *ctx;
     BMVidFrame     *bmframe;
@@ -513,7 +513,7 @@ static av_cold int bm_decode_init(AVCodecContext *avctx)
     bmctx->first_frame = 0;
     bmctx->pkt_flag = 0;
     bmctx->first_frame_get = 0;
-    bmctx->pts_offset = 0;
+    bmctx->dts_offset = 0;
 
     BMHandleBuffer *bm_handle_buffer = (BMHandleBuffer*)av_mallocz(sizeof(BMHandleBuffer));
     ff_mutex_init(&(bm_handle_buffer->av_mutex), NULL);
@@ -718,8 +718,9 @@ static int bm_fill_frame(AVCodecContext *avctx, BMVidFrame* bmframe, AVFrame* fr
     AVBmCodecFrame* hwpic = NULL;
 #endif
 #ifdef BM_PCIE_MODE
-    BMVidCodHandle handle = bmctx->handle;
-    int coreIdx = bmvpu_dec_get_core_idx(handle);
+    //BMVidCodHandle handle = bmctx->handle;
+    //int coreIdx = bmvpu_dec_get_core_idx(handle);
+	int soc_idx = 0;
 #endif
     int i, ret = 0;
 
@@ -925,7 +926,8 @@ static int bm_fill_frame(AVCodecContext *avctx, BMVidFrame* bmframe, AVFrame* fr
 
         //VDI_LITTLE_ENDIAN(64bit LE)=0
         if( !bmctx->pcie_no_copyback && bmctx->output_format == BMDEC_OUTPUT_UNMAP) {
-            vdi_read_memory(coreIdx, (unsigned long long)bmframe->buf[4], buffer->buf0, bmframe->size, 0);
+            //vdi_read_memory(coreIdx, (unsigned long long)bmframe->buf[4], buffer->buf0, bmframe->size, 0);
+            bmvpu_dec_read_memory(soc_idx, (u64)(bmframe->buf[4]), buffer->buf0, bmframe->size);
         }
 
         buffer->pcie_no_copyback = bmctx->pcie_no_copyback;
@@ -1412,30 +1414,28 @@ SEND_PKG:
                         bmctx->pkg_num_inbuf, bmvpu_dec_get_all_empty_input_buf_cnt(handle), stream.length, avpkt->pts, avpkt->dts);
 #endif
                 if (get_frame == 1) {
-                    return ret;
+                    goto DEC_END;
                 }
             } else {
                 if(ret > 0)
                     ret = 0;
 
+                if (ret == BM_ERR_VDEC_INVALID_CHNID) {
+                    free(bmframe);
+                    return AVERROR_EXTERNAL;
+                }
+
                 if (get_frame == 1) {
-                    usleep(1000);
+                    av_usleep(1000);
                     overtime_cnt++;
                     if(ret ==  BM_ERR_VDEC_SEQ_CHANGE || overtime_cnt % bmctx->timeout == 0) {
                         av_log(avctx, AV_LOG_WARNING, "send stream error... free input buffer:%d ret=%d\n", bmvpu_dec_get_all_empty_input_buf_cnt(handle), ret);
-                        return 0;
+                        goto DEC_END;
                     }
                     goto SEND_PKG;
                 }
             }
 
-#ifdef BM_PCIE_MODE
-            //free the header and data buffer
-            if(header_buf)
-                av_freep(&header_buf);
-            if(data_buf)
-                av_freep(&data_buf);
-#endif
         }
         else if(avpkt == NULL || avpkt->size==0) {
             bmctx->endof_flag = 1;
@@ -1466,12 +1466,23 @@ GET_FRAME:
             bmctx->first_frame_get = 1;
             int dts = bmframe->dts;
             if(dts < 0) {
-                bmctx->pts_offset = 0 - dts;
+                bmctx->dts_offset = 0 - dts;
+                bmctx->last_dts = dts;
             }
         }
-        bmframe->pts = bmframe->dts + bmctx->pts_offset;
+        if((long)bmframe->dts < 0 || (long)(bmframe->dts - bmctx->last_dts) < bmctx->dts_offset) {
+            bmframe->dts = bmctx->last_dts + bmctx->dts_offset;
+        }
+        bmctx->last_dts =  bmframe->dts;
+        if(avpkt->pts == AV_NOPTS_VALUE && bmframe->pts == AV_NOPTS_VALUE) {
+            bmframe->pts = bmframe->dts;
+        }
         overtime_cnt = 0;
         get_frame = 1;
+    }
+    else if(get_frame_state == BM_ERR_VDEC_INVALID_CHNID) {
+        free(bmframe);
+        return AVERROR_EXTERNAL;
     }
     else {
         if(bmvpu_dec_get_status(handle) == BMDEC_STOP && bmctx->endof_flag == 2) {
@@ -1482,11 +1493,12 @@ GET_FRAME:
             bmctx->pkt_flag = 0;
 
             free(bmframe);
-            return AVERROR_EOF;
+            ret = AVERROR_EOF;
+            goto DEC_END;
         }
 
         if(bmctx->endof_flag > 0) {
-            usleep(1000);
+            av_usleep(1000);
             goto FLUSH_FRAME;
         }
 
@@ -1495,17 +1507,25 @@ GET_FRAME:
                 av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame. ret=%d\n", ret);
             }
             free(bmframe);
-            return ret;
+            goto DEC_END;
         }
         else {
-            usleep(1000);
+            av_usleep(1000);
             overtime_cnt += 1;
             if(overtime_cnt % bmctx->timeout == 0){
-                if(bmvpu_dec_get_status(handle) == BMDEC_STOP || overtime_cnt / bmctx->timeout > 30){
-                    av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame. free input buffer:%d dec status:%d\n",
-                        bmvpu_dec_get_all_empty_input_buf_cnt(handle), bmvpu_dec_get_status(handle));
+                dec_state = bmvpu_dec_get_status(handle);
+                if(dec_state == BMDEC_STOP){
+                    av_log(avctx, AV_LOG_ERROR, "dec_decode fail. dec status:%d\n", dec_state);
                     free(bmframe);
-                    return AVERROR_EXTERNAL;
+                    ret = AVERROR_EOF;
+                    goto DEC_END;
+                }
+                else if(overtime_cnt / bmctx->timeout > 30){
+                    av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame. free input buffer:%d dec status:%d\n",
+                        bmvpu_dec_get_all_empty_input_buf_cnt(handle), dec_state);
+                    free(bmframe);
+                    ret = AVERROR_EXTERNAL;
+                    goto DEC_END;
                 }
             }
             if (bmvpu_dec_get_all_empty_input_buf_cnt(handle) > 0)
@@ -1582,6 +1602,14 @@ GET_FRAME:
             goto SEND_PKG;
         }
     }
+DEC_END:
+#ifdef BM_PCIE_MODE
+    //free the header and data buffer
+    if(header_buf)
+        av_freep(&header_buf);
+    if(data_buf)
+        av_freep(&data_buf);
+#endif
 
     return ret;
 
@@ -1736,6 +1764,8 @@ static const AVOption options[] = {
         OFFSET(dec_cmd_queue), AV_OPT_TYPE_INT, {.i64 = 4} , 1, 4, FLAGS },
     {"timeout","decoder timeout max count",
         OFFSET(timeout), AV_OPT_TYPE_INT, {.i64 = 1000} , 0, INT_MAX, FLAGS },
+    { "pts_calibrate", "use dts to correct frame's pts",
+        OFFSET(pts_calibrate), AV_OPT_TYPE_FLAGS, {.i64 = 0}, 0, 1, FLAGS },
     { NULL},
 };
 

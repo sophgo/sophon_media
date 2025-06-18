@@ -444,7 +444,6 @@ BMJpegDecoder::BMJpegDecoder()
 BMJpegDecoder::~BMJpegDecoder()
 {
     close(DECODE_INIT);
-    bm_jpu_dec_unload(BM_CARD_ID(m_device_id));
 }
 
 void  BMJpegDecoder::close(int decode_status)
@@ -455,6 +454,14 @@ void  BMJpegDecoder::close(int decode_status)
     {
         bm_jpu_jpeg_dec_close(jpeg_decoder);
         jpeg_decoder = NULL;
+        bm_jpu_dec_unload(BM_CARD_ID(m_device_id));
+    }
+#else
+    if (jpeg_decoder && decode_status == DECODE_SUCCESS && (m_type == -1))
+    {
+        bm_jpu_jpeg_dec_close(jpeg_decoder);
+        jpeg_decoder = NULL;
+        bm_jpu_dec_unload(BM_CARD_ID(m_device_id));
     }
 #endif
     // for Other
@@ -724,21 +731,17 @@ static void av_buffer_release(void *opaque, uint8_t *data)
     UMatData *u = (UMatData *)jpeg_opaque->data;
 
 #ifdef USING_SOC
-    #ifdef BOARD_FPGA
-        bm_jpu_devm_unmap(u->origdata, jpeg_decoder->raw_frame.framebuffer->dma_buffer->size);
-    #else
-        // decoder maybe has been closed, use a new handle
-        bm_handle_t handle;
-        bm_dev_request(&handle, jpeg_decoder->device_index);
-        bm_status_t ret = bm_mem_unmap_device_mem(handle, u->origdata,
-                            jpeg_decoder->raw_frame.framebuffer->dma_buffer->size);
-        if (ret != BM_SUCCESS) {
-            CV_Error(CV_HalMemErr, "unmap failed");
-            bm_dev_free(handle);
-            return;
-        }
+    // decoder maybe has been closed, use a new handle
+    bm_handle_t handle;
+    bm_dev_request(&handle, jpeg_decoder->device_index);
+    bm_status_t ret = bm_mem_unmap_device_mem(handle, u->origdata,
+                        jpeg_decoder->raw_frame.framebuffer->dma_buffer->size);
+    if (ret != BM_SUCCESS) {
+        CV_Error(CV_HalMemErr, "unmap failed");
         bm_dev_free(handle);
-    #endif
+        return;
+    }
+    bm_dev_free(handle);
 #else
     if (u->origdata){ fastFree(u->origdata); u->origdata = 0;}
 #endif
@@ -747,6 +750,7 @@ static void av_buffer_release(void *opaque, uint8_t *data)
      * so inform the decoder that it can reclaim it */
     bm_jpu_jpeg_dec_frame_finished(jpeg_decoder, jpeg_decoder->raw_frame.framebuffer);
     bm_jpu_jpeg_dec_close(jpeg_decoder);
+    bm_jpu_dec_unload(jpeg_decoder->device_index);
 
     if (jpeg_opaque) delete jpeg_opaque;
     if (u) delete u;
@@ -772,18 +776,13 @@ AVFrame *BMJpegDecoder::fillAVFrame(BmJpuJPEGDecInfo& info)
 #ifdef USING_SOC
     unsigned long long vaddr = 0;
     uint8_t *vddr = NULL;
-    #ifdef BOARD_FPGA
-        vaddr = bm_mem_get_device_addr(*(fb->dma_buffer));
-        vddr = (uint8_t *)bm_jpu_devm_map(vaddr, size);
-    #else
-        bm_handle_t handle = bm_jpu_dec_get_bm_handle(m_device_id);
-        bm_status_t ret =  bm_mem_mmap_device_mem(handle, fb->dma_buffer, &vaddr);
-        if (ret != BM_SUCCESS) {
-            CV_Error(CV_HalMemErr, "mmap failed");
-            return NULL;
-        }
-        vddr = (uint8_t*)vaddr;
-    #endif
+    bm_handle_t handle = bm_jpu_dec_get_bm_handle(m_device_id);
+    bm_status_t ret =  bm_mem_mmap_device_mem(handle, fb->dma_buffer, &vaddr);
+    if (ret != BM_SUCCESS) {
+        CV_Error(CV_HalMemErr, "mmap failed");
+        return NULL;
+    }
+    vddr = (uint8_t*)vaddr;
 #else
     uint8_t *vddr = (uint8_t *)fastMalloc(size);
     if (!vddr) {
@@ -1049,7 +1048,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
         img.allocator = hal::getAllocator();
         if (img.empty() || !(img.u && img.u->addr) || (BM_CARD_ID(img.card) != BM_CARD_ID(m_device_id)) ||
             (img.cols != (int)info.actual_frame_width) || (img.rows != (int)info.actual_frame_height) ||
-            (img.type() != CV_8UC3)){
+            (img.type() != CV_8UC3)) {
             img.create(info.actual_frame_height, info.actual_frame_width, CV_8UC3, m_device_id);
         }
 
@@ -1086,10 +1085,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
             /* Map the DMA buffer of the decoded picture */
             unsigned long long vmem  = 0;
             uint8_t *p_virt_addr = NULL;
-        #ifdef BOARD_FPGA
-            vmem = bm_mem_get_device_addr(*(info.framebuffer->dma_buffer));
-            p_virt_addr = (uint8_t *)bm_jpu_devm_map(vmem, info.framebuffer->dma_buffer->size);
-        #else
+
             bm_handle_t handle = bm_jpu_dec_get_bm_handle(m_device_id);
             bm_status_t ret = bm_mem_mmap_device_mem(handle, (info.framebuffer)->dma_buffer, &vmem);
             if (ret != BM_SUCCESS) {
@@ -1097,7 +1093,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
                 return -1;
             }
             p_virt_addr = (uint8_t*)vmem;
-        #endif
+
             uint8_t* u = p_virt_addr + info.cb_offset;
             uint8_t* v = p_virt_addr + info.cr_offset;
             int stride_u = info.cbcr_stride;
@@ -1111,15 +1107,12 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
                                v, stride_v,
                                info.actual_frame_width, info.actual_frame_height);
 
-        #ifdef BOARD_FPGA
-            bm_jpu_devm_unmap(p_virt_addr, info.framebuffer->dma_buffer->size);
-        #else
             /* Flush data from cache to dma buffer for VPP */
             bm_mem_flush_device_mem(handle, (info.framebuffer)->dma_buffer);
 
             /* Unmap the DMA buffer of the decoded picture */
             bm_mem_unmap_device_mem(handle, p_virt_addr,(info.framebuffer)->dma_buffer->size);
-        #endif
+
             src_fmt = FORMAT_YUV420P;
             src_stride[1] = info.cbcr_stride;
             src_stride[2] = src_stride[1];
@@ -1142,14 +1135,11 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
             /* Map the DMA buffer of the decoded picture */
             unsigned long long vmem = 0;
             uint8_t *p_virt_addr = NULL;
-        #ifdef BOARD_FPGA
-            vmem = bm_mem_get_device_addr(*(info.framebuffer->dma_buffer));
-            p_virt_addr = (uint8_t *)bm_jpu_devm_map(vmem, info.framebuffer->dma_buffer->size);
-        #else
+
             bm_handle_t handle = bm_jpu_dec_get_bm_handle(m_device_id);
             bm_mem_mmap_device_mem(handle, (info.framebuffer)->dma_buffer, &vmem);
             p_virt_addr = (uint8_t*)vmem;
-        #endif
+
             uint8_t* dst_rgb24 = img.data;
             int dst_stride_rgb24 = img.step[0];
             int width  = info.actual_frame_width;
@@ -1159,11 +1149,8 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
                             dst_rgb24, dst_stride_rgb24,
                             width, height);
 
-        #ifdef BOARD_FPGA
-            bm_jpu_devm_unmap(p_virt_addr, info.framebuffer->dma_buffer->size);
-        #else
             bm_mem_unmap_device_mem(handle, p_virt_addr,(info.framebuffer)->dma_buffer->size);
-        #endif
+
             img.allocator->invalidate(img.u, img.u->size);
             return 0;
             // static int ccc=0;
@@ -1171,7 +1158,7 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
         }
         img.allocator->invalidate(img.u, img.u->size); // cache is not flushed when input is physical address
 #ifdef HAVE_BMCV
-          CV_Assert(BM_SUCCESS == dec_convert(img, info.actual_frame_height, info.actual_frame_width, p_phys_addr, info.cb_offset, info.cr_offset, src_stride, dst_stride, src_fmt, csc_type));
+        CV_Assert(BM_SUCCESS == dec_convert(img, info.actual_frame_height, info.actual_frame_width, p_phys_addr, info.cb_offset, info.cr_offset, src_stride, dst_stride, src_fmt, csc_type));
 #endif
 
 #else
@@ -1226,24 +1213,18 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
 
         unsigned long long vmem = 0;
         uint8_t *p_virt_addr = NULL;
-    #ifdef BOARD_FPGA
-        vmem = bm_mem_get_device_addr(*(info.framebuffer->dma_buffer));
-        p_virt_addr = (uint8_t *)bm_jpu_devm_map(vmem, info.framebuffer->dma_buffer->size);
-    #else
+
         bm_handle_t handle = bm_jpu_dec_get_bm_handle(m_device_id);
         bm_mem_mmap_device_mem(handle, (info.framebuffer)->dma_buffer, &vmem);
         p_virt_addr = (uint8_t*)vmem;
-    #endif
+
         uint8_t* addr_y  = p_virt_addr + info.y_offset;
         libyuv::CopyPlane(addr_y, info.y_stride,
                              img.data, img.step[0],
                              info.actual_frame_width, info.actual_frame_height);
 
-    #ifdef BOARD_FPGA
-        bm_jpu_devm_unmap(p_virt_addr, info.framebuffer->dma_buffer->size);
-    #else
-        bm_mem_unmap_device_mem(handle,p_virt_addr, (info.framebuffer)->dma_buffer->size);
-    #endif
+        bm_mem_unmap_device_mem(handle, p_virt_addr, (info.framebuffer)->dma_buffer->size);
+
         if (!img.allocator) img.allocator = hal::getAllocator();
         img.allocator->invalidate(img.u, img.u->size);
 #else
@@ -1254,6 +1235,8 @@ int BMJpegDecoder::outputMat(Mat& img, BmJpuJPEGDecInfo &info)
 
         bm_memcpy_d2d(img.u->hid, dst_mem, 0, src_mem, info.y_offset, info.y_stride*info.actual_frame_height);
         bmcv::downloadMat(img);
+        // when fmt = gray, set m_type to -1, because we need to close decoder after decode
+        m_type = -1;
 #endif
     }
     return 0;
@@ -1271,13 +1254,13 @@ int BMJpegDecoder::softDec(Mat& img, unsigned int iScale, unsigned int scale_w, 
     JSAMPARRAY buffer = 0;
 
 #if defined(PROFILING_DEC)
-        gettimeofday(&start, NULL);
+    gettimeofday(&start, NULL);
 #endif
     bool color = img.channels() > 1;
     Mat dst;
     if (iScale) {
         dst = img;
-        img.create( m_height, m_width, img.type(), m_device_id);
+        img.create(m_height, m_width, img.type(), m_device_id);
     } else {
         if (img.empty() || (img.rows != m_height) || (img.cols != m_width))
             img.create(m_height, m_width, img.type(), m_device_id);
@@ -1325,7 +1308,7 @@ int BMJpegDecoder::softDec(Mat& img, unsigned int iScale, unsigned int scale_w, 
         }
     }
 
-    jpeg_finish_decompress( cinfo );
+    jpeg_finish_decompress(cinfo);
 
     m_yuv_output = 0;
     if (iScale != 0)
@@ -1361,14 +1344,14 @@ static int get_bm_chip_id(int card)
         return -1;
     }
     bm_get_chipid(handle, &chipid);
-    if(handle != NULL){
+    if(handle != NULL) {
         bm_dev_free(handle);
     }
 
     return chipid;
 }
 
-bool BMJpegDecoder::readData( Mat& img )
+bool BMJpegDecoder::readData(Mat& img)
 {
 #if defined(PROFILING_DEC)
     struct timeval start;
@@ -1540,6 +1523,7 @@ bool BMJpegDecoder::readData( Mat& img )
                 free(m_src_data);
             m_src_data = NULL;
             close(DECODE_FAILED);
+            bm_jpu_dec_unload(BM_CARD_ID(m_device_id));
             return false;
         }
 
@@ -1649,7 +1633,6 @@ BMJpegEncoder::BMJpegEncoder()
 BMJpegEncoder::~BMJpegEncoder()
 {
     close();
-    bm_jpu_enc_unload(BM_CARD_ID( m_device_id ));
 }
 
 ImageEncoder BMJpegEncoder::newEncoder() const
@@ -1664,6 +1647,7 @@ void BMJpegEncoder::close()
     {
         bm_jpu_jpeg_enc_close(jpeg_encoder);
         jpeg_encoder = NULL;
+        bm_jpu_enc_unload(BM_CARD_ID( m_device_id ));
     }
 }
 
@@ -2101,9 +2085,6 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
     struct timeval start;
     struct timeval end;
     double t;
-#endif
-
-#if defined(PROFILING_ENC)
     gettimeofday(&start, NULL);
 #endif
 
@@ -2150,14 +2131,11 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
 
         unsigned long long vmem = 0;
         uint8_t *p_virt_addr = NULL;
-    #ifdef BOARD_FPGA
-        vmem = bm_mem_get_device_addr(*(framebuffer.dma_buffer));
-        p_virt_addr = (uint8_t *)bm_jpu_devm_map(vmem, framebuffer.dma_buffer->size);
-    #else
+
         bm_handle_t handle2 = bm_jpu_enc_get_bm_handle(m_device_id);
         bm_mem_mmap_device_mem(handle2, framebuffer.dma_buffer, &vmem);
         p_virt_addr = (uint8_t*)vmem;
-    #endif
+
         if (p_virt_addr == NULL)
         {
             fprintf(stderr, "Error! bm_jpu_dma_buffer_map failed.\n");
@@ -2192,11 +2170,8 @@ bool BMJpegEncoder::prepareInternalDMABuffer(BmJpuFramebuffer& framebuffer, int 
 
         /* Flush cache to the DMA buffer */
         bm_mem_flush_device_mem(handle2, framebuffer.dma_buffer);
-    #ifdef BOARD_FPGA
-        bm_jpu_devm_unmap(p_virt_addr, framebuffer.dma_buffer->size);
-    #else
+
         bm_mem_unmap_device_mem(handle2, p_virt_addr, framebuffer.dma_buffer->size);
-    #endif
     }
 #if 0
     static int ab= 0;
@@ -2280,6 +2255,7 @@ bool BMJpegEncoder::write(const Mat& img, const std::vector<int>& params)
         fprintf(stderr, "Error! Failed to open bm_jpu_jpeg_enc_open() :  %s\n",
                 bm_jpu_enc_error_string(enc_ret));
         close();
+        bm_jpu_enc_unload(BM_CARD_ID(m_device_id));
         return false;
     }
 

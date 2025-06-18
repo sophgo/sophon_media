@@ -167,12 +167,8 @@ static void bm_jpegdec_buffer_release(void *opaque, uint8_t *data)
         if (framebuffer != NULL) {
             if (ctx->hw_accel==0) {
 #ifndef BM_PCIE_MODE
-            #ifdef BOARD_FPGA
-                bm_jpu_devm_unmap(bm_opaque->vaddr, framebuffer->dma_buffer->size);
-            #else
                 /* Unmap the DMA buffer of the decoded picture */
                 bm_mem_unmap_device_mem(ctx->handle, bm_opaque->vaddr, framebuffer->dma_buffer->size);
-            #endif
 #endif
             }
             /* Decoded frame is no longer needed,
@@ -184,12 +180,8 @@ static void bm_jpegdec_buffer_release(void *opaque, uint8_t *data)
         if (dma_buffer_to_user != NULL) {
             if (ctx->hw_accel==0) {
 #ifndef BM_PCIE_MODE
-            #ifdef BOARD_FPGA
-                bm_jpu_devm_unmap(bm_opaque->vaddr, dma_buffer_to_user->size);
-            #else
                 /* Unmap the DMA buffer of the decoded picture */
                 bm_mem_unmap_device_mem(ctx->handle, bm_opaque->vaddr, dma_buffer_to_user->size);
-            #endif
 #endif
             }
             /* free device memory allocated for user */
@@ -336,9 +328,6 @@ static int bm_jpegdec_fill_frame(AVCodecContext *avctx,
             }
         }
 #else
-    #ifdef BOARD_FPGA
-        virt_addr = (uint8_t*)bm_jpu_devm_map(phys_addr, data_size);
-    #else
         /* Map the DMA buffer of the decoded picture */
         // TODO extra cost when process only via HW
         unsigned long long p_vaddr = 0;
@@ -348,13 +337,7 @@ static int bm_jpegdec_fill_frame(AVCodecContext *avctx,
             return AVERROR_UNKNOWN;
         }
         virt_addr = (uint8_t*)p_vaddr;
-    #endif
 
-    #if 0
-        FILE *fp = fopen("dump.yuv", "wb");
-        fwrite(virt_addr, sizeof(uint8_t), data_size, fp);
-        fclose(fp);
-    #endif
 #endif
         yuv_virt_addr[0] = virt_addr + info->y_offset;
         yuv_virt_addr[1] = virt_addr + info->cb_offset;

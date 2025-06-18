@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
 if("${PLATFORM}" STREQUAL "soc" OR "${PLATFORM}" STREQUAL "pcie_arm64")
-    set(CMAKE_TOOLCHAIN_FILE ${CMAKE_MODULE_PATH}/aarch64-gnu.toolchain.cmake)
+    #set(CMAKE_TOOLCHAIN_FILE ${CMAKE_MODULE_PATH}/aarch64-gnu.toolchain.cmake)
     if("${GCC_VERSION}" STREQUAL "930")
         set(CMAKE_TOOLCHAIN_FILE ${CMAKE_MODULE_PATH}/aarch64-gnu.toolchain-930.cmake)
         #set(CMAKE_SKIP_RPATH TRUE)
@@ -11,13 +11,16 @@ if("${PLATFORM}" STREQUAL "soc" OR "${PLATFORM}" STREQUAL "pcie_arm64")
         set(CMAKE_TOOLCHAIN_FILE ${CMAKE_MODULE_PATH}/aarch64-gnu.toolchain-1131.cmake)
         #set(CMAKE_SKIP_RPATH TRUE)
         set(CMAKE_SKIP_INSTALL_RPATH TRUE)
+    else()
+        set(CMAKE_TOOLCHAIN_FILE ${CMAKE_MODULE_PATH}/aarch64-gnu.toolchain.cmake)
+        set(CMAKE_SKIP_INSTALL_RPATH TRUE)
     endif()
 elseif("${PLATFORM}" STREQUAL "pcie")
     set(CMAKE_TOOLCHAIN_FILE ${CMAKE_MODULE_PATH}/x86_64-gnu.toolchain.cmake)
     #include(cmake/x86_64-gnu.toolchain.cmake)
 endif()
 
-set(GIT_VERSION "1.9.0")
+set(GIT_VERSION "2.0.0")
 STRING(REGEX REPLACE "[\n\t\r]" "" GIT_VERSION ${GIT_VERSION})
 STRING(REGEX REPLACE "([0-9][0-9]*)\\..*" "\\1" MAJOR_VERSION ${GIT_VERSION})
 STRING(REGEX REPLACE ".*\\.([0-9][0-9]*)\\..*" "\\1" MINOR_VERSION ${GIT_VERSION})
@@ -74,8 +77,21 @@ message(STATUS "LIBSOPHAV_TOP............... " ${LIBSOPHAV_TOP})
 add_subdirectory(libsophav)
 
 find_package(FFmpeg)
-ADD_TARGET_FFMPEG(bm_ffmpeg ${CHIP_NAME} ${PLATFORM} OFF ${LIBSOPHAV_OUT_PATH}/jpeg ${LIBSOPHAV_OUT_PATH}/video ${LIBSOPHAV_OUT_PATH}/bmcv sophon-ffmpeg ${CMAKE_INSTALL_PREFIX}/ffmpeg)
-add_dependencies(bm_ffmpeg jpeg_all  vdec_all venc_all bmcv_all yuv_lib)
+ADD_TARGET_FFMPEG(build_ffmpeg ${CHIP_NAME} ${PLATFORM} OFF ${LIBSOPHAV_OUT_PATH}/jpeg ${LIBSOPHAV_OUT_PATH}/video ${LIBSOPHAV_OUT_PATH}/bmcv sophon-ffmpeg ${CMAKE_INSTALL_PREFIX}/ffmpeg)
+add_dependencies(build_ffmpeg jpeg_all  vdec_all venc_all bmcv_all yuv_lib)
+
+INSTALL_TARGET_FFMPEG(install_ffmpeg ${CHIP_NAME} ${PLATFORM} OFF sophon-ffmpeg ${CMAKE_INSTALL_PREFIX}/ffmpeg)
+add_dependencies(install_ffmpeg build_ffmpeg)
+
+add_custom_target(bm_ffmpeg ALL
+    DEPENDS build_ffmpeg install_ffmpeg)
+add_dependencies(bm_ffmpeg build_ffmpeg install_ffmpeg)
+
+add_custom_target(clean_ffmpeg
+    COMMAND make clean
+    COMMAND ${CMAKE_COMMAND} -E echo "Complete clean ffmpeg"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bm_ffmpeg)
+set_target_properties(clean_ffmpeg PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 option(BMCPU_USED "Use CPU on board" OFF)
 set_property(CACHE BMCPU_USED PROPERTY TYPE BOOL)
@@ -88,9 +104,9 @@ if (ENABLE_ABI0)
     add_dependencies(bm_opencv_abi0 bm_ffmpeg)
 else()
     ADD_TARGET_OPENCV_LIB(bm_opencv ${CHIP_NAME} ${SUBTYPE} ${PLATFORM} OFF ${ENABLE_OCV_CONTRIB} ${BMCPU_USED} ${LIBSOPHAV_OUT_PATH} ${LIBSOPHAV_OUT_PATH}
-        ${LIBSOPHAV_OUT_PATH} ${LIBSOPHAV_OUT_PATH} ${LIBSOPHAV_OUT_PATH} ${LIBSOPHAV_OUT_PATH} ${CMAKE_CURRENT_BINARY_DIR}/../install/ffmpeg sophon-opencv
+        ${LIBSOPHAV_OUT_PATH} ${LIBSOPHAV_OUT_PATH} ${LIBSOPHAV_OUT_PATH} ${LIBSOPHAV_OUT_PATH} ${CMAKE_SOURCE_DIR}/bm_ffmpeg sophon-opencv
         ${CMAKE_CURRENT_BINARY_DIR}/release/opencv)
-    add_dependencies(bm_opencv jpeg_all  vdec_all venc_all bmcv_all yuv_lib bm_ffmpeg)
+    add_dependencies(bm_opencv jpeg_all  vdec_all venc_all bmcv_all yuv_lib build_ffmpeg)
     add_subdirectory(samples)
     add_dependencies(sophon_sample bm_ffmpeg bm_opencv)
 endif()

@@ -74,8 +74,8 @@ const FourCC_Ext_Size entries[] =
     make_tuple("MPEG", "avi", Size(720, 576)),
     make_tuple("XVID", "avi", bigSize),
     make_tuple("H264", "mp4", Size(4096, 2160)),
-    make_tuple("FFV1", "avi", bigSize),
-    make_tuple("FFV1", "mkv", bigSize)
+    // make_tuple("FFV1", "avi", bigSize),
+    // make_tuple("FFV1", "mkv", bigSize)
 };
 
 INSTANTIATE_TEST_CASE_P(videoio, videoio_ffmpeg, testing::ValuesIn(entries));

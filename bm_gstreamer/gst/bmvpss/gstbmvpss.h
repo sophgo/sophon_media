@@ -6,6 +6,7 @@
 #include <gst/video/gstvideofilter.h>
 #include <gst/video/video-format.h>
 
+#include "bmcv_api_ext_c.h"
 
 G_BEGIN_DECLS
 
@@ -34,6 +35,7 @@ typedef struct _GstBmVPSSClass GstBmVPSSClass;
 struct _GstBmVPSS {
   GstVideoFilter base_bmvpss;
   GstAllocator *allocator;
+  bm_handle_t bm_handle;
 
   GstVideoInfo in_info;
   GstVideoInfo out_info;

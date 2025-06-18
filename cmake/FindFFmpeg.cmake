@@ -1,8 +1,4 @@
 function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_path video_abs_path bmcv_abs_path component out_abs_path)
-    set(FFMPEG_LIB_TARGET ${out_abs_path}/usr/local/lib)
-    set(FFMPEG_HEADER_TARGET ${out_abs_path}/usr/local/include)
-    set(FFMPEG_SHARE_TARGET ${out_abs_path}/usr/local/share)
-    set(FFMPEG_BIN_TARGET ${out_abs_path}/usr/local/bin)
     set(FFMPEG_VERSION ${PROJECT_VERSION})
     set(LOCATION_PREFIX sophon-ffmpeg_${FFMPEG_VERSION})
 
@@ -39,16 +35,23 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
     #        set(EXTRA_LDFLAGS -L${CMAKE_SOURCE_DIR}/prebuilt/riscv64/lib -Wl,-rpath=${CMAKE_SOURCE_DIR}/prebuilt/riscv64/lib)
     #        set(EXTRA_LIBS -lz -lpthread -lharfbuzz -lbz2 -lpng16 -lfreetype -lssl)
     #    else()
-    set(PKG_CONFIG_PATH ${CMAKE_SOURCE_DIR}/prebuilt/lib/pkgconfig)
-    if("${GCC_VERSION}" STREQUAL "930")
-        set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
-    elseif("${GCC_VERSION}" STREQUAL "1131")
-        set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-none-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
-    else()
-        set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+    if("${platform}" STREQUAL "pcie")
+        set(PKG_CONFIG_PATH ${CMAKE_SOURCE_DIR}/prebuilt/x86_64/pkgconfig)
+        set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=  --target-os=linux --arch=x86_64)
+        set(EXTRA_LDFLAGS -L${CMAKE_SOURCE_DIR}/prebuilt/x86_64 -Wl,-rpath=${CMAKE_SOURCE_DIR}/prebuilt/x86_64)
+    elseif("${platform}" STREQUAL "soc" OR "${platform}" STREQUAL "pcie_arm64")
+        set(PKG_CONFIG_PATH ${CMAKE_SOURCE_DIR}/prebuilt/lib/pkgconfig)
+        if("${GCC_VERSION}" STREQUAL "930")
+            set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+        elseif("${GCC_VERSION}" STREQUAL "1131")
+            set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-none-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+        else()
+            set(CROSS_COMPILE_OPTION --enable-cross-compile --cross-prefix=aarch64-linux-gnu- --target-os=linux --arch=aarch64 --cpu=cortex-a53)
+        endif()
+        set(EXTRA_LDFLAGS -L${CMAKE_SOURCE_DIR}/prebuilt/lib -Wl,-rpath=${CMAKE_SOURCE_DIR}/prebuilt/lib)
     endif()
 
-    set(EXTRA_LDFLAGS -L${CMAKE_SOURCE_DIR}/prebuilt/lib -Wl,-rpath=${CMAKE_SOURCE_DIR}/prebuilt/lib)
+    #set(EXTRA_LDFLAGS -L${CMAKE_SOURCE_DIR}/prebuilt/lib -Wl,-rpath=${CMAKE_SOURCE_DIR}/prebuilt/lib)
     #    endif()
     if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
         set(DEBUG_OPTION --enable-debug --disable-optimizations --disable-stripping)
@@ -78,24 +81,30 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         -L${LIBSOPHAV_OUT_PATH}/jpeg
                         -L${LIBSOPHAV_OUT_PATH}/bmcv
                         )
-
-    if("${GCC_VERSION}" STREQUAL "930")
+    if("${platform}" STREQUAL "pcie" OR "${platform}" STREQUAL "pcie_arm64")
         set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
-                            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}
-                            -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib930/soc
-                            -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib930/${platform}
-                            )
-    elseif("${GCC_VERSION}" STREQUAL "1131")
-        set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
-                            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}
-                            -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib1131/soc
-                            -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib1131/${platform}
-                            )
-    else()
-        set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
-                            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}
-                            -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib/soc
-                            )
+            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}
+            -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib/${platform}
+        )
+    elseif("${platform}" STREQUAL "soc")
+        if("${GCC_VERSION}" STREQUAL "930")
+            set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
+                                -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}
+                                -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib930/${platform}
+                                -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib930/${platform}
+                                )
+        elseif("${GCC_VERSION}" STREQUAL "1131")
+            set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
+                                -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}
+                                -L${LIBSOPHAV_TOP}/3rdparty/libisp/lib1131/${platform}
+                                -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib1131/${platform}
+                                )
+        else()
+            set(EXTRA_LDFLAGS   ${EXTRA_LDFLAGS}
+            -L${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}
+            -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib/${platform}
+        )
+        endif()
     endif()
 
     if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -110,12 +119,20 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         --disable-hwaccel=mjpeg_vaapi --disable-hwaccel=mpeg2_vaapi --disable-hwaccel=mpeg4_vaapi
                         --disable-hwaccel=vc1_vaapi   --disable-hwaccel=vp8_vaapi   --disable-hwaccel=wmv3_vaapi
             --enable-encoder=h264_bm      --enable-encoder=h265_bm      --enable-bmcodec)
-
+    if("${platform}" STREQUAL "pcie" OR "${platform}" STREQUAL "pcie_arm64")
+        list(APPEND EXTRA_OPTIONS --disable-indev=soph_v4l2)
+    endif()
     # basic config for different chips
 #if("${chip_name}" STREQUAL "bm1686")
         #set(EXTRA_LDFLAGS ${EXTRA_LDFLAGS} -L${LIBSOPHAV_OUT_PATH}/bmcv -Wl,-rpath=${CMAKE_SOURCE_DIR}/3rdparty/libbmcv/lib/${platform})
-    set(EXTRA_LIBS ${EXTRA_LIBS} -lispv4l2_helper -lae -laf -lawb -lcvi_bin -lcvi_bin_isp -lisp -lisp_algo -lispv4l2_adapter -lsns_full)#set mw lib
-    set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lbo -ldrm -lkms)
+    if("${platform}" STREQUAL "pcie")
+        set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel)
+    elseif("${platform}" STREQUAL "pcie_arm64")
+        set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel -lbo -ldrm -lkms)
+    elseif("${platform}" STREQUAL "soc")
+        set(EXTRA_LIBS ${EXTRA_LIBS} -lispv4l2_helper -lae -laf -lawb -lcvi_bin -lcvi_bin_isp -lisp -lisp_algo -lispv4l2_adapter -lsns_full)#set mw lib
+        set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel -lbo -ldrm -lkms)
+    endif()
 
     # TODO: depend on chip name?
     set(EXTRA_CFLAGS ${EXTRA_CFLAGS} -DBM1684)
@@ -137,7 +154,7 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         --enable-zlib --enable-openssl)
 
     if(NOT "${platform}" STREQUAL "soc")
-        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-encoder=bmx264)
+        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --disable-encoder=bmx264)
     else()
         set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --disable-encoder=bmx264)
     endif()
@@ -161,7 +178,9 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
         set(EXTRA_CFLAGS ${EXTRA_CFLAGS} -DBOARD_FPGA=1)
     endif()
 
-    set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay)
+    if("${platform}" STREQUAL "soc")
+        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay)
+    endif()
 
     set(FFMPEG_BUILD_TARGETS all)
 
@@ -183,24 +202,36 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                     --extra-version="sophon-${FFMPEG_VERSION}"
                     ${DEBUG_OPTION})
 
-    add_custom_command(OUTPUT ${FFMPEG_LIB_TARGET} ${FFMPEG_HEADER_TARGET} ${FFMPEG_BIN_TARGET} ${FFMPEG_SHARE_TARGET}
+    add_custom_command(OUTPUT ${out_abs_path}
         COMMAND ${CMAKE_COMMAND} -E env PKG_CONFIG_PATH=${PKG_CONFIG_PATH} ./configure ${PKG_OPTION}
+        COMMAND make clean
         COMMAND ${CMAKE_COMMAND} -E make_directory ${out_abs_path}
-        COMMAND make -j`nproc` ${FFMPEG_BUILD_TARGETS} VERBOSE=1
-        COMMAND make install DESTDIR=${out_abs_path}
-        #COMMAND make distclean
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bm_ffmpeg)
 
     add_custom_target(${target_name} ALL
-        DEPENDS ${FFMPEG_LIB_TARGET} ${FFMPEG_HEADER_TARGET} ${FFMPEG_BIN_TARGET} ${FFMPEG_SHARE_TARGET})
-    # support x264
-    #if((NOT ("${platform}" STREQUAL "soc")) AND ("${chip_name}" STREQUAL "bm1686"))
-    #    add_custom_command(TARGET ${target_name}
-    #        PRE_BUILD
-    #        COMMAND ${CMAKE_COMMAND} -E make_directoy ${FFMPEG_LIB_TARGET}/firmware
-    #        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/prebuilt/firmware/libx264.so ${FFMPEG_LIB_TARGET}/firmware
-    #        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    #endif()
+        COMMAND make -j`nproc` ${FFMPEG_BUILD_TARGETS} VERBOSE=1
+        DEPENDS ${out_abs_path}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bm_ffmpeg)
+
+endfunction(ADD_TARGET_FFMPEG)
+
+function(INSTALL_TARGET_FFMPEG target_name chip_name platform enable_sdl component out_abs_path)
+    set(FFMPEG_LIB_TARGET ${out_abs_path}/usr/local/lib)
+    set(FFMPEG_HEADER_TARGET ${out_abs_path}/usr/local/include)
+    set(FFMPEG_SHARE_TARGET ${out_abs_path}/usr/local/share)
+    set(FFMPEG_BIN_TARGET ${out_abs_path}/usr/local/bin)
+    set(FFMPEG_VERSION ${PROJECT_VERSION})
+    set(LOCATION_PREFIX sophon-ffmpeg_${FFMPEG_VERSION})
+
+    add_custom_command(OUTPUT ${FFMPEG_LIB_TARGET} ${FFMPEG_HEADER_TARGET} ${FFMPEG_BIN_TARGET} ${FFMPEG_SHARE_TARGET}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bm_ffmpeg)
+
+    add_custom_target(${target_name} ALL
+    COMMAND ${CMAKE_COMMAND} -E echo "Start install ffmpeg"
+    COMMAND make install DESTDIR=${out_abs_path}
+    DEPENDS ${FFMPEG_LIB_TARGET} ${FFMPEG_HEADER_TARGET} ${FFMPEG_BIN_TARGET} ${FFMPEG_SHARE_TARGET}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bm_ffmpeg)
+
     install(DIRECTORY ${FFMPEG_LIB_TARGET}/
         DESTINATION ${LOCATION_PREFIX}/lib
         FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
@@ -237,11 +268,21 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
         FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         COMPONENT ${component}-dev)
 
-endfunction(ADD_TARGET_FFMPEG)
+    # support x264
+    #if((NOT ("${platform}" STREQUAL "soc")) AND ("${chip_name}" STREQUAL "bm1686"))
+    #    add_custom_command(TARGET ${target_name}
+    #        PRE_BUILD
+    #        COMMAND ${CMAKE_COMMAND} -E make_directoy ${FFMPEG_LIB_TARGET}/firmware
+    #        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/prebuilt/firmware/libx264.so ${FFMPEG_LIB_TARGET}/firmware
+    #        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    #endif()
+
+endfunction(INSTALL_TARGET_FFMPEG)
 
 
 macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib vpu_abs_path
         jpu_abs_path yuv_abs_path bmcv_abs_path vpp_abs_path ion_abs_path ffmpeg_abs_path out_abs_path)
+    message(STATUS "SET_OPENCV_ENV out_abs_path:${ffmpeg_abs_path}")
     set(CHIP                        ${chip_name})
     set(SUBTYPE                     ${subtype})
     set(PRODUCTFORM                 ${platform})
@@ -259,29 +300,41 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
     set(BUILD_TIFF                  ON)
     set(WITH_JPEG                   ON)
     set(OPENCV_GENERATE_PKGCONFIG   ON)
-    set(FFMPEG_INCLUDE_DIRS         "${ffmpeg_abs_path}/usr/local/include"
+    set(FFMPEG_INCLUDE_DIRS         "${ffmpeg_abs_path}"
                                     "${LIBSOPHAV_TOP}/jpeg/inc"
                                     "${LIBSOPHAV_TOP}/video/dec/inc"
                                     "${LIBSOPHAV_TOP}/video/enc/inc"
                                     "${yuv_abs_path}/libyuv/include"
                                     "${LIBSOPHAV_TOP}/bmcv/include"
                                     "${LIBSOPHAV_TOP}/3rdparty/libbmcv/include")
-    set(FFMPEG_LIBRARY_DIRS         "${ffmpeg_abs_path}/usr/local/lib"
+    set(FFMPEG_LIBRARY_DIRS         "${ffmpeg_abs_path}/libavcodec"
+                                    "${ffmpeg_abs_path}/libavdevice"
+                                    "${ffmpeg_abs_path}/libavfilter"
+                                    "${ffmpeg_abs_path}/libavformat"
+                                    "${ffmpeg_abs_path}/libavutil"
+                                    "${ffmpeg_abs_path}/libpostproc"
+                                    "${ffmpeg_abs_path}/libswresample"
+                                    "${ffmpeg_abs_path}/libswscale"
                                     "${jpu_abs_path}/jpeg"
                                     "${vpu_abs_path}/video/dec"
                                     "${vpu_abs_path}/video/enc"
                                     "${yuv_abs_path}/libyuv/lib"
                                     "${bmcv_abs_path}/bmcv")
 
-    if("${GCC_VERSION}" STREQUAL "930")
+    if("${platform}" STREQUAL "pcie" OR "${platform}" STREQUAL "pcie_arm64")
         set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
-                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}")
-    elseif("${GCC_VERSION}" STREQUAL "1131")
-        set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
-                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}")
-    else()
-        set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
-                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
+                                            "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
+    elseif("${platform}" STREQUAL "soc")
+        if("${GCC_VERSION}" STREQUAL "930")
+            set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}")
+        elseif("${GCC_VERSION}" STREQUAL "1131")
+            set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}")
+        else()
+            set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
+        endif()
     endif()
 
     if (${platform} STREQUAL "pcie_sw64" OR ${platform} STREQUAL "pcie_loongarch64"  OR ${platform} STREQUAL "pcie_riscv64")
@@ -336,134 +389,142 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
             set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-930.cmake)
         elseif("${GCC_VERSION}" STREQUAL "1131")
             set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-1131.cmake)
+        else()
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain.cmake)
         endif()
 
     elseif(${platform} STREQUAL "pcie")
 
-        #        set(HAVE_opencv_python3         ON)
-        #        set(BUILD_opencv_python3        ON)
-        #        set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/include/python3.5m)
-        #        set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/lib/libpython3.5m.so)
-        #        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/bin)
-        #        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/dist-packages/numpy/core/include)
-        #        set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
-        #        set(HAVE_opencv_python2         ON)
-        #        set(BUILD_opencv_python2        ON)
-        #        set(PYTHON2_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/include/python2.7)
-        #        set(PYTHON2_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/lib/libpython2.7.so)
-        #        set(PYTHON2_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/dist-packages/numpy/core/include)
-        #        set(PYTHON2_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/bin)
-        #        set(PYTHON2_PACKAGES_PATH       ${out_abs_path}/opencv-python/python2)
-        #        set(PYTHON_DEFAULT_EXECUTABLE   /usr/bin/python)
-        #        set(OPENCV_SKIP_PYTHON_LOADER   ON)
-        #        set(ENABLE_NEON                 OFF)
-        #
-        #        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
-        #        set(JPEG_LIBRARY                ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/lib/pcie/libturbojpeg.a)
-        #        set(JPEG_INCLUDE_DIR            ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/include)
-        #        set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/lib/libfreetype.a)
-        #        set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
-        #        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
-        #        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/x86_64-gnu.toolchain.cmake)
-        #
-        #    elseif(${platform} STREQUAL "pcie_arm64")
-        #
-        #        set(HAVE_opencv_python3         ON)
-        #        set(BUILD_opencv_python3        ON)
-        #        set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/python3.5)
-        #        set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libpython3.5m.so)
-        #        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/bin/python3)
-        #        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/local/python3.5/dist-packages/numpy/core/include)
-        #        set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
-        #        set(HAVE_opencv_python2         ON)
-        #        set(BUILD_opencv_python2        ON)
-        #        set(PYTHON2_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/python2.7)
-        #        set(PYTHON2_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libpython2.7.so)
-        #        set(PYTHON2_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/local/python2.7/dist-packages/numpy/core/include)
-        #        set(PYTHON2_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/bin/python2.7)
-        #        set(PYTHON2_PACKAGES_PATH       ${out_abs_path}/opencv-python/python2)
-        #        set(PYTHON_DEFAULT_EXECUTABLE   /usr/bin/python)
-        #        set(OPENCV_SKIP_PYTHON_LOADER   ON)
-        #        set(WITH_ITT                    OFF)
-        #        set(BUILD_ITT                   OFF)
-        #        set(WITH_IPP                    OFF)
-        #        set(ENABLE_NEON                 ON)
-        #
-        #        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
-        #        set(JPEG_LIBRARY                ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/lib/soc/libturbojpeg.a)
-        #        set(JPEG_INCLUDE_DIR            ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/include)
-        #        set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libfreetype.a)
-        #        set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
-        #        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
-        #        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain.cmake)
-        #
-        #    elseif(${platform} STREQUAL "pcie_mips64")
-        #
-        #        set(HAVE_opencv_python3         OFF)
-        #        set(BUILD_opencv_python3        OFF)
-        #        set(HAVE_opencv_python2         OFF)
-        #        set(BUILD_opencv_python2        OFF)
-        #        set(ENABLE_NEON                 OFF)
-        #
-        #        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
-        #        set(JPEG_LIBRARY                ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/lib/mips/libturbojpeg.a)
-        #        set(JPEG_INCLUDE_DIR            ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/include)
-        #        set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/mip_64/lib/libfreetype.a)
-        #        set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
-        #        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
-        #        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/mips_64-gnu.toolchain.cmake)
-        #
-        #    elseif(${platform} STREQUAL "pcie_sw64")
-        #        set(HAVE_opencv_python3         ON)
-        #        set(BUILD_opencv_python3        ON)
-        #        set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/include/python3.7m)
-        #        set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/lib/libpython3.7m.so)
-        #        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/bin)
-        #        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/dist-packages/numpy/core/include)
-        #        set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
-        #    set(HAVE_opencv_python2         ON)
-        #    set(BUILD_opencv_python2        ON)
-        #        set(PYTHON2_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/include/python2.7)
-        #        set(PYTHON2_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/lib/libpython2.7.so)
-        #        set(PYTHON2_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/dist-packages/numpy/core/include)
-        #        set(PYTHON2_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/bin)
-        #        set(PYTHON2_PACKAGES_PATH       ${out_abs_path}/opencv-python/python2)
-        #        set(PYTHON_DEFAULT_EXECUTABLE   /usr/bin/python)
-        #        set(OPENCV_SKIP_PYTHON_LOADER   ON)
-        #        set(ENABLE_NEON                 OFF)
-        #
-        #        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
-        #        set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/lib/libfreetype.a)
-        #        set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
-        #        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
-        #        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/sw_64.toolchain.cmake)
-        #
-        #    elseif(${platform} STREQUAL "pcie_loongarch64")
-        #
-        #        set(HAVE_opencv_python3         OFF)
-        #        set(BUILD_opencv_python3        OFF)
-        #        set(HAVE_opencv_python2         OFF)
-        #        set(BUILD_opencv_python2        OFF)
-        #        set(ENABLE_NEON                 OFF)
-        #
-        #        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
-        #        set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/loongarch64/lib/libfreetype.a)
-        #        set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
-        #        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
-        #        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/loongarch64.toolchain.cmake)
-        #   elseif(${platform} STREQUAL "pcie_riscv64")
-        #
-        #        set(HAVE_opencv_python3         OFF)
-        #        set(BUILD_opencv_python3        OFF)
-        #        set(HAVE_opencv_python2         OFF)
-        #        set(BUILD_opencv_python2        OFF)
-        #        set(ENABLE_NEON                 OFF)
-        #
-        #        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
-        #    set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/riscv64/lib/libfreetype.a)
-        #    set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
-        #        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
-        #        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/riscv64.toolchain.cmake)
+        set(HAVE_opencv_python3         ON)
+        set(BUILD_opencv_python3        ON)
+        set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/include/python3.5m)
+        set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/lib/libpython3.5m.so)
+        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/bin)
+        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python3.5/dist-packages/numpy/core/include)
+        set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
+        set(HAVE_opencv_python2         ON)
+        set(BUILD_opencv_python2        ON)
+        set(PYTHON2_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/include/python2.7)
+        set(PYTHON2_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/lib/libpython2.7.so)
+        set(PYTHON2_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/dist-packages/numpy/core/include)
+        set(PYTHON2_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/python2.7/bin)
+        set(PYTHON2_PACKAGES_PATH       ${out_abs_path}/opencv-python/python2)
+        set(PYTHON_DEFAULT_EXECUTABLE   /usr/bin/python)
+        set(OPENCV_SKIP_PYTHON_LOADER   ON)
+        set(ENABLE_NEON                 OFF)
+
+        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
+        set(JPEG_LIBRARY                ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/lib/pcie/libturbojpeg.a)
+        set(JPEG_INCLUDE_DIR            ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/include)
+        set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/x86_64/libfreetype.a)
+        set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
+        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
+        set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/x86_64-gnu.toolchain.cmake)
+
+    elseif(${platform} STREQUAL "pcie_arm64")
+
+        set(HAVE_opencv_python3         ON)
+        set(BUILD_opencv_python3        ON)
+        set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/python3.5)
+        set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libpython3.5m.so)
+        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/bin/python3)
+        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/local/python3.5/dist-packages/numpy/core/include)
+        set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
+        set(HAVE_opencv_python2         ON)
+        set(BUILD_opencv_python2        ON)
+        set(PYTHON2_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/python2.7)
+        set(PYTHON2_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libpython2.7.so)
+        set(PYTHON2_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/local/python2.7/dist-packages/numpy/core/include)
+        set(PYTHON2_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/bin/python2.7)
+        set(PYTHON2_PACKAGES_PATH       ${out_abs_path}/opencv-python/python2)
+        set(PYTHON_DEFAULT_EXECUTABLE   /usr/bin/python)
+        set(OPENCV_SKIP_PYTHON_LOADER   ON)
+        set(WITH_ITT                    OFF)
+        set(BUILD_ITT                   OFF)
+        set(WITH_IPP                    OFF)
+        set(ENABLE_NEON                 ON)
+
+        set(OPENCV_FORCE_3RDPARTY_BUILD ON)
+        set(JPEG_LIBRARY                ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/lib/soc/libturbojpeg.a)
+        set(JPEG_INCLUDE_DIR            ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/include)
+        set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libfreetype.a)
+        set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
+        set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
+        if("${GCC_VERSION}" STREQUAL "930")
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-930.cmake)
+        elseif("${GCC_VERSION}" STREQUAL "1131")
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain-1131.cmake)
+        else()
+            set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/aarch64-gnu.toolchain.cmake)
+        endif()
+
+    #elseif(${platform} STREQUAL "pcie_mips64")
+
+    #    set(HAVE_opencv_python3         OFF)
+    #    set(BUILD_opencv_python3        OFF)
+    #    set(HAVE_opencv_python2         OFF)
+    #    set(BUILD_opencv_python2        OFF)
+    #    set(ENABLE_NEON                 OFF)
+
+    #    set(OPENCV_FORCE_3RDPARTY_BUILD ON)
+    #    set(JPEG_LIBRARY                ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/lib/mips/libturbojpeg.a)
+    #    set(JPEG_INCLUDE_DIR            ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/3rdparty/libjpeg-turbo/binary/include)
+    #    set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/mip_64/lib/libfreetype.a)
+    #    set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
+    #    set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
+    #    set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/mips_64-gnu.toolchain.cmake)
+
+    #elseif(${platform} STREQUAL "pcie_sw64")
+    #    set(HAVE_opencv_python3         ON)
+    #    set(BUILD_opencv_python3        ON)
+    #    set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/include/python3.7m)
+    #    set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/lib/libpython3.7m.so)
+    #    set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/bin)
+    #    set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python3.7/dist-packages/numpy/core/include)
+    #    set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
+    #set(HAVE_opencv_python2         ON)
+    #set(BUILD_opencv_python2        ON)
+    #    set(PYTHON2_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/include/python2.7)
+    #    set(PYTHON2_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/lib/libpython2.7.so)
+    #    set(PYTHON2_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/dist-packages/numpy/core/include)
+    #    set(PYTHON2_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/python2.7/bin)
+    #    set(PYTHON2_PACKAGES_PATH       ${out_abs_path}/opencv-python/python2)
+    #    set(PYTHON_DEFAULT_EXECUTABLE   /usr/bin/python)
+    #    set(OPENCV_SKIP_PYTHON_LOADER   ON)
+    #    set(ENABLE_NEON                 OFF)
+
+    #    set(OPENCV_FORCE_3RDPARTY_BUILD ON)
+    #    set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/sw_64/lib/libfreetype.a)
+    #    set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
+    #    set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
+    #    set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/sw_64.toolchain.cmake)
+
+    #elseif(${platform} STREQUAL "pcie_loongarch64")
+
+    #    set(HAVE_opencv_python3         OFF)
+    #    set(BUILD_opencv_python3        OFF)
+    #    set(HAVE_opencv_python2         OFF)
+    #    set(BUILD_opencv_python2        OFF)
+    #    set(ENABLE_NEON                 OFF)
+
+    #    set(OPENCV_FORCE_3RDPARTY_BUILD ON)
+    #    set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/loongarch64/lib/libfreetype.a)
+    #    set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
+    #    set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
+    #    set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/loongarch64.toolchain.cmake)
+    #elseif(${platform} STREQUAL "pcie_riscv64")
+
+    #    set(HAVE_opencv_python3         OFF)
+    #    set(BUILD_opencv_python3        OFF)
+    #    set(HAVE_opencv_python2         OFF)
+    #    set(BUILD_opencv_python2        OFF)
+    #    set(ENABLE_NEON                 OFF)
+
+    #    set(OPENCV_FORCE_3RDPARTY_BUILD ON)
+    #set(FREETYPE_LIBRARY            ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/riscv64/lib/libfreetype.a)
+    #set(FREETYPE_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/freetype2)
+    #    set(HARFBUZZ_INCLUDE_DIRS       ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/harfbuzz)
+    #    set(CMAKE_TOOLCHAIN_FILE        ../platforms/linux/riscv64.toolchain.cmake)
     endif()
 
     set(OPTION_LIST WITH_FFMPEG WITH_GSTREAMER WITH_GTK WITH_1394 WITH_V4L WITH_OPENCL WITH_CUDA WITH_LAPACK WITH_TBB
@@ -525,13 +586,15 @@ function(ADD_TARGET_OPENCV_LIB target_name chip_name subtype platform enable_abi
         COMMAND ${CMAKE_COMMAND} -E make_directory ./build
         COMMAND rm -rf ./build/*
         COMMAND ${CMAKE_COMMAND} -E chdir ./build ${CMAKE_COMMAND} -DCMAKE_INSTALL_PREFIX=${OPENCV_OUT_REL_PATH} -DENABLE_BMCPU=${ENABLE_BMCPU} ${OPENCV_CMAKE_OPTION} ..
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv)
+
+    add_custom_target (${target_name} ALL
         COMMAND ${CMAKE_COMMAND} -E chdir ./build make -j`nproc` ${MAKE_TARGET}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${OPENCV_OUT_REL_PATH}/test/
         COMMAND ${CMAKE_COMMAND} -E copy ./build/bin/opencv_test_* ${OPENCV_OUT_REL_PATH}/test/
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv
-    )
+        DEPENDS ${OPENCV_LIB_TARGET}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv)
 
-    add_custom_target (${target_name} ALL DEPENDS ${OPENCV_LIB_TARGET})
     set_property(TARGET ${target_name}
                 APPEND
                 PROPERTY ADDITIONAL_CLEAN_FILES ${CMAKE_CURRENT_SOURCE_DIR}/bm_opencv/build)
