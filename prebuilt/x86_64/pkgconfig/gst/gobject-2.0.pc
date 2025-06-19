@@ -1,0 +1,12 @@
+prefix=../../../../prebuilt
+includedir=${prefix}/include/gst
+libdir=${prefix}/x86_64/gst
+
+Name: GObject
+Description: GLib Type, Object, Parameter and Signal Library
+Version: 2.60.7
+Requires: glib-2.0
+Requires.private: libffi
+Libs: -L${libdir} -lgobject-2.0
+Libs.private: -pthread
+Cflags: -I${includedir}
