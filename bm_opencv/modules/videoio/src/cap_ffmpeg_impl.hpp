@@ -2409,16 +2409,16 @@ bool CvCapture_FFMPEG::grabFrame(char *buf, unsigned int len_in, unsigned int *l
                 break;
             }
         }
-        if (ret) {
+        if (valid) {
             if (round(sampler_cnt + sampler_step) == round(sampler_cnt))
-                ret = 0;
+                valid = false;
 
             sampler_cnt += sampler_step;
         } else {
             count_errs++;
             continue;
         }
-        if (ret) {
+        if (valid) {
             picture_raw_pts = picture->pkt_dts;
             dump_write(&g_bm_callback_info[chl_id].debug_param, picture);
         }
