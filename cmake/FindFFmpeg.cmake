@@ -68,7 +68,8 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         -I${LIBSOPHAV_TOP}/3rdparty/libdrm/include/libdrm
                         -I${LIBSOPHAV_TOP}/3rdparty/libdrm/include/libkms
                         -I${CMAKE_SOURCE_DIR}/prebuilt/include
-                        -I${CMAKE_SOURCE_DIR}/prebuilt/include/gbclient)
+                        -I${CMAKE_SOURCE_DIR}/prebuilt/include/gbclient
+                        -I${CMAKE_SOURCE_DIR}/prebuilt/include/opus)
 
     set(EXTRA_CFLAGS ${EXTRA_CFLAGS} -I${LIBSOPHAV_TOP}/3rdparty/libbmcv/include)
     # TODO: add other modules libraries
@@ -131,7 +132,7 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
         set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel -lbo -ldrm -lkms)
     elseif("${platform}" STREQUAL "soc")
         set(EXTRA_LIBS ${EXTRA_LIBS} -lispv4l2_helper -lae -laf -lawb -lcvi_bin -lcvi_bin_isp -lisp -lisp_algo -lispv4l2_adapter -lsns_full)#set mw lib
-        set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel -lbo -ldrm -lkms)
+        set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel -lbo -ldrm -lkms -lopus)
     endif()
 
     # TODO: depend on chip name?
@@ -179,7 +180,7 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
     endif()
 
     if("${platform}" STREQUAL "soc")
-        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay)
+        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay  --enable-libopus)
     endif()
 
     set(FFMPEG_BUILD_TARGETS all)
@@ -362,10 +363,10 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
 
         set(HAVE_opencv_python3         ON)
         set(BUILD_opencv_python3        ON)
-        set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/python3.5)
-        set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libpython3.5m.so)
-        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/bin/python3)
-        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/local/python3.5/dist-packages/numpy/core/include)
+        set(PYTHON3_INCLUDE_PATH        ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/include/python3.10)
+        set(PYTHON3_LIBRARIES           ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/libpython3.10.so)
+        set(PYTHON3_EXECUTABLE          ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/bin/python3.10)
+        set(PYTHON3_NUMPY_INCLUDE_DIRS  ${CMAKE_CURRENT_SOURCE_DIR}/prebuilt/lib/local/python3.10/dist-packages/numpy/core/include)
         set(PYTHON3_PACKAGES_PATH       ${out_abs_path}/opencv-python)
         set(HAVE_opencv_python2         ON)
         set(BUILD_opencv_python2        ON)

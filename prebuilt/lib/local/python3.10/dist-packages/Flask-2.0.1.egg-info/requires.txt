@@ -1,0 +1,6 @@
+
+[async]
+asgiref>=3.2
+
+[dotenv]
+python-dotenv

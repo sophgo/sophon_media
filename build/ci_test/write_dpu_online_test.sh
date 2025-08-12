@@ -12,8 +12,7 @@ function writeDpuOnline(){
 		cat <<-EOF > $nfs_path/tmp_daily.sh
 		for((i=1; i<=$try_n_times; i++))
 		do
-			./bmcv/test_dpu_online_thread 512 284 4 ./stream/sofa_left_img_512x284.bin ./stream/sofa_right_img_512x284.bin ./stream/fgs_512x284_res.bin 0 0 1 1 2>&1 | tee dpu_online_log.txt
-		    cmd_status=\${PIPESTATUS[0]}
+			./bmcv/test_dpu_online_thread 1 1 512 284 ./stream/sofa_left_img_512x284.bin ./stream/sofa_right_img_512x284.bin ./stream/fgs_512x284_res.bin ./stream/fgs_512x284_save.bin 2>&1 | tee dpu_online_log.txt
 		    if [ \$cmd_status -ne 0 ]; then
 		        exit \$cmd_status
 		    fi

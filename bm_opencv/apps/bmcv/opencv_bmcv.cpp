@@ -8,9 +8,45 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+// #include <opencv2/stitching.hpp>
+// #include "opencv2/stitching/warpers.hpp"
+// #include "opencv2/stitching/detail/matchers.hpp"
+// #include "opencv2/stitching/detail/motion_estimators.hpp"
+// #include "opencv2/stitching/detail/exposure_compensate.hpp"
+// #include "opencv2/stitching/detail/seam_finders.hpp"
+// #include "opencv2/stitching/detail/blenders.hpp"
+// #include "opencv2/stitching/detail/camera.hpp"
 
 using namespace cv;
 using namespace std;
+
+typedef enum {
+    conv,
+    size,
+    video,
+    image,
+    cvt,
+    bmcv2cv,
+    warp_affine,
+    bm_rectangle,
+    // fill_rectangle,
+    bm_bitwise_and,
+    bm_bitwise_or,
+    bm_bitwise_xor,
+    bm_absdiff,
+    mosaic,
+    quantify,
+    bm_rotate,
+    bm_threshold,
+    bm_stitch,
+    bm_convertTo
+} test_case;
+
+enum operation{
+    AND = 100,
+    OR = 101,
+    XOR = 102,
+};
 
 int g_device_id = 0;
 
@@ -18,7 +54,6 @@ static int get_plane_width(int format, int plane, int width)
 {
     int ret;
     if (plane > 2) return 0;
-
     switch (format){
         case FORMAT_YUV420P:
         case FORMAT_YUV422P:
@@ -292,7 +327,6 @@ static void test_size(const char *f0)
   Mat out(200, 200, CV_8UC3, SophonDevice(g_device_id));
   bmcv::resize(m0, out);
   bmcv::print(out);
-
   imwrite("size_1_0.png", out);
 }
 
@@ -554,33 +588,464 @@ start:
     return;
 }
 
+static void test_stitch(const char *f, bool default_stitch) {
+    bm_handle_t handle = NULL;
+    Mat frame0 = imread(f, 1, g_device_id);
+    Mat frame1 = imread(f, 1, g_device_id);
+    Mat output(1920, 2160, frame0.type());
+    bool update = true;
+    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
+    std::vector<Mat> src_img;
+    std::vector<Rect> src_vrt;
+    std::vector<Rect> dst_vrt;
+    if (default_stitch) {
+        Rect src_rt(0, 0, frame0.cols, frame0.rows);
+        Rect dst_rt0(0, 0, 1920, 1080);
+        Rect dst_rt1(0, 1080, 1920, 1080);
+        src_img = { frame0, frame1};
+        src_vrt = { src_rt, src_rt };
+        dst_vrt = { dst_rt0, dst_rt1};
+    } else {
+        return;
+    }
+    bmcv::stitch(src_img, src_vrt, dst_vrt, output, update);
+    imwrite("dst.png", output);
+    return;
+}
+
+static void test_mosaic(const char *f, bool default_mosaic, int mosaic_num, int start_x, int start_y, int crop_x, int crop_y, int is_expand) {
+    bm_handle_t handle = NULL;
+    Mat frame = imread(f, 1, g_device_id);
+    bool update = true;
+    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
+    // frame.size().width;
+    std::vector<Rect> vrt;
+    if (default_mosaic) {
+        Rect rt(300, 200, 500, 200);
+        Rect rt1(100, 200, 300, 400);
+        Rect rt2(50, 100, 100, 500);
+        vrt= { rt, rt1, rt2 };
+    } else {
+        Rect rt(start_x, start_y, crop_x, crop_y);
+        vrt = { rt };
+    }
+    bmcv::mosaic(frame, vrt, is_expand, update);
+    // imwrite("dst.png", frame);
+    return;
+}
+
+static void test_quantify(const char *f) {
+    bm_handle_t handle = NULL;
+    Mat frame = imread(f, 1, g_device_id);
+    Mat tmp;
+    frame.convertTo(tmp, CV_32FC3, 1);
+    Mat output(frame.size(), CV_8UC3);
+    bool update = true;
+    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
+
+    bmcv::quantify(tmp, output, update);
+    imwrite("dst.png", output);
+    return;
+}
+
+static void test_warp_affine(const char* f0, int is_bilinear, int borderMode, int dst_h, int dst_w){
+
+    bm_handle_t handle;
+    bm_status_t ret;
+
+    Mat mat_src = imread(f0, 1, g_device_id);
+    Mat mat_dst;
+
+    std::vector<float> data = {
+        0.96592583,    0.25881905, -230.06622949,
+        -0.25881905,    0.96592583,  172.47349112
+    };
+
+    Mat trans_mat1 = Mat(data).reshape(1, 2);
+
+    const char *out = "warp_affine_out.bin";
+    cv::bmcv::warpAffine(mat_src, mat_dst, trans_mat1, Size(dst_w, dst_h), is_bilinear, borderMode);
+    imwrite("dst.png", mat_dst);
+
+    warpAffine(mat_src, mat_dst, trans_mat1, Size(dst_w, dst_h), is_bilinear, borderMode, Scalar(0, 0, 0));
+    imwrite("cv_dst.png", mat_dst);
+
+  return;
+}
+
+static void test_bitwise_and(const char *f0, const char *f1) {
+    bm_handle_t handle = NULL;
+    Mat frame0 = imread(f0, 1, g_device_id);
+    Mat frame1 = imread(f1, 1, g_device_id);
+    Mat output(frame0.size(), frame0.type());
+    bool update = true;
+    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
+    bmcv::bitwise_and(frame0, frame1, output, update);
+    imwrite("dst.png", output);
+    bitwise_and(frame0, frame1, output);
+    imwrite("cv_dst.png", output);
+    return;
+}
+
+static void test_bitwise_or(const char *f0, const char *f1) {
+    bm_handle_t handle = NULL;
+    Mat frame0 = imread(f0, 1, g_device_id);
+    Mat frame1 = imread(f1, 1, g_device_id);
+    Mat output(frame0.size(), frame0.type());
+    bool update = false;
+    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
+    bmcv::bitwise_or(frame0, frame1, output, update);
+    imwrite("dst.png", output);
+    bitwise_or(frame0, frame1, output);
+    imwrite("cv_dst.png", output);
+    return;
+}
+
+static void test_bitwise_xor(const char *f0, const char *f1) {
+    bm_handle_t handle = NULL;
+    Mat frame0 = imread(f0, 1, g_device_id);
+    Mat frame1 = imread(f1, 1, g_device_id);
+    Mat output(frame0.size(), frame0.type());
+    bool update = false;
+    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
+    bmcv::bitwise_xor(frame0, frame1, output, update);
+    imwrite("dst.png", output);
+    bitwise_xor(frame0, frame1, output);
+    imwrite("cv_dst.png", output);
+    return;
+}
+
+static void test_absdiff(const char *f0, const char *f1) {
+    bm_handle_t handle = NULL;
+    Mat frame0 = imread(f0, 1, g_device_id);
+    Mat frame1 = imread(f1, 1, g_device_id);
+    Mat output(frame0.size(), frame0.type());
+    bool update = true;
+    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
+    bmcv::absdiff(frame0, frame1, output, update);
+    imwrite("dst.png", output);
+    absdiff(frame0, frame1, output);
+    // imwrite("cv_dst.png", output);
+    return;
+}
+
+static void test_rotate(const char *f, int rotateCode) {
+    bm_handle_t handle = NULL;
+    Mat frame = imread(f, 1, g_device_id);
+    Mat output;
+
+    bool update = true;
+    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
+    rotate(frame, output, rotateCode);
+    imwrite("cv_dst.png", output);
+    bmcv::rotate(frame, output, rotateCode, update);
+    imwrite("dst.png", output);
+    return;
+}
+
+static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num, int start_x, int start_y, int crop_x, int crop_y, int line_width, unsigned char r, unsigned char g, unsigned char b) {
+    bm_handle_t handle = NULL;
+    bool update = true;
+
+    // one input, method 1:
+    Mat frame1 = imread(f0, 1, g_device_id);
+    handle = frame1.u->hid ? frame1.u->hid : bmcv::getCard();
+    bmcv::rectangle(frame1, Point(start_x, start_y), Point(start_x + crop_x, start_y + crop_y), Scalar(b, g, r), line_width);
+    imwrite("dst1.png", frame1);
+    rectangle(frame1, Point(start_x, start_y), Point(start_x + crop_x, start_y + crop_y), Scalar(b, g, r), line_width);
+    imwrite("cv_dst1.png", frame1);
+
+    // one input, method 2:
+    Mat frame2 = imread(f0, 1, g_device_id);
+    handle = frame2.u->hid ? frame2.u->hid : bmcv::getCard();
+    bmcv::rectangle(frame2, Rect(start_x, start_y, crop_x, crop_y), Scalar(b, g, r), line_width);
+    imwrite("dst2.png", frame2);
+    rectangle(frame2, Rect(start_x, start_y, crop_x, crop_y), Scalar(b, g, r), line_width);
+    imwrite("cv_dst2.png", frame2);
+
+    // multi inputs, method 3;
+    Mat frame3 = imread(f0, 1, g_device_id);
+    handle = frame3.u->hid ? frame3.u->hid : bmcv::getCard();
+    std::vector<Rect> vrt;
+    if (default_draw) {
+        Rect rt(300, 200, 500, 200);
+        Rect rt1(100, 200, 300, 400);
+        Rect rt2(50, 100, 100, 500);
+        vrt= { rt, rt1, rt2 };
+    } else {
+        Rect rt(start_x, start_y, crop_x, crop_y);
+        vrt = { rt };
+    }
+    bmcv::rectangle(frame3, vrt, Scalar(b, g, r), line_width);
+    imwrite("dst3.png", frame3);
+    return;
+}
+
+static void test_convert_to(const char *f, int type, float alpha0, float beta0, float alpha1, float beta1, float alpha2, float beta2) {
+    bm_handle_t handle = NULL;
+    Mat frame = imread(f, 1, g_device_id);
+    // Mat frame(20, 20, CV_32FC1);
+    // cv::randu(frame, 0.0f, 255.0f);
+    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
+    std::vector<Mat> srcs = { frame };
+    std::vector<Mat> dsts(1);
+    std::array<float, 3> convert_to_alpha = {alpha0, alpha1, alpha2};
+    std::array<float, 3> convert_to_beta = {beta0, beta1, beta2};
+
+    bmcv::convertTo(srcs, dsts, CV_MAKETYPE(type,3), convert_to_alpha, convert_to_beta);
+    Mat gray_frame;
+    imwrite("dst.png", dsts[0]);
+
+    bmcv::convertTo(frame, dsts[0], CV_MAKETYPE(type,3), 1, 1);
+    imwrite("dst1.png", dsts[0]);
+
+    frame.convertTo(dsts[0], CV_MAKETYPE(type,3), 1, 1);
+    imwrite("cv_dst.png", dsts[0]);
+
+    return;
+}
+
+static void test_threshold(const char *f, unsigned char thresh, unsigned char max_value, int type) {
+    bm_handle_t handle = NULL;
+    Mat frame = imread(f, 0, g_device_id);
+    Mat output(frame.size(), frame.type());
+    bool update = true;
+    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
+    bmcv::threshold(frame, output, thresh, max_value, type, update);
+    imwrite("dst.png", output);
+    threshold(frame, output, thresh, max_value, type);
+    imwrite("cv_dst.png", output);
+    return;
+}
+
+static void Help(const char *programName)
+{
+    fprintf(stderr, "------------------------------------------------------------------------------\n");
+    fprintf(stderr, "%s\n", programName);
+    fprintf(stderr, "\tAll rights reserved by Bitmain\n");
+    fprintf(stderr, "------------------------------------------------------------------------------\n");
+    fprintf(stderr, "USAGE: %s <conv|size> <image file 1> [device_id]\n", programName);
+    fprintf(stderr, "       %s <conv> <image file 1> <image file 2> <image file 3> <image file 4> [device_id]\n", programName);
+    fprintf(stderr, "       %s <video> <rtsp url> [device_id]\n", programName);
+    fprintf(stderr, "       %s <image> <jpeg file> [device_id]\n", programName);
+    fprintf(stderr, "       %s <cvt> <jpeg file> [device_id]\n", programName);
+    fprintf(stderr, "       %s <bmcv2cv> <jpeg file> [device_id]\n", programName);
+    fprintf(stderr, "       %s <warp_affine> <input file> <is_bilinear> <borderMode> <dst_h> <dst_w> [device_id]\n", programName);
+    fprintf(stderr, "       %s <rectangle> <image file> <default(1): 3 Rects> [device_id]\n", programName);
+    fprintf(stderr, "       %s <rectangle> <image file> <default> <rect_num(1)> <start_x> <start_y> <crop_x> <crop_y> <line_width> <r_value> <g_value> <b_value> [device_id]\n", programName);
+    fprintf(stderr, "       %s <bitwise_and> <image file 1> <image file 2> [device_id]\n", programName);
+    fprintf(stderr, "       %s <bitwise_or> <image file 1> <image file 2> [device_id]\n", programName);
+    fprintf(stderr, "       %s <bitwise_xor> <image file 1> <image file 2> [device_id]\n", programName);
+    fprintf(stderr, "       %s <absdiff> <image file 1> <image file 2> [device_id]\n", programName);
+    fprintf(stderr, "       %s <mosaic> <image file> <default(1) 3 mosaic Rects> <is_expand> [device_id]\n", programName);
+    fprintf(stderr, "       %s <mosaic> <image file> <mosaic num(1)> <start_x> <start_y> <crop_x> <crop_y> <is_expand> [device_id]\n", programName);
+    fprintf(stderr, "       %s <quantify> <image file> [device_id]\n", programName);
+    fprintf(stderr, "       %s <rotate> <image file> <rotation_angle> [device_id]\n", programName);
+    fprintf(stderr, "       %s <threshold> <image file> <thresh> <max_value> <type> [device_id]\n", programName);
+    // fprintf(stderr, "       %s <stitch> <image file> <src_rect_num(1)> <src_start_x> <src_start_y> <src_crop_x> <src_crop_y> <dst_rect_num(1)> <dst_start_x> <max_value> <type> [device_id]\n", programName);
+    fprintf(stderr, "       %s <stitch> <image file> <default(1)> [device_id]\n", programName);
+    fprintf(stderr, "       %s <convertTo> <image file> <type> <alpha0> <beta0> <alpha1> <beta1> <alpha2> <beta2> [device_id]\n", programName);
+}
+
+static int parse_args(const char *argv, test_case* tc) {
+    if (strcmp(argv, "conv") == 0) {
+        *tc = conv;
+    } else if (strcmp(argv, "size") == 0) {
+        *tc = size;
+    } else if (strcmp(argv, "video") == 0) {
+        *tc = video;
+    } else if (strcmp(argv, "image") == 0) {
+        *tc = image;
+    } else if (strcmp(argv, "cvt") == 0) {
+        *tc = cvt;
+    } else if (strcmp(argv, "bmcv2cv") == 0) {
+        *tc = bmcv2cv;
+    } else if (strcmp(argv, "warp_affine") == 0) {
+        *tc = warp_affine;
+    } else if (strcmp(argv, "rectangle") == 0) {
+        *tc = bm_rectangle;
+    } else if (strcmp(argv, "bitwise_and") == 0) {
+        *tc = bm_bitwise_and;
+    } else if (strcmp(argv, "bitwise_or") == 0) {
+        *tc = bm_bitwise_or;
+    } else if (strcmp(argv, "bitwise_xor") == 0) {
+        *tc = bm_bitwise_xor;
+    } else if (strcmp(argv, "absdiff") == 0) {
+        *tc = bm_absdiff;
+    } else if (strcmp(argv, "mosaic") == 0) {
+        *tc = mosaic;
+    } else if (strcmp(argv, "quantify") == 0) {
+        *tc = quantify;
+    } else if (strcmp(argv, "rotate") == 0) {
+        *tc = bm_rotate;
+    } else if (strcmp(argv, "threshold") == 0) {
+        *tc = bm_threshold;
+    } else if (strcmp(argv, "stitch") == 0) {
+        *tc = bm_stitch;
+    } else if (strcmp(argv, "convertTo") == 0) {
+        *tc = bm_convertTo;
+    }
+
+    else {
+        printf("Invalid test case: %s\n", argv);
+        return -1;
+    }
+}
+
 int main(int argc, const char** argv)
 {
-  if (argc != 3 && argc != 6 && argc != 4 && argc != 7) {
-    printf("USAGE: %s <conv|size> <image file 1> [device_id]\n", argv[0]);
-    printf("       %s <conv> <image file 1> <image file 2> <image file 3> <image file 4> [device_id]\n", argv[0]);
-    printf("       %s <video> <rtsp url> [device_id]\n", argv[0]);
-    printf("       %s <image> <jpeg file> [device_id]\n", argv[0]);
-    printf("       %s <cvt> <jpeg file> [device_id]\n", argv[0]);
-    printf("       %s <bmcv2cv> <jpeg file> [device_id]\n", argv[0]);
-    return -1;
-  }
+    if (argc < 2) {
+        printf("Invalid input!\n");
+        Help(argv[0]);
+        return -1;
+    }
 
-  if (argc == 4 || argc == 7) g_device_id = atoi(argv[argc-1]);
-  printf("bm_device %d used.\n", g_device_id);
+    test_case tc;
 
-  if (argc < 5) {
-    if (strcmp(argv[1], "conv") == 0) test_conv_1(argv[2]);
+    parse_args(argv[1], &tc);
 
-    if (strcmp(argv[1], "size") == 0) test_size(argv[2]);
-    if (strcmp(argv[1], "video") == 0) test_video(argv[2]);
-    if (strcmp(argv[1], "image") == 0) test_image(argv[2]);
-    if (strcmp(argv[1], "cvt") == 0) test_cvt(argv[2]);
-    if (strcmp(argv[1], "bmcv2cv") == 0) test_bmcv2cv(argv[2]);
-  }
-  // else {
-  //   if (strcmp(argv[1], "conv") == 0) test_conv_4(argv[2], argv[3], argv[4], argv[5]);
-  // }
+    switch (tc)
+    {
+    case conv:
+        if (argc != 3 && argc != 4 && argc != 6 && argc != 7) {Help(argv[0]); return -1;}
+        if (argc == 4 || argc == 7) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_conv_1(argv[2]);
+        break;
+    case size:
+        if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
+        if (argc == 4) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_size(argv[2]);
+        break;
+    case video:
+        if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
+        if (argc == 4) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_video(argv[2]);
+        break;
+    case image:
+        if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
+        if (argc == 4) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_image(argv[2]);
+        break;
+    case cvt:
+        if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
+        if (argc == 4) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_cvt(argv[2]);
+        break;
+    case bmcv2cv:
+        if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
+        if (argc == 4) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_bmcv2cv(argv[2]);
+        break;
+    case warp_affine:
+        if (argc != 7 && argc != 8) {Help(argv[0]); return -1;}
+        if (argc == 8) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_warp_affine(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), atoi(argv[6]));
+        break;
+    case bm_rectangle:
+        if (argc != 4 && argc != 5 && argc != 13 && argc != 14) {Help(argv[0]); return -1;}
+        if (argc == 5 || argc == 14) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        if (argc < 6) {
+            test_draw_rectangle(argv[2], true, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        } else {
+            // bool default_ = atoi(argv[3]);
+            bool default_ = (strcmp(argv[3], "true") == 0 || strcmp(argv[3], "1") == 0);
+            int rect_num = atoi(argv[4]);
+            int start_x = atoi(argv[5]);
+            int start_y = atoi(argv[6]);
+            int crop_x = atoi(argv[7]);
+            int crop_y = atoi(argv[8]);
+            int line_width = atoi(argv[9]);
+            int r = atoi(argv[10]);
+            unsigned char g = atoi(argv[11]);
+            unsigned char b = atoi(argv[12]);
+            test_draw_rectangle(argv[2], default_, rect_num, start_x, start_y, crop_x, crop_y, line_width, r, g, b);
+        }
+        break;
+    case bm_bitwise_and:
+        if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
+        if (argc == 5) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_bitwise_and(argv[2], argv[3]);
+        break;
+    case bm_bitwise_or:
+        if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
+        if (argc == 5) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_bitwise_or(argv[2], argv[3]);
+        break;
+    case bm_bitwise_xor:
+        if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
+        if (argc == 5) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_bitwise_xor(argv[2], argv[3]);
+        break;
+    case bm_absdiff:
+        if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
+        if (argc == 5) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_absdiff(argv[2], argv[3]);
+        break;
+    case mosaic:
+        if (argc != 5 && argc != 6 && argc != 9 && argc != 10) {Help(argv[0]); return -1;}
+        if (argc == 6 || argc == 10) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        if (argc < 7) {
+            test_mosaic(argv[2], true, 0, 0, 0, 0, 0, 0);
+        } else {
+            int mosaic_num = atoi(argv[3]);
+            int start_x = atoi(argv[4]);
+            int start_y = atoi(argv[5]);
+            int crop_x = atoi(argv[6]);
+            int crop_y = atoi(argv[7]);
+            int is_expand = atoi(argv[8]);
+            test_mosaic(argv[2], false, mosaic_num, start_x, start_y, crop_x, crop_y, is_expand);
+        }
+        break;
+    case quantify:
+        if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
+        if (argc == 4) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_quantify(argv[2]);
+        break;
+    case bm_rotate:
+        if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
+        if (argc == 5) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_rotate(argv[2], atoi(argv[3]));
+        break;
+    case bm_threshold:
+        if (argc != 6 && argc != 7) {Help(argv[0]); return -1;}
+        if (argc == 7) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_threshold(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
+        break;
+    case bm_stitch:
+        if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
+        if (argc == 5) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        if (argc < 6)
+            test_stitch(argv[2], true);
+        // else
+        break;
+    case bm_convertTo:
+        if (argc != 10 && argc != 11) {Help(argv[0]); return -1;}
+        if (argc == 11) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_convert_to(argv[2], atoi(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]), atof(argv[7]), atof(argv[8]), atof(argv[9]));
+        break;
+    default:
+        printf("Invalid input!\n");
+        Help(argv[0]);
+        break;
+    }
 
   return 0;
 }

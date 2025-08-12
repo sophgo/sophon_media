@@ -70,6 +70,7 @@ int VideoDec_FFMPEG::openDec(const char *filename, int codec_name_flag,
     if (ret < 0)
     {
         av_log(NULL, AV_LOG_ERROR, "Cannot open input file\n");
+        av_dict_free(&dict);
         return ret;
     }
 
@@ -77,6 +78,7 @@ int VideoDec_FFMPEG::openDec(const char *filename, int codec_name_flag,
     if (ret < 0)
     {
         av_log(NULL, AV_LOG_ERROR, "Cannot find stream information\n");
+        av_dict_free(&dict);
         return ret;
     }
 

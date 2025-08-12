@@ -1,0 +1,5 @@
+
+[:platform_system == "Windows"]
+colorama
+
+[:python_version < "3.8"]
