@@ -22,7 +22,7 @@ using namespace std;
 
 typedef enum {
     conv,
-    size,
+    scale,
     video,
     image,
     cvt,
@@ -589,12 +589,10 @@ start:
 }
 
 static void test_stitch(const char *f, bool default_stitch) {
-    bm_handle_t handle = NULL;
     Mat frame0 = imread(f, 1, g_device_id);
     Mat frame1 = imread(f, 1, g_device_id);
     Mat output(1920, 2160, frame0.type());
     bool update = true;
-    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
     std::vector<Mat> src_img;
     std::vector<Rect> src_vrt;
     std::vector<Rect> dst_vrt;
@@ -613,11 +611,11 @@ static void test_stitch(const char *f, bool default_stitch) {
     return;
 }
 
-static void test_mosaic(const char *f, bool default_mosaic, int mosaic_num, int start_x, int start_y, int crop_x, int crop_y, int is_expand) {
-    bm_handle_t handle = NULL;
+static void test_mosaic(const char *f, bool default_mosaic, int mosaic_num,
+    int start_x, int start_y, int crop_x, int crop_y, int is_expand) {
+
     Mat frame = imread(f, 1, g_device_id);
     bool update = true;
-    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
     // frame.size().width;
     std::vector<Rect> vrt;
     if (default_mosaic) {
@@ -635,13 +633,11 @@ static void test_mosaic(const char *f, bool default_mosaic, int mosaic_num, int 
 }
 
 static void test_quantify(const char *f) {
-    bm_handle_t handle = NULL;
     Mat frame = imread(f, 1, g_device_id);
     Mat tmp;
     frame.convertTo(tmp, CV_32FC3, 1);
     Mat output(frame.size(), CV_8UC3);
     bool update = true;
-    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
 
     bmcv::quantify(tmp, output, update);
     imwrite("dst.png", output);
@@ -649,10 +645,6 @@ static void test_quantify(const char *f) {
 }
 
 static void test_warp_affine(const char* f0, int is_bilinear, int borderMode, int dst_h, int dst_w){
-
-    bm_handle_t handle;
-    bm_status_t ret;
-
     Mat mat_src = imread(f0, 1, g_device_id);
     Mat mat_dst;
 
@@ -663,23 +655,19 @@ static void test_warp_affine(const char* f0, int is_bilinear, int borderMode, in
 
     Mat trans_mat1 = Mat(data).reshape(1, 2);
 
-    const char *out = "warp_affine_out.bin";
     cv::bmcv::warpAffine(mat_src, mat_dst, trans_mat1, Size(dst_w, dst_h), is_bilinear, borderMode);
     imwrite("dst.png", mat_dst);
 
     warpAffine(mat_src, mat_dst, trans_mat1, Size(dst_w, dst_h), is_bilinear, borderMode, Scalar(0, 0, 0));
     imwrite("cv_dst.png", mat_dst);
-
-  return;
+    return;
 }
 
 static void test_bitwise_and(const char *f0, const char *f1) {
-    bm_handle_t handle = NULL;
     Mat frame0 = imread(f0, 1, g_device_id);
     Mat frame1 = imread(f1, 1, g_device_id);
     Mat output(frame0.size(), frame0.type());
     bool update = true;
-    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
     bmcv::bitwise_and(frame0, frame1, output, update);
     imwrite("dst.png", output);
     bitwise_and(frame0, frame1, output);
@@ -688,12 +676,10 @@ static void test_bitwise_and(const char *f0, const char *f1) {
 }
 
 static void test_bitwise_or(const char *f0, const char *f1) {
-    bm_handle_t handle = NULL;
     Mat frame0 = imread(f0, 1, g_device_id);
     Mat frame1 = imread(f1, 1, g_device_id);
     Mat output(frame0.size(), frame0.type());
     bool update = false;
-    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
     bmcv::bitwise_or(frame0, frame1, output, update);
     imwrite("dst.png", output);
     bitwise_or(frame0, frame1, output);
@@ -702,12 +688,10 @@ static void test_bitwise_or(const char *f0, const char *f1) {
 }
 
 static void test_bitwise_xor(const char *f0, const char *f1) {
-    bm_handle_t handle = NULL;
     Mat frame0 = imread(f0, 1, g_device_id);
     Mat frame1 = imread(f1, 1, g_device_id);
     Mat output(frame0.size(), frame0.type());
     bool update = false;
-    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
     bmcv::bitwise_xor(frame0, frame1, output, update);
     imwrite("dst.png", output);
     bitwise_xor(frame0, frame1, output);
@@ -716,12 +700,10 @@ static void test_bitwise_xor(const char *f0, const char *f1) {
 }
 
 static void test_absdiff(const char *f0, const char *f1) {
-    bm_handle_t handle = NULL;
     Mat frame0 = imread(f0, 1, g_device_id);
     Mat frame1 = imread(f1, 1, g_device_id);
     Mat output(frame0.size(), frame0.type());
     bool update = true;
-    handle = frame0.u->hid ? frame0.u->hid : bmcv::getCard();
     bmcv::absdiff(frame0, frame1, output, update);
     imwrite("dst.png", output);
     absdiff(frame0, frame1, output);
@@ -730,12 +712,10 @@ static void test_absdiff(const char *f0, const char *f1) {
 }
 
 static void test_rotate(const char *f, int rotateCode) {
-    bm_handle_t handle = NULL;
     Mat frame = imread(f, 1, g_device_id);
     Mat output;
 
     bool update = true;
-    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
     rotate(frame, output, rotateCode);
     imwrite("cv_dst.png", output);
     bmcv::rotate(frame, output, rotateCode, update);
@@ -743,13 +723,11 @@ static void test_rotate(const char *f, int rotateCode) {
     return;
 }
 
-static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num, int start_x, int start_y, int crop_x, int crop_y, int line_width, unsigned char r, unsigned char g, unsigned char b) {
-    bm_handle_t handle = NULL;
-    bool update = true;
-
+static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num,
+    int start_x, int start_y, int crop_x, int crop_y, int line_width,
+    unsigned char r, unsigned char g, unsigned char b) {
     // one input, method 1:
     Mat frame1 = imread(f0, 1, g_device_id);
-    handle = frame1.u->hid ? frame1.u->hid : bmcv::getCard();
     bmcv::rectangle(frame1, Point(start_x, start_y), Point(start_x + crop_x, start_y + crop_y), Scalar(b, g, r), line_width);
     imwrite("dst1.png", frame1);
     rectangle(frame1, Point(start_x, start_y), Point(start_x + crop_x, start_y + crop_y), Scalar(b, g, r), line_width);
@@ -757,7 +735,6 @@ static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num,
 
     // one input, method 2:
     Mat frame2 = imread(f0, 1, g_device_id);
-    handle = frame2.u->hid ? frame2.u->hid : bmcv::getCard();
     bmcv::rectangle(frame2, Rect(start_x, start_y, crop_x, crop_y), Scalar(b, g, r), line_width);
     imwrite("dst2.png", frame2);
     rectangle(frame2, Rect(start_x, start_y, crop_x, crop_y), Scalar(b, g, r), line_width);
@@ -765,7 +742,6 @@ static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num,
 
     // multi inputs, method 3;
     Mat frame3 = imread(f0, 1, g_device_id);
-    handle = frame3.u->hid ? frame3.u->hid : bmcv::getCard();
     std::vector<Rect> vrt;
     if (default_draw) {
         Rect rt(300, 200, 500, 200);
@@ -781,12 +757,12 @@ static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num,
     return;
 }
 
-static void test_convert_to(const char *f, int type, float alpha0, float beta0, float alpha1, float beta1, float alpha2, float beta2) {
-    bm_handle_t handle = NULL;
+static void test_convert_to(const char *f, int type, float alpha0,
+    float beta0, float alpha1, float beta1, float alpha2, float beta2) {
+
     Mat frame = imread(f, 1, g_device_id);
     // Mat frame(20, 20, CV_32FC1);
     // cv::randu(frame, 0.0f, 255.0f);
-    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
     std::vector<Mat> srcs = { frame };
     std::vector<Mat> dsts(1);
     std::array<float, 3> convert_to_alpha = {alpha0, alpha1, alpha2};
@@ -806,11 +782,9 @@ static void test_convert_to(const char *f, int type, float alpha0, float beta0, 
 }
 
 static void test_threshold(const char *f, unsigned char thresh, unsigned char max_value, int type) {
-    bm_handle_t handle = NULL;
     Mat frame = imread(f, 0, g_device_id);
     Mat output(frame.size(), frame.type());
     bool update = true;
-    handle = frame.u->hid ? frame.u->hid : bmcv::getCard();
     bmcv::threshold(frame, output, thresh, max_value, type, update);
     imwrite("dst.png", output);
     threshold(frame, output, thresh, max_value, type);
@@ -851,7 +825,7 @@ static int parse_args(const char *argv, test_case* tc) {
     if (strcmp(argv, "conv") == 0) {
         *tc = conv;
     } else if (strcmp(argv, "size") == 0) {
-        *tc = size;
+        *tc = scale;
     } else if (strcmp(argv, "video") == 0) {
         *tc = video;
     } else if (strcmp(argv, "image") == 0) {
@@ -884,12 +858,11 @@ static int parse_args(const char *argv, test_case* tc) {
         *tc = bm_stitch;
     } else if (strcmp(argv, "convertTo") == 0) {
         *tc = bm_convertTo;
-    }
-
-    else {
+    } else {
         printf("Invalid test case: %s\n", argv);
         return -1;
     }
+    return 0;
 }
 
 int main(int argc, const char** argv)
@@ -912,7 +885,7 @@ int main(int argc, const char** argv)
         printf("bm_device %d used.\n", g_device_id);
         test_conv_1(argv[2]);
         break;
-    case size:
+    case scale:
         if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
         if (argc == 4) g_device_id = atoi(argv[argc-1]);
         printf("bm_device %d used.\n", g_device_id);

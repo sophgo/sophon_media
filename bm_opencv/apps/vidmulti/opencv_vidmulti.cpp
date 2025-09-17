@@ -110,37 +110,36 @@ int kbhit (void)
 #endif
 
 /* Obtain a backtrace and print it to stdout. */
-void
-print_trace (void)
-{
-#ifdef WIN32
-#else
-  void *array[10];
-  char **strings;
-  int size, i;
+//void
+//print_trace (void)
+//{
+//#ifdef WIN32
+//#else
+//  void *array[10];
+//  char **strings;
+//  int size, i;
 
-  size = backtrace (array, 10);
-  strings = backtrace_symbols (array, size);
-  if (strings != NULL)
-  {
-      printf ("Obtained %d stack frames.\n", size);
-      for (i = 0; i < size; i++)
-          printf ("%s\n", strings[i]);
-  }
+//  size = backtrace (array, 10);
+//  strings = backtrace_symbols (array, size);
+//  if (strings != NULL)
+//  {
+//      printf ("Obtained %d stack frames.\n", size);
+//      for (i = 0; i < size; i++)
+//          printf ("%s\n", strings[i]);
+//  }
 
-  free (strings);
-#endif
-}
+//  free (strings);
+//#endif
+//}
 
 void signal_handler(int signum) {
    // Release handle before crash in case we cannot reopen it again.
    g_exit_flag = 1;     // exit all threads
    int try_count = 100;
-   cout << "signal " << signum << endl;
 
    signal(signum, SIG_IGN);
 
-   print_trace();
+//   print_trace();
    /* wait thread quit for 1s */
    while (try_count--){
      bool exit_all = true;
@@ -160,19 +159,10 @@ void signal_handler(int signum) {
 #endif
    }
 
-   for (int i = 0; i < MAX_THREAD_NUM; i++) {
-      if (g_cap[i].isOpened()){
-          cout << "thread " << i << "timed out! Force to release video capture!" << endl;
-          g_cap[i].release();
-      }
-   }
    // Reset the signal handler as default
    signal(signum, SIG_DFL);
 
-   // flush IO before exiting.
-   cout.flush();
-
-   _exit(signum);
+//   _exit(signum);
 }
 
 void register_signal_handler(void) {
@@ -801,6 +791,9 @@ int main(int argc, char **argv)
     char cmd = 0;
     while(cmd != 'q')
     {
+        if (g_exit_flag) {
+            break;
+        }
 #ifdef WIN32
         if (_kbhit())
             cmd = _getch();
@@ -837,6 +830,12 @@ int main(int argc, char **argv)
         }
 #endif
     }
+
+    for (int i = 0; i < MAX_THREAD_NUM; i++) {
+      if (g_cap[i].isOpened()){
+          g_cap[i].release();
+      }
+   }
 #ifdef WIN32
         WaitForSingleObject(stat_h, INFINITE);
 #else
