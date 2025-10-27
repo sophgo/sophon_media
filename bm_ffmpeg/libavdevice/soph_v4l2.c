@@ -688,8 +688,7 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
 
     /* FIXME: Some special treatment might be needed in case of loss of signal... */
     while ((res = v4l2_ioctl(s->fd, VIDIOC_DQBUF, &buf)) < 0 && ((errno == EINTR) || (res == -1))) {
-        av_usleep(2000);
-        if(timeout_count > 1000)
+        if(timeout_count > 10)
             return res;
         timeout_count++;
     }

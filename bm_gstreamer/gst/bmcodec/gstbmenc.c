@@ -26,6 +26,8 @@
 #include "gstbmenc.h"
 #include "gstbmallocator.h"
 #include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
@@ -227,16 +229,12 @@ gst_bm_get_pixel_stride (GstVideoInfo * info)
 gboolean
 gst_bm_enc_supported (BmVpuCodecFormat codec_type)
 {
-  BmVpuEncoder  *bmVenc;
-  BmVpuEncOpenParams open_params;
-  BmVpuEncInitialInfo initial_info;
-  bmvpu_enc_set_default_open_params(&open_params, codec_type);
-  open_params.frame_width = 352;
-  open_params.frame_height = 288;
-  if(bmvpu_enc_open(&bmVenc, &open_params, NULL, &initial_info)) {
+  int fd = open("/dev/soph_vc_enc", O_RDWR | O_DSYNC | O_CLOEXEC);
+  if (fd < 0) {
+    GST_ERROR ("open /dev/soph_vc_enc failed");
     return FALSE;
   }
-  bmvpu_enc_close(bmVenc);
+  close(fd);
   return TRUE;
 }
 

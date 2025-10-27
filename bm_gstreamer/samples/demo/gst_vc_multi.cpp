@@ -44,11 +44,11 @@ void signal_handler(int signum) {
    // Release handle before crash in case we cannot reopen it again.
    g_exit_flag = 1;     // exit all threads
    int try_count = 8000;
-   cout << "signal " << signum << endl;
+//   cout << "signal " << signum << endl;
 
    signal(signum, SIG_IGN);
-   if (g_pipeline)
-        gst_element_send_event(g_pipeline, gst_event_new_eos());
+//   if (g_pipeline)
+//        gst_element_send_event(g_pipeline, gst_event_new_eos());
    while (try_count--){
     usleep(1000);
      if (g_loop_exit){
@@ -59,9 +59,9 @@ void signal_handler(int signum) {
    signal(signum, SIG_DFL);
 
    // flush IO before exiting.
-   cout.flush();
+//   cout.flush();
 
-   _exit(signum);
+//   _exit(signum);
 }
 
 void register_signal_handler(void) {
@@ -599,6 +599,9 @@ int main(int argc, char *argv[]) {
     char cmd = 0;
     while(cmd != 'q')
     {
+        if (g_exit_flag) {
+            break;
+        }
         if (kbhit())
             cin >> cmd;
         else

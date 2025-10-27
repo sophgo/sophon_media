@@ -20,7 +20,7 @@ elseif("${PLATFORM}" STREQUAL "pcie")
     #include(cmake/x86_64-gnu.toolchain.cmake)
 endif()
 
-set(GIT_VERSION "2.0.0")
+set(GIT_VERSION "2.1.0")
 STRING(REGEX REPLACE "[\n\t\r]" "" GIT_VERSION ${GIT_VERSION})
 STRING(REGEX REPLACE "([0-9][0-9]*)\\..*" "\\1" MAJOR_VERSION ${GIT_VERSION})
 STRING(REGEX REPLACE ".*\\.([0-9][0-9]*)\\..*" "\\1" MINOR_VERSION ${GIT_VERSION})
