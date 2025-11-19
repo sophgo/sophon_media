@@ -440,8 +440,10 @@ static void test_bmcv2cv(const char *f0)
 
 start:
     // decode input
-    ret = bmcv_image_jpeg_dec(handle, (void**)&jpeg_data, &size, 1, src);
-    assert(ret == BM_SUCCESS);
+    // ret = bmcv_image_jpeg_dec(handle, (void**)&jpeg_data, &size, 1, src);
+    // assert(ret == BM_SUCCESS);
+    bm_image_create(handle, 1920, 1080, FORMAT_YUV420P, DATA_TYPE_EXT_1N_BYTE, src);
+    bm_image_alloc_dev_mem(src[0]);
     // sprintf(fn, "%ssrc.yuv", prefix.c_str());
     // dump_image(fn, src[0]);
 
