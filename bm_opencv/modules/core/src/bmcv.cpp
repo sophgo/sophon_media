@@ -80,6 +80,14 @@ static int map_bmformat_to_avformat(int bmformat)
     return format;
 }
 
+static bool isSupportedAvFormat(AVPixelFormat fmt)
+{
+    return fmt == AV_PIX_FMT_GRAY8   || fmt == AV_PIX_FMT_GBRP    ||
+           fmt == AV_PIX_FMT_YUV420P || fmt == AV_PIX_FMT_YUV422P ||
+           fmt == AV_PIX_FMT_YUV444P || fmt == AV_PIX_FMT_NV12    ||
+           fmt == AV_PIX_FMT_NV16;
+}
+
 static int map_avformat_to_bmformat(int avformat)
 {
     int format;
@@ -1144,6 +1152,141 @@ done:
   return ret;
 }
 
+bm_status_t circle(InputOutputArray img, Point center, int radius, const Scalar &color,
+                   int thickness, bool update) {
+    Mat m;
+    if (img.kind() != _InputOutputArray::MAT) {
+        printf("src must be of type cv::Mat.\n");
+        return BM_NOT_SUPPORTED;
+    }
+    m = img.getMat();
+    if (!m.u || !m.u->addr) {
+        printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n");
+        return BM_NOT_SUPPORTED;
+    }
+    if (m.empty()) {
+        printf("Input Mat m neet to allocate memory at first!\n");
+        return BM_ERR_FAILURE;
+    }
+    bm_status_t ret = BM_SUCCESS;
+    bm_handle_t handle = m.u->hid ? m.u->hid : getCard();
+    bm_image src;
+    bmcv_point_t center_bm = {center.x, center.y};
+    bmcv_color_t color_bm = { color[2], color[1], color[0]};
+
+    ret = toBMI(m, &src, update);
+    if (ret != BM_SUCCESS) {
+        printf("src toBMI failed\n");
+        goto done;
+    }
+
+#ifdef USING_SOC
+    download(handle, m, &src);
+#endif
+
+    ret = bmcv_image_circle(handle, src, center_bm, radius, color_bm, thickness);
+    if (ret != BM_SUCCESS) goto done;
+
+    bm_thread_sync(handle);
+    img.assign(m);
+
+#ifndef USING_SOC
+    if (update) download(handle, m, &src);
+#endif
+
+done:
+    bm_image_destroy(&src);
+    return ret;
+}
+
+bm_status_t flip(InputArray src, OutputArray dst, int flipCode, bool update) {
+    Mat m, output;
+    if (src.kind() != _InputArray::MAT || dst.kind() != _OutputArray::MAT) {
+        printf("src must be of type cv::Mat.\n");
+        return BM_NOT_SUPPORTED;
+    }
+    m = src.getMat();
+    if (!m.u || !m.u->addr) {
+        printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n");
+        return BM_NOT_SUPPORTED;
+    }
+    bm_handle_t handle = m.u->hid ? m.u->hid : getCard();
+    bm_status_t ret = BM_SUCCESS;
+    bm_image bm_src, bm_dst;
+
+    ret = toBMI(m, &bm_src, update);
+    if (ret != BM_SUCCESS) {
+        printf("src toBMI failed\n");
+        goto fail;
+    }
+
+    if (!dst.empty()) {
+        output = dst.getMat();
+        CV_Assert(output.cols == m.cols);
+        CV_Assert(output.rows == m.rows);
+    } else {
+        int id = getId(handle);
+        if (m.avOK() && isSupportedAvFormat((AVPixelFormat)m.avFormat())) {
+            int p_plane_stride[3], plane_size[3];
+            int wscale[3], hscale[3];
+            int plane_num = av::get_scale_and_plane(m.avFormat(), wscale, hscale);
+            for (int i = 0; i < plane_num; i++) {
+                p_plane_stride[i] = m.avCols() / wscale[i];
+                plane_size[i] = p_plane_stride[i] * (m.avRows() / hscale[i]);
+            }
+            AVFrame *f = av::create(m.rows,
+                                    m.cols,
+                                    m.avFormat(),
+                                    nullptr,
+                                    0,
+                                    -1,
+                                    p_plane_stride,
+                                    plane_size);
+            output.create(f, id);
+        } else if ((m.type() == CV_8UC1 || m.type() == CV_8UC3)) {
+            output.allocator = hal::getAllocator();
+            output.create(m.rows, m.cols, m.type(), id);
+        } else {
+            printf("src format is not supported\n");
+            ret = BM_NOT_SUPPORTED;
+            goto fail;
+        }
+    }
+
+    ret = toBMI(output, &bm_dst, update);
+    if (ret != BM_SUCCESS) {
+        printf("output toBMI failed\n");
+        goto done;
+    }
+
+    bmcv_flip_mode flip_mode;
+    if (flipCode > 0)
+        flip_mode = HORIZONTAL_FLIP;
+    else if (flipCode == 0)
+        flip_mode = VERTICAL_FLIP;
+    else
+        flip_mode = bmcv_flip_mode ::ROTATE_180;
+
+    ret = bmcv_image_flip(handle, bm_src, bm_dst, flip_mode);
+    if (ret != BM_SUCCESS) {
+        printf("bmcv_image_flip failed. ret = %d\n", ret);
+        goto done;
+    }
+
+    bm_thread_sync(handle);
+    dst.assign(output);
+
+#ifndef USING_SOC
+    if (update) download(handle, m, &bm_src);
+#endif
+
+done:
+    bm_image_destroy(&bm_dst);
+fail:
+    bm_image_destroy(&bm_src);
+    return ret;
+}
+
 bm_status_t bitwise_and(InputArray a, InputArray b, OutputArray c, bool update) {
   Mat m0, m1, output;
   if( a.kind() != _InputArray::MAT || b.kind() != _InputArray::MAT || c.kind() != _OutputArray::MAT) {printf("src must be of type cv::Mat.\n"); return BM_NOT_SUPPORTED;}
@@ -1172,29 +1315,44 @@ bm_status_t bitwise_and(InputArray a, InputArray b, OutputArray c, bool update) 
     output = c.getMat();
     CV_Assert(output.cols == m0.cols);
     CV_Assert(output.rows == m0.rows);
-    toBMI(output, &bm_output, update);
   } else {
-    bm_image_create(handle, m0.rows, m0.cols, (bm_image_format_ext)src0.image_format, DATA_TYPE_EXT_1N_BYTE, &bm_output, NULL);
-    ret = bm_image_alloc_dev_mem(bm_output, 2);
-    if (ret != BM_SUCCESS) {
-        printf("dst bm_image_alloc_dev_mem failed. ret = %d\n", ret);
+    int id = getId(handle);
+    if (m0.avOK() && isSupportedAvFormat((AVPixelFormat)m0.avFormat())) {
+      int p_plane_stride[3], plane_size[3];
+      int wscale[3], hscale[3];
+      int plane_num = av::get_scale_and_plane(m0.avFormat(), wscale, hscale);
+      for (int i = 0; i < plane_num; i++) {
+        p_plane_stride[i] = m0.avCols() / wscale[i];
+        plane_size[i] = p_plane_stride[i] * (m0.avRows() / hscale[i]);
+      }
+      AVFrame *f = av::create(m0.rows, m0.cols, m0.avFormat(), nullptr, 0, -1, p_plane_stride, plane_size);
+      output.create(f, id);
+    } else if ((m0.type() == CV_8UC1 || m0.type() == CV_8UC3)) {
+      output.allocator = hal::getAllocator();
+      output.create(m0.rows, m0.cols, m0.type(), id);
+    } else {
+      printf("src format is not supported\n");
+      ret = BM_NOT_SUPPORTED;
+      goto fail;
     }
   }
 
+  toBMI(output, &bm_output, update);
+
   ret = bmcv_image_bitwise_and(handle, src0, src1, bm_output);
   if (ret != BM_SUCCESS) {
-      printf("Create bm handle failed. ret = %d\n", ret);
+      printf("bmcv_image_bitwise_and failed. ret = %d\n", ret);
       goto done;
   }
 
   bm_thread_sync(handle);
-  toMAT(&bm_output, output, update);
   c.assign(output);
 
 done:
+  bm_image_destroy(&bm_output);
+fail:
   bm_image_destroy(&src0);
   bm_image_destroy(&src1);
-  bm_image_destroy(&bm_output);
   return ret;
 }
 
@@ -1204,6 +1362,8 @@ bm_status_t bitwise_or(InputArray a, InputArray b, OutputArray c, bool update) {
   m0 = a.getMat();
   m1 = b.getMat();
   if (!m0.u || !m0.u->addr || !m1.u || !m1.u->addr) {printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n"); return BM_NOT_SUPPORTED;}
+  CV_Assert(m0.cols == m1.cols);
+  CV_Assert(m0.rows == m1.rows);
   bm_handle_t handle = m0.u->hid ? m0.u->hid : getCard();
   if(handle == 0)
   {
@@ -1211,39 +1371,57 @@ bm_status_t bitwise_or(InputArray a, InputArray b, OutputArray c, bool update) {
     return BM_ERR_FAILURE;
   }
   bm_status_t ret = BM_SUCCESS;
+
   bm_image src0;
   bm_image src1;
   bm_image bm_output;
+
   toBMI(m0, &src0, update);
   toBMI(m1, &src1, update);
   CV_Assert(src0.image_format == src1.image_format);
+
   if (!c.empty()) {
     output = c.getMat();
     CV_Assert(output.cols == m0.cols);
     CV_Assert(output.rows == m0.rows);
-    toBMI(output, &bm_output, update);
   } else {
-    bm_image_create(handle, m0.rows, m0.cols, (bm_image_format_ext)src0.image_format, DATA_TYPE_EXT_1N_BYTE, &bm_output, NULL);
-    ret = bm_image_alloc_dev_mem(bm_output, 2);
-    if (ret != BM_SUCCESS) {
-        printf("dst bm_image_alloc_dev_mem failed. ret = %d\n", ret);
+    int id = getId(handle);
+    if (m0.avOK() && isSupportedAvFormat((AVPixelFormat)m0.avFormat())) {
+      int p_plane_stride[3], plane_size[3];
+      int wscale[3], hscale[3];
+      int plane_num = av::get_scale_and_plane(m0.avFormat(), wscale, hscale);
+      for (int i = 0; i < plane_num; i++) {
+        p_plane_stride[i] = m0.avCols() / wscale[i];
+        plane_size[i] = p_plane_stride[i] * (m0.avRows() / hscale[i]);
+      }
+      AVFrame *f = av::create(m0.rows, m0.cols, m0.avFormat(), nullptr, 0, -1, p_plane_stride, plane_size);
+      output.create(f, id);
+    } else if ((m0.type() == CV_8UC1 || m0.type() == CV_8UC3)) {
+      output.allocator = hal::getAllocator();
+      output.create(m0.rows, m0.cols, m0.type(), id);
+    } else {
+      printf("src format is not supported\n");
+      ret = BM_NOT_SUPPORTED;
+      goto fail;
     }
   }
 
+  toBMI(output, &bm_output, update);
+
   ret = bmcv_image_bitwise_or(handle, src0, src1, bm_output);
   if (ret != BM_SUCCESS) {
-      printf("Create bm handle failed. ret = %d\n", ret);
+      printf("bmcv_image_bitwise_or failed. ret = %d\n", ret);
       goto done;
   }
 
   bm_thread_sync(handle);
-
-  toMAT(&bm_output, output, update);
   c.assign(output);
+
 done:
+  bm_image_destroy(&bm_output);
+fail:
   bm_image_destroy(&src0);
   bm_image_destroy(&src1);
-  bm_image_destroy(&bm_output);
   return ret;
 }
 
@@ -1253,6 +1431,8 @@ bm_status_t bitwise_xor(InputArray a, InputArray b, OutputArray c, bool update) 
   m0 = a.getMat();
   m1 = b.getMat();
   if (!m0.u || !m0.u->addr || !m1.u || !m1.u->addr) {printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n"); return BM_NOT_SUPPORTED;}
+  CV_Assert(m0.cols == m1.cols);
+  CV_Assert(m0.rows == m1.rows);
   bm_handle_t handle = m0.u->hid ? m0.u->hid : getCard();
   if(handle == 0)
   {
@@ -1260,39 +1440,57 @@ bm_status_t bitwise_xor(InputArray a, InputArray b, OutputArray c, bool update) 
     return BM_ERR_FAILURE;
   }
   bm_status_t ret = BM_SUCCESS;
+
   bm_image src0;
   bm_image src1;
   bm_image bm_output;
+
   toBMI(m0, &src0, update);
   toBMI(m1, &src1, update);
   CV_Assert(src0.image_format == src1.image_format);
+
   if (!c.empty()) {
     output = c.getMat();
     CV_Assert(output.cols == m0.cols);
     CV_Assert(output.rows == m0.rows);
-    toBMI(output, &bm_output, update);
   } else {
-    bm_image_create(handle, m0.rows, m0.cols, (bm_image_format_ext)src0.image_format, DATA_TYPE_EXT_1N_BYTE, &bm_output, NULL);
-    ret = bm_image_alloc_dev_mem(bm_output, 2);
-    if (ret != BM_SUCCESS) {
-        printf("dst bm_image_alloc_dev_mem failed. ret = %d\n", ret);
+    int id = getId(handle);
+    if (m0.avOK() && isSupportedAvFormat((AVPixelFormat)m0.avFormat())) {
+      int p_plane_stride[3], plane_size[3];
+      int wscale[3], hscale[3];
+      int plane_num = av::get_scale_and_plane(m0.avFormat(), wscale, hscale);
+      for (int i = 0; i < plane_num; i++) {
+        p_plane_stride[i] = m0.avCols() / wscale[i];
+        plane_size[i] = p_plane_stride[i] * (m0.avRows() / hscale[i]);
+      }
+      AVFrame *f = av::create(m0.rows, m0.cols, m0.avFormat(), nullptr, 0, -1, p_plane_stride, plane_size);
+      output.create(f, id);
+    } else if ((m0.type() == CV_8UC1 || m0.type() == CV_8UC3)) {
+      output.allocator = hal::getAllocator();
+      output.create(m0.rows, m0.cols, m0.type(), id);
+    } else {
+      printf("src format is not supported\n");
+      ret = BM_NOT_SUPPORTED;
+      goto fail;
     }
   }
 
+  toBMI(output, &bm_output, update);
+
   ret = bmcv_image_bitwise_xor(handle, src0, src1, bm_output);
   if (ret != BM_SUCCESS) {
-      printf("Create bm handle failed. ret = %d\n", ret);
+      printf("bmcv_image_bitwise_xor failed. ret = %d\n", ret);
       goto done;
   }
 
   bm_thread_sync(handle);
-
-  toMAT(&bm_output, output, update);
   c.assign(output);
+
 done:
+  bm_image_destroy(&bm_output);
+fail:
   bm_image_destroy(&src0);
   bm_image_destroy(&src1);
-  bm_image_destroy(&bm_output);
   return ret;
 }
 
@@ -1329,7 +1527,7 @@ bm_status_t absdiff(InputArray src1, InputArray src2, OutputArray dst, bool upda
 
   ret = bmcv_image_absdiff(handle, bm_src1, bm_src2, bm_output);
   if (ret != BM_SUCCESS) {
-    printf("Create bm handle failed. ret = %d\n", ret);
+    printf("bmcv_image_absdiff failed. ret = %d\n", ret);
     goto done;
   }
 
@@ -1711,6 +1909,132 @@ done:
   bm_image_destroy(&dst_img);
 
   return ret;
+}
+
+bm_status_t addWeighted(InputArray src1, double alpha, InputArray src2, double beta, double gamma,
+                        OutputArray dst, bool update) {
+    Mat m0, m1, output;
+    if (src1.kind() != _InputArray::MAT || src2.kind() != _InputArray::MAT ||
+        dst.kind() != _OutputArray::MAT) {
+        printf("src must be of type cv::Mat.\n");
+        return BM_NOT_SUPPORTED;
+    }
+    m0 = src1.getMat();
+    m1 = src2.getMat();
+    if (!m0.u || !m0.u->addr || !m1.u || !m1.u->addr) {
+        printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n");
+        return BM_NOT_SUPPORTED;
+    }
+    CV_Assert(m0.cols == m1.cols);
+    CV_Assert(m0.rows == m1.rows);
+    bm_handle_t handle = m0.u->hid ? m0.u->hid : getCard();
+    bm_status_t ret = BM_SUCCESS;
+
+    bm_image bm_src0;
+    bm_image bm_src1;
+    bm_image bm_output;
+
+    toBMI(m0, &bm_src0, update);
+    toBMI(m1, &bm_src1, update);
+    CV_Assert(bm_src0.image_format == bm_src1.image_format);
+
+    if (!dst.empty()) {
+        output = dst.getMat();
+        CV_Assert(output.cols == m0.cols);
+        CV_Assert(output.rows == m0.rows);
+        toBMI(output, &bm_output, update);
+    } else {
+        int id = getId(handle);
+        if (m0.avOK() && isSupportedAvFormat((AVPixelFormat)m0.avFormat())) {
+            int p_plane_stride[3], plane_size[3];
+            int wscale[3], hscale[3];
+            int plane_num = av::get_scale_and_plane(m0.avFormat(), wscale, hscale);
+            for (int i = 0; i < plane_num; i++) {
+                p_plane_stride[i] = m0.avCols() / wscale[i];
+                plane_size[i] = p_plane_stride[i] * (m0.avRows() / hscale[i]);
+            }
+            AVFrame *f = av::create(m0.rows,
+                                    m0.cols,
+                                    m0.avFormat(),
+                                    nullptr,
+                                    0,
+                                    -1,
+                                    p_plane_stride,
+                                    plane_size);
+            output.create(f, id);
+        } else if ((m0.type() == CV_8UC1 || m0.type() == CV_8UC3)) {
+            output.allocator = hal::getAllocator();
+            output.create(m0.rows, m0.cols, m0.type(), id);
+        } else {
+            printf("src format is not supported\n");
+            ret = BM_NOT_SUPPORTED;
+            goto fail;
+        }
+    }
+    toBMI(output, &bm_output, update);
+    ret = bmcv_image_add_weighted(handle, bm_src0, alpha, bm_src1, beta, gamma, bm_output);
+    if (ret != BM_SUCCESS) {
+        printf("bmcv_image_add_weighted failed. ret = %d\n", ret);
+        goto done;
+    }
+    bm_thread_sync(handle);
+    dst.assign(output);
+done:
+    bm_image_destroy(&bm_output);
+fail:
+    bm_image_destroy(&bm_src0);
+    bm_image_destroy(&bm_src1);
+    return ret;
+}
+
+bm_status_t transpose(InputArray src, OutputArray dst, bool update) {
+    Mat m, output;
+    if (src.kind() != _InputArray::MAT || dst.kind() != _OutputArray::MAT) {
+        printf("src must be of type cv::Mat.\n");
+        return BM_NOT_SUPPORTED;
+    }
+    m = src.getMat();
+    if (!m.u || !m.u->addr) {
+        printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n");
+        return BM_NOT_SUPPORTED;
+    }
+    if (m.type() != CV_8UC1) {
+        printf("bmcv::transpose only support CV_8UC1 type\n");
+        return BM_NOT_SUPPORTED;
+    }
+    bm_status_t ret = BM_SUCCESS;
+    bm_handle_t handle = m.u->hid ? m.u->hid : getCard();
+
+    if (!dst.empty()) {
+        output = dst.getMat();
+        CV_Assert(output.cols == m.rows);
+        CV_Assert(output.rows == m.cols);
+    } else {
+        int id = getId(handle);
+        output.allocator = hal::getAllocator();
+        output.create(Size(m.rows, m.cols), m.type(), id);
+    }
+
+    bm_image bm_src;
+    bm_image bm_output;
+    toBMI(m, &bm_src, update);
+    toBMI(output, &bm_output, update);
+#ifdef USING_SOC
+    download(handle, output, &bm_output);
+#endif
+
+    ret = bmcv_image_transpose(handle, bm_src, bm_output);
+    if (ret != BM_SUCCESS) {
+        printf("bmcv_image_transpose failed. ret = %d\n", ret);
+        goto done;
+    }
+
+    bm_thread_sync(handle);
+    dst.assign(output);
+done:
+    bm_image_destroy(&bm_src);
+    bm_image_destroy(&bm_output);
+    return ret;
 }
 
 bm_status_t resize(Mat &m, Mat &out, bool update, int interpolation)

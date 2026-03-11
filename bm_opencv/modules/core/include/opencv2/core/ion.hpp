@@ -127,13 +127,21 @@ struct cv_ion_custom_data {
 	unsigned long arg;
 };
 
+// sync with cvitek_cache_range
 struct cv_bitmain_cache_range {
 	void *start;
-	size_t size;
+#ifdef __arm__
+	__u32 padding;
+#endif
+	__u32 size;
+	__u64 paddr;
 };
 
-#define ION_IOC_BITMAIN_FLUSH_RANGE             1
+#define ION_IOC_BITMAIN_FLUSH_RANGE		1
+#define ION_IOC_BITMAIN_GET_HEAP_INFO		2
 #define ION_IOC_BITMAIN_INVALIDATE_RANGE        3
+#define ION_IOC_BITMAIN_FLUSH_PHY_RANGE		4
+#define ION_IOC_BITMAIN_INVALIDATE_PHY_RANGE	5
 #define ION_IOC_MAGIC		'I'
 
 /**

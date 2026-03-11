@@ -39,9 +39,11 @@ set(SAMPLE_TARGETS test_bm_restart test_ff_video_encode
                 test_ocv_vidbasic
                 test_ocv_video_xcode
                 test_ocv_vidmulti
+                test_ocv_vidsensor
                 test_gst_vcmulti
                 test_gst_transcode
                 test_gst_xcode
+                test_gst_bmcv_transcode
                 )
 if("${PLATFORM}" STREQUAL "soc")
     list(APPEND SAMPLE_TARGETS test_ff_sns_xcode)
@@ -64,9 +66,11 @@ add_subdirectory(ocv_jpumulti)
 add_subdirectory(ocv_vidbasic)
 add_subdirectory(ocv_video_xcode)
 add_subdirectory(ocv_vidmulti)
+add_subdirectory(ocv_vidsensor)
 add_subdirectory(gst/gst_bm_vcmulti)
 add_subdirectory(gst/gst_bm_transcode)
 add_subdirectory(gst/gst_bm_v4l2xcode)
+add_subdirectory(gst/gst_bm_bmcv_transcode)
 if("${PLATFORM}" STREQUAL "soc")
     add_subdirectory(ff_sns_xcode)
 endif()
@@ -95,6 +99,7 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ff_bmcv_transcode/water.bin
 
 set(BMMW_SAMPLES_SOURCE
     ocv_vidmulti
+    ocv_vidsensor
     ocv_jpumulti
     ocv_vidbasic
     ocv_jpubasic
@@ -109,6 +114,7 @@ set(BMMW_SAMPLES_SOURCE
     gst/gst_bm_vcmulti
     gst/gst_bm_transcode
     gst/gst_bm_v4l2xcode
+    gst/gst_bm_bmcv_transcode
     )
 if("${PLATFORM}" STREQUAL "soc")
     list(APPEND BMMW_SAMPLES_SOURCE ff_sns_xcode)

@@ -37,6 +37,8 @@ uint64_t  time_dec[MAX_INST_NUM];
 
 #define INTERVAL 1
 
+using std::cin;
+
 typedef struct MultiInstTest
 {
     const char *src_filename;
@@ -69,6 +71,23 @@ static void usage(const char *program_name)
     av_log(NULL, AV_LOG_ERROR, "\n\tExamples: \n");
     av_log(NULL, AV_LOG_ERROR, "\t%s 1 0 1 no 0 1 ./example0.mp4 ./example1.mp4 ./example2.mp4\n", program_name);
 }
+
+#ifndef WIN32
+int kbhit (void)
+{
+    struct timeval tv;
+    fd_set rdfs;
+
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+
+    FD_ZERO(&rdfs);
+    FD_SET (STDIN_FILENO, &rdfs);
+
+    select(STDIN_FILENO+1, &rdfs, NULL, NULL, &tv);
+    return FD_ISSET(STDIN_FILENO, &rdfs);
+}
+#endif
 
 #if _WIN32
 DWORD statPthread(void *arg)
@@ -383,6 +402,26 @@ int main(int argc, char **argv)
     }
 #endif
 
+    char cmd = 0;
+    while(cmd != 'q')
+    {
+        if (quit_flag)
+            break;
+#ifdef WIN32
+        if (_kbhit())
+            cmd = _getch();
+#else
+        if (kbhit())
+            cin >> cmd;
+#endif
+        else
+#ifdef WIN32
+            Sleep(1000);
+#else
+            sleep(1);
+#endif
+    }
+    quit_flag = 1;
 
     int idx = 0;
     for (idx = 0; idx < td_index; idx++)

@@ -13,9 +13,10 @@ function writeDpuOnline(){
 		for((i=1; i<=$try_n_times; i++))
 		do
 			./bmcv/test_dpu_online_thread 1 1 512 284 ./stream/sofa_left_img_512x284.bin ./stream/sofa_right_img_512x284.bin ./stream/fgs_512x284_res.bin ./stream/fgs_512x284_save.bin 2>&1 | tee dpu_online_log.txt
-		    if [ \$cmd_status -ne 0 ]; then
-		        exit \$cmd_status
-		    fi
+			cmd_status=\${PIPESTATUS[0]}
+			if [ \$cmd_status -ne 0 ]; then
+				exit \$cmd_status
+			fi
 			grep "time_avg =" dpu_online_log.txt | awk '{print \$12}' | cut -d ',' -f1 >> tmp_n_time_dpu.txt
 			rm -f dpu_online_log.txt
 		done

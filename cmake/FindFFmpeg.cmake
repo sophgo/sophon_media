@@ -307,8 +307,11 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
                                     "${LIBSOPHAV_TOP}/video/enc/inc"
                                     "${yuv_abs_path}/libyuv/include"
                                     "${LIBSOPHAV_TOP}/bmcv/include"
-                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/include")
-    set(FFMPEG_LIBRARY_DIRS         "${ffmpeg_abs_path}/libavcodec"
+                                    "${LIBSOPHAV_TOP}/3rdparty/libbmcv/include"
+                                    "${LIBSOPHAV_TOP}/3rdparty/osdrv"
+                                    "${LIBSOPHAV_TOP}/3rdparty/libisp/include")
+    set(FFMPEG_LIBRARY_DIRS         "${ffmpeg_abs_path}/usr/local/lib"
+                                    "${ffmpeg_abs_path}/libavcodec"
                                     "${ffmpeg_abs_path}/libavdevice"
                                     "${ffmpeg_abs_path}/libavfilter"
                                     "${ffmpeg_abs_path}/libavformat"
@@ -324,17 +327,21 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
 
     if("${platform}" STREQUAL "pcie" OR "${platform}" STREQUAL "pcie_arm64")
         set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
-                                            "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
+                                            "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}"
+                                            "${LIBSOPHAV_TOP}/3rdparty/libisp/lib/${platform}")
     elseif("${platform}" STREQUAL "soc")
         if("${GCC_VERSION}" STREQUAL "930")
             set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
-                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}")
+                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib930/${platform}"
+                                        "${LIBSOPHAV_TOP}/3rdparty/libisp/lib930/${platform}")
         elseif("${GCC_VERSION}" STREQUAL "1131")
             set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
-                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}")
+                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib1131/${platform}"
+                                        "${LIBSOPHAV_TOP}/3rdparty/libisp/lib1131/${platform}")
         else()
             set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
-                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
+                                        "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}"
+                                        "${LIBSOPHAV_TOP}/3rdparty/libisp/lib/${platform}")
         endif()
     endif()
 

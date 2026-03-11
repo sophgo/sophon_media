@@ -281,18 +281,28 @@ int main(int argc, char **argv)
             av_log(NULL, AV_LOG_ERROR, "video_decoder pthread[%d] create failed \n", td_index);
             return -1;
         }
+        g_thread_num_lock.lock();
+        g_thread_num++;
+        g_thread_num_lock.unlock();
 
         ret = pthread_create(&(vpp_thread[td_index]), NULL, video_process_pthread, thread_arg);
         if (ret != 0) {
             av_log(NULL, AV_LOG_ERROR, "video_process pthread[%d] create failed \n", td_index);
             return -1;
         }
+        g_thread_num_lock.lock();
+        g_thread_num++;
+        g_thread_num_lock.unlock();
 
         ret = pthread_create(&(enc_thread[td_index]), NULL, video_encoder_pthread, thread_arg);
         if (ret != 0) {
             av_log(NULL, AV_LOG_ERROR, "video_encoder pthread[%d] create failed \n", td_index);
             return -1;
         }
+        g_thread_num_lock.lock();
+        g_thread_num++;
+        g_thread_num_lock.unlock();
+
         usleep(100000);
         td_index++;
         thread_arg->thread_index = td_index;
@@ -300,7 +310,6 @@ int main(int argc, char **argv)
     }
 
     thread_arg->thread_num = td_index;
-    g_thread_num = 3*thread_arg->thread_num;
     ret = pthread_create(&(stat_thread), NULL, stat_pthread, thread_arg);
     if (ret != 0) {
         av_log(NULL, AV_LOG_ERROR, "stat pthread create failed \n");

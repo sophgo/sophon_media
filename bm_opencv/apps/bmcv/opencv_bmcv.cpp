@@ -29,6 +29,8 @@ typedef enum {
     bmcv2cv,
     warp_affine,
     bm_rectangle,
+    bm_circle,
+    bm_flip,
     // fill_rectangle,
     bm_bitwise_and,
     bm_bitwise_or,
@@ -39,7 +41,9 @@ typedef enum {
     bm_rotate,
     bm_threshold,
     bm_stitch,
-    bm_convertTo
+    bm_convertTo,
+    bm_addWeighted,
+    bm_transpose
 } test_case;
 
 enum operation{
@@ -757,6 +761,27 @@ static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num,
     return;
 }
 
+static void test_circle(const char *f0, int center_x, int center_y, int radius,
+    int line_width, unsigned char r, unsigned char g, unsigned char b) {
+    Mat frame0 = imread(f0, 1, g_device_id);
+    bool update = true;
+    bmcv::circle(frame0, Point(center_x, center_y), radius, Scalar(b, g, r), line_width, update);
+    imwrite("circle.png", frame0);
+}
+
+static void test_flip(const char *f, int flipCode) {
+    Mat frame = imread(f, 1, g_device_id);
+    Mat output, cv_output;
+
+    bool update = true;
+    bmcv::flip(frame, output, flipCode, update);
+    imwrite("flip.png", output);
+
+    flip(frame, cv_output, flipCode);
+    imwrite("cv_flip.png", cv_output);
+    return;
+}
+
 static void test_convert_to(const char *f, int type, float alpha0,
     float beta0, float alpha1, float beta1, float alpha2, float beta2) {
 
@@ -792,6 +817,30 @@ static void test_threshold(const char *f, unsigned char thresh, unsigned char ma
     return;
 }
 
+static void test_addWeighted(const char *f0, const char *f1, double alpha, double beta, double gamma) {
+    Mat frame0 = imread(f0, 1, g_device_id);
+    Mat frame1 = imread(f1, 1, g_device_id);
+    Mat output(frame0.size(), frame0.type());
+    bool update = true;
+    bmcv::addWeighted(frame0, alpha, frame1, beta, gamma, output, update);
+    imwrite("dst.png", output);
+    addWeighted(frame0, alpha, frame1, beta, gamma, output);
+    imwrite("cv_dst.png", output);
+    return;
+}
+
+static void test_transpose(const char *f) {
+    Mat frame = imread(f, IMREAD_GRAYSCALE, g_device_id);
+    Mat output;
+
+    bool update = true;
+    bmcv::transpose(frame, output, update);
+    imwrite("dst.png", output);
+    transpose(frame, output);
+    imwrite("cv_dst.png", output);
+    return;
+}
+
 static void Help(const char *programName)
 {
     fprintf(stderr, "------------------------------------------------------------------------------\n");
@@ -807,6 +856,8 @@ static void Help(const char *programName)
     fprintf(stderr, "       %s <warp_affine> <input file> <is_bilinear> <borderMode> <dst_h> <dst_w> [device_id]\n", programName);
     fprintf(stderr, "       %s <rectangle> <image file> <default(1): 3 Rects> [device_id]\n", programName);
     fprintf(stderr, "       %s <rectangle> <image file> <default> <rect_num(1)> <start_x> <start_y> <crop_x> <crop_y> <line_width> <r_value> <g_value> <b_value> [device_id]\n", programName);
+    fprintf(stderr, "       %s <circle> <image file> <center_x> <center_y> <radius> <line_width> <r_value> <g_value> <b_value> [device_id]\n", programName);
+    fprintf(stderr, "       %s <flip> <image file> <flipCode> [device_id]\n", programName);
     fprintf(stderr, "       %s <bitwise_and> <image file 1> <image file 2> [device_id]\n", programName);
     fprintf(stderr, "       %s <bitwise_or> <image file 1> <image file 2> [device_id]\n", programName);
     fprintf(stderr, "       %s <bitwise_xor> <image file 1> <image file 2> [device_id]\n", programName);
@@ -819,6 +870,8 @@ static void Help(const char *programName)
     // fprintf(stderr, "       %s <stitch> <image file> <src_rect_num(1)> <src_start_x> <src_start_y> <src_crop_x> <src_crop_y> <dst_rect_num(1)> <dst_start_x> <max_value> <type> [device_id]\n", programName);
     fprintf(stderr, "       %s <stitch> <image file> <default(1)> [device_id]\n", programName);
     fprintf(stderr, "       %s <convertTo> <image file> <type> <alpha0> <beta0> <alpha1> <beta1> <alpha2> <beta2> [device_id]\n", programName);
+    fprintf(stderr, "       %s <addWighted> <image file 1> <image file 2> <alpha> <beta> <gamma> [device_id]\n", programName);
+    fprintf(stderr, "       %s <transpose> <image file> [device_id]\n", programName);
 }
 
 static int parse_args(const char *argv, test_case* tc) {
@@ -838,6 +891,10 @@ static int parse_args(const char *argv, test_case* tc) {
         *tc = warp_affine;
     } else if (strcmp(argv, "rectangle") == 0) {
         *tc = bm_rectangle;
+    } else if (strcmp(argv, "circle") == 0) {
+        *tc = bm_circle;
+    } else if (strcmp(argv, "flip") == 0) {
+        *tc = bm_flip;
     } else if (strcmp(argv, "bitwise_and") == 0) {
         *tc = bm_bitwise_and;
     } else if (strcmp(argv, "bitwise_or") == 0) {
@@ -858,6 +915,10 @@ static int parse_args(const char *argv, test_case* tc) {
         *tc = bm_stitch;
     } else if (strcmp(argv, "convertTo") == 0) {
         *tc = bm_convertTo;
+    } else if (strcmp(argv, "addWighted") == 0) {
+        *tc = bm_addWeighted;
+    } else if (strcmp(argv, "transpose") == 0) {
+        *tc = bm_transpose;
     } else {
         printf("Invalid test case: %s\n", argv);
         return -1;
@@ -942,6 +1003,26 @@ int main(int argc, const char** argv)
             test_draw_rectangle(argv[2], default_, rect_num, start_x, start_y, crop_x, crop_y, line_width, r, g, b);
         }
         break;
+    case bm_circle: {
+        if (argc != 10 && argc != 11) {Help(argv[0]); return -1;}
+        if (argc == 11) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        int center_x = atoi(argv[3]);
+        int center_y = atoi(argv[4]);
+        int radius = atoi(argv[5]);
+        int line_width = atoi(argv[6]);
+        unsigned char r = atoi(argv[7]);
+        unsigned char g = atoi(argv[8]);
+        unsigned char b = atoi(argv[9]);
+        test_circle(argv[2], center_x, center_y, radius, line_width, r, g, b);
+        break;
+    }
+    case bm_flip:
+        if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
+        if (argc == 5) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_flip(argv[2], atoi(argv[3]));
+        break;
     case bm_bitwise_and:
         if (argc != 4 && argc != 5) {Help(argv[0]); return -1;}
         if (argc == 5) g_device_id = atoi(argv[argc-1]);
@@ -1013,6 +1094,22 @@ int main(int argc, const char** argv)
         if (argc == 11) g_device_id = atoi(argv[argc-1]);
         printf("bm_device %d used.\n", g_device_id);
         test_convert_to(argv[2], atoi(argv[3]), atof(argv[4]), atof(argv[5]), atof(argv[6]), atof(argv[7]), atof(argv[8]), atof(argv[9]));
+        break;
+    case bm_addWeighted: {
+        if (argc != 7 && argc != 8) {Help(argv[0]); return -1;}
+        if (argc == 8) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        double alpha = atof(argv[4]);
+        double beta = atof(argv[5]);
+        double gamma = atof(argv[6]);
+        test_addWeighted(argv[2], argv[3], alpha, beta, gamma);
+        break;
+    }
+    case bm_transpose:
+        if (argc != 3 && argc != 4) {Help(argv[0]); return -1;}
+        if (argc == 4) g_device_id = atoi(argv[argc-1]);
+        printf("bm_device %d used.\n", g_device_id);
+        test_transpose(argv[2]);
         break;
     default:
         printf("Invalid input!\n");

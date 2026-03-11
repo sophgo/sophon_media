@@ -501,6 +501,7 @@ static av_cold int bm_decode_init(AVCodecContext *avctx)
     param.perf = bmctx->perf;
     param.core_idx = bmctx->core_idx;
     param.cmd_queue_depth = bmctx->dec_cmd_queue;
+    param.decode_order = bmctx->decode_order;
 
     ret = bmvpu_dec_create(&handle, param);
     if (ret != 0) {
@@ -720,9 +721,7 @@ static int bm_fill_frame(AVCodecContext *avctx, BMVidFrame* bmframe, AVFrame* fr
     AVBmCodecFrame* hwpic = NULL;
 #endif
 #ifdef BM_PCIE_MODE
-    //BMVidCodHandle handle = bmctx->handle;
-    //int coreIdx = bmvpu_dec_get_core_idx(handle);
-	int soc_idx = 0;
+    int soc_idx = bmctx->soc_idx;
 #endif
     int i, ret = 0;
 
@@ -1436,6 +1435,7 @@ SEND_PKG:
                     overtime_cnt++;
                     if(ret ==  BM_ERR_VDEC_SEQ_CHANGE || overtime_cnt % bmctx->timeout == 0) {
                         av_log(avctx, AV_LOG_WARNING, "send stream error... free input buffer:%d ret=%d\n", bmvpu_dec_get_all_empty_input_buf_cnt(handle), ret);
+                        ret = 0;
                         goto DEC_END;
                     }
                     goto SEND_PKG;
@@ -1512,8 +1512,32 @@ GET_FRAME:
             if(ret < 0) {
                 av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame. ret=%d\n", ret);
             }
-            free(bmframe);
-            goto DEC_END;
+
+            if(bmctx->decode_order == 1) {
+                overtime_cnt += 1;
+                if(overtime_cnt % bmctx->timeout == 0){
+                    dec_state = bmvpu_dec_get_status(handle);
+                    if(dec_state == BMDEC_STOP){
+                        av_log(avctx, AV_LOG_ERROR, "dec_decode fail. dec status:%d\n", dec_state);
+                        free(bmframe);
+                        ret = AVERROR_EOF;
+                        goto DEC_END;
+                    }
+                    else if(overtime_cnt / bmctx->timeout > 30){
+                        av_log(avctx, AV_LOG_ERROR, "maybe meet a error. didn't get frame. free input buffer:%d dec status:%d\n",
+                            bmvpu_dec_get_all_empty_input_buf_cnt(handle), dec_state);
+                        free(bmframe);
+                        ret = AVERROR_EXTERNAL;
+                        goto DEC_END;
+                    }
+                }
+                av_usleep(1000);
+                goto GET_FRAME;
+            }
+            else {
+                free(bmframe);
+                goto DEC_END;
+            }
         }
         else {
             av_usleep(1000);
@@ -1770,8 +1794,8 @@ static const AVOption options[] = {
         OFFSET(dec_cmd_queue), AV_OPT_TYPE_INT, {.i64 = 4} , 1, 4, FLAGS },
     {"timeout","decoder timeout max count",
         OFFSET(timeout), AV_OPT_TYPE_INT, {.i64 = 1000} , 0, INT_MAX, FLAGS },
-    { "pts_calibrate", "use dts to correct frame's pts",
-        OFFSET(pts_calibrate), AV_OPT_TYPE_FLAGS, {.i64 = 0}, 0, 1, FLAGS },
+    {"decode_order","set decoder display order: 0: display order, 1: decode order",
+        OFFSET(decode_order), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS },
     { NULL},
 };
 

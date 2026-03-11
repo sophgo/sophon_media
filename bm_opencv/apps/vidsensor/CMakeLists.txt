@@ -1,0 +1,1 @@
+ocv_add_application(vidsensor MODULES opencv_core opencv_videoio opencv_imgcodecs opencv_highgui SRCS vidsensor.cpp)

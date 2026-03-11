@@ -66,6 +66,9 @@ CV_EXPORTS bm_status_t warpAffine(InputArray src, OutputArray dst, InputArray M0
 CV_EXPORTS bm_status_t rectangle(InputOutputArray img, Point pt1, Point pt2, const Scalar &color, int thickness = 1, bool update = true);
 CV_EXPORTS bm_status_t rectangle(InputOutputArray img, Rect rec, const Scalar &color, int thickness = 1, bool update = true);
 CV_EXPORTS bm_status_t rectangle(Mat &m, std::vector<Rect> &vrt, const Scalar& color, int thickness = 1, bool update = true);
+CV_EXPORTS bm_status_t circle(InputOutputArray img, Point center, int radius, const Scalar &color,
+                              int thickness = 1, bool update = true);
+CV_EXPORTS bm_status_t flip(InputArray src, OutputArray dst, int flipCode, bool update = true);
 CV_EXPORTS bm_status_t bitwise_and(InputArray src1, InputArray src2, OutputArray dst, bool update = true);
 CV_EXPORTS bm_status_t bitwise_or(InputArray src1, InputArray src2, OutputArray dst, bool update = true);
 CV_EXPORTS bm_status_t bitwise_xor(InputArray src1, InputArray src2, OutputArray dst, bool update = true);
@@ -76,6 +79,9 @@ CV_EXPORTS bm_status_t convertTo(InputArray srcs, OutputArray m, int rtype, floa
 CV_EXPORTS bm_status_t convertTo(InputArray srcs, OutputArray m, int rtype, std::array<float, 3> alpha = {1.0f, 1.0f, 1.0f}, std::array<float, 3> beta = {0.0f, 0.0f, 0.0f}, bool update = true);
 CV_EXPORTS bm_status_t mosaic(Mat &m, std::vector<Rect> &vrt, int is_expand, bool update = true);
 CV_EXPORTS bm_status_t quantify(Mat &m, Mat &output, bool update = true);
+CV_EXPORTS bm_status_t addWeighted(InputArray src1, double alpha, InputArray src2, double beta,
+                                   double gamma, OutputArray dst, bool update = true);
+CV_EXPORTS bm_status_t transpose(InputArray src, OutputArray dst, bool update);
 CV_EXPORTS void print(Mat &m, bool dump = false);
 CV_EXPORTS void print(bm_image *image, bool dump = false);
 CV_EXPORTS void dumpMat(Mat &image, const String &fname);
