@@ -447,8 +447,8 @@ static size_t calculate_onebs_buffer_size(int width, int height) {
     else if (resolution <= 720 * 576)   return 256 * 1024;      // 256KB
     else if (resolution <= 1280 * 720)  return 512 * 1024;      // 512KB
     else if (resolution <= 1920 * 1080) return 1 * 1024 * 1024; // 1MB
-    else if (resolution <= 3840 * 2160) return 4 * 1024 * 1024; // 2MB
-    else return 8 * 1024 * 1024; // 4MB
+    else if (resolution <= 3840 * 2160) return 2 * 1024 * 1024; // 2MB
+    else return 4 * 1024 * 1024; // 4MB
 }
 
 #ifdef BM_PCIE_MODE
