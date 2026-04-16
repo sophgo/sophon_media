@@ -418,6 +418,9 @@ void *video_encoder_pthread(void * arg)
         out_buf = NULL;
     }
 
+    if(writer.isOpened())
+        writer.release();
+
     return NULL;
 }
 
