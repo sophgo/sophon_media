@@ -3261,6 +3261,7 @@ struct CvVideoWriter_FFMPEG
     VideoWriterParameters*  m_writeparams = NULL;
     int               is_dma_buffer;
     int               is_fmt_nv12;
+    int               is_fmt_nv21;
     bool              output_flags;
 
     int               encode_gop_size;
@@ -3338,6 +3339,7 @@ void CvVideoWriter_FFMPEG::init(bool is_first_init)
     if (is_first_init) {
         is_dma_buffer = 0;
         is_fmt_nv12 = 0;
+        is_fmt_nv21 = 0;
     }
 
     for(int i=0;i<DMA_LIST_MAX_NUMS;i++)
@@ -3962,10 +3964,15 @@ bool CvVideoWriter_FFMPEG::writeFrame( cv::InputArray image, char *data, int *le
     cv::Mat m_in = image.getMat();
     if (m_in.avOK()) {
 #ifdef HAVE_BMCV
-        if ((m_in.avFormat() == AV_PIX_FMT_NV12) || (m_in.avFormat() == AV_PIX_FMT_YUV420P)){
+        if ((m_in.avFormat() == AV_PIX_FMT_NV12) || (m_in.avFormat() == AV_PIX_FMT_YUV420P) || (m_in.avFormat() == AV_PIX_FMT_NV21)){
             bool reopen = false;
             if((m_in.avFormat() == AV_PIX_FMT_NV12) && (is_fmt_nv12 != 0xFF)){
                 is_fmt_nv12 = 0xFF;
+                reopen = true;
+            }
+
+            if((m_in.avFormat() == AV_PIX_FMT_NV21) && (is_fmt_nv21 != 0xFF)){
+                is_fmt_nv21 = 0xFF;
                 reopen = true;
             }
 
@@ -4689,6 +4696,10 @@ bool CvVideoWriter_FFMPEG::open( const char * filename, int fourcc,
 
     if((codec_pix_fmt == AV_PIX_FMT_YUV420P) && (is_fmt_nv12 == 0xFF)){
         codec_pix_fmt = AV_PIX_FMT_NV12;
+    }
+
+     if((codec_pix_fmt == AV_PIX_FMT_YUV420P) && (is_fmt_nv21 == 0xFF)){
+        codec_pix_fmt = AV_PIX_FMT_NV21;
     }
 
     double bitrate = std::min(bitrate_scale*fps*width*height, (double)INT_MAX/2);

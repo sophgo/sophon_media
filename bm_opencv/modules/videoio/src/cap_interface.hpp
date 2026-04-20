@@ -458,6 +458,9 @@ Ptr<IVideoCapture> create_DShow_capture(int index);
 Ptr<IVideoCapture> create_V4L_capture_cam(int index);
 Ptr<IVideoCapture> create_V4L_capture_file(const std::string &filename, int id = 0);
 
+Ptr<IVideoCapture> create_SOPH_V4L_capture_cam(int index);
+Ptr<IVideoCapture> create_SOPH_V4L_capture_file(const std::string &filename, int id = 0);
+
 Ptr<IVideoCapture> create_OpenNI2_capture_cam( int index );
 Ptr<IVideoCapture> create_OpenNI2_capture_file( const std::string &filename, int id = 0);
 
@@ -504,6 +507,10 @@ bool VideoCapture_V4L_waitAny(
         CV_OUT std::vector<int>& ready,
         int64 timeoutNs);
 
+bool VideoCapture_SOPH_V4L_waitAny(
+        const std::vector<VideoCapture>& streams,
+        CV_OUT std::vector<int>& ready,
+        int64 timeoutNs);
 static inline
 std::ostream& operator<<(std::ostream& out, const VideoAccelerationType& va_type)
 {

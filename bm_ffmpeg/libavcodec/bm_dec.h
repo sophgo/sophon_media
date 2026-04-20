@@ -98,6 +98,7 @@ typedef struct _BMDecContext{
     int handle_packet_loss;
     int is_need_wait_iframe;
     int skip_non_idr;
+    int decode_order;
 
     int    hw_accel;
 
@@ -119,7 +120,6 @@ typedef struct _BMDecContext{
     int last_dts;
     int dec_cmd_queue;
     int timeout;
-    int pts_calibrate;
 } BMDecContext;
 
 #ifdef __cplusplus

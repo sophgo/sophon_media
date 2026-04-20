@@ -71,6 +71,7 @@ ocv_add_app(ocv-drawing)
 ocv_add_app(vidbasic)
 ocv_add_app(vidmulti)
 ocv_add_app(vidcamera)
+ocv_add_app(vidsensor)
 ocv_add_app(videotranscode)
 
 ocv_add_app(bmcv)

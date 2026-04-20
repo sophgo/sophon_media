@@ -759,6 +759,171 @@ void crossCorr( const Mat& img, const Mat& _templ, Mat& corr,
     }
 }
 
+static void hwDFT( Mat &srcm, Mat &outmR, Mat &outmI)
+{
+    if (!srcm.u || !srcm.u->addr) {
+        printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n");
+        return;
+    }
+    bm_handle_t handle = srcm.u->hid ? srcm.u->hid : bmcv::getCard();
+    bm_image src, outR, outI;
+    void* plan;
+    bm_device_mem_t XRDev, YRDev, YIDev;
+    bmcv::uploadMat(srcm);
+    bmcv::toBMI(srcm, &src, false);
+    bm_image_get_device_mem(src, &XRDev);
+
+    int id = bmcv::getId(handle);
+    outmR.create(src.height, src.width, CV_32FC1, id);
+    outmI.create(src.height, src.width, CV_32FC1, id);
+    bmcv::toBMI(outmR, &outR, false);
+    bmcv::toBMI(outmI, &outI, false);
+    bm_image_get_device_mem(outR, &YRDev);
+    bm_image_get_device_mem(outI, &YIDev);
+
+    bmcv_fft_2d_create_plan(handle, src.height, src.width, true, &plan);
+    bmcv_fft_execute_real_input(handle, XRDev, YRDev, YIDev, plan);
+    bmcv_fft_destroy_plan(handle, plan);
+
+    bmcv::downloadMat(outmR);
+    bmcv::downloadMat(outmI);
+
+    bm_image_destroy(&outR);
+    bm_image_destroy(&outI);
+    bm_image_destroy(&src);
+    return;
+}
+
+static void hwDFT_R( Mat &srcmR, Mat &srcmI, Mat &outm)
+{
+    if (!srcmR.u || !srcmR.u->addr) {
+        printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n");
+        return;
+    }
+    bm_handle_t handle = srcmR.u->hid ? srcmR.u->hid : bmcv::getCard();
+
+    bm_image srcR, srcI, out;
+    void* plan;
+    bm_device_mem_t XRDev, XIDev, YRDev, YIDev;
+    bmcv::toBMI(srcmR, &srcR, false);
+    bm_image_get_device_mem(srcR, &XRDev);
+
+    bmcv::toBMI(srcmI, &srcI, false);
+    bm_image_get_device_mem(srcI, &XIDev);
+
+    int id = bmcv::getId(handle);
+    outm.create(srcR.height, srcR.width, CV_32FC1, id);
+    bmcv::toBMI(outm, &out, false);
+    bm_image_get_device_mem(out, &YRDev);
+    bm_malloc_device_byte(handle, &YIDev, srcR.height * srcR.width * sizeof(float));
+
+    bmcv_fft_2d_create_plan(handle, srcR.height, srcR.width, false, &plan);
+    bmcv_fft_execute(handle, XRDev, XIDev, YRDev, YIDev, plan);
+    bmcv_fft_destroy_plan(handle, plan);
+
+    bmcv::downloadMat(outm);
+    bm_free_device(handle, YIDev);
+
+    bm_image_destroy(&out);
+    bm_image_destroy(&srcI);
+    bm_image_destroy(&srcR);
+    return;
+}
+
+static int cpu_cmulp(float* XRHost, float* XIHost, float* PRHost, float* PIHost,
+             float* cpu_YR, float* cpu_YI, int L, int batch)
+{
+    for (int i = 0; i < batch; ++i) {
+        int base = i * L;
+        int j = 0;
+
+        for (; j <= L - 4; j += 4) {
+            int idx0 = base + j;
+            int idx1 = base + j + 1;
+            int idx2 = base + j + 2;
+            int idx3 = base + j + 3;
+
+            float a0 = XRHost[idx0], b0 = XIHost[idx0];
+            float c0 = PRHost[idx0], d0 = PIHost[idx0];
+            cpu_YR[idx0] = a0 * c0 + b0 * d0;
+            cpu_YI[idx0] = -a0 * d0 + b0 * c0;
+
+            float a1 = XRHost[idx1], b1 = XIHost[idx1];
+            float c1 = PRHost[idx1], d1 = PIHost[idx1];
+            cpu_YR[idx1] = a1 * c1 + b1 * d1;
+            cpu_YI[idx1] = -a1 * d1 + b1 * c1;
+
+            float a2 = XRHost[idx2], b2 = XIHost[idx2];
+            float c2 = PRHost[idx2], d2 = PIHost[idx2];
+            cpu_YR[idx2] = a2 * c2 + b2 * d2;
+            cpu_YI[idx2] = -a2 * d2 + b2 * c2;
+
+            float a3 = XRHost[idx3], b3 = XIHost[idx3];
+            float c3 = PRHost[idx3], d3 = PIHost[idx3];
+            cpu_YR[idx3] = a3 * c3 + b3 * d3;
+            cpu_YI[idx3] = -a3 * d3 + b3 * c3;
+        }
+
+        for (; j < L; ++j) {
+            int idx = base + j;
+            float a = XRHost[idx], b = XIHost[idx];
+            float c = PRHost[idx], d = PIHost[idx];
+            cpu_YR[idx] = a * c + b * d;
+            cpu_YI[idx] = -a * d + b * c;
+        }
+    }
+    return 0;
+}
+
+static void c_cmulp( Mat &Rsrc0, Mat &Isrc0, Mat &Rsrc1, Mat &Isrc1, Mat &Rout, Mat &Iout)
+{
+    int height = Rsrc0.rows;
+    int width = Rsrc0.cols;
+    bm_handle_t handle = Rsrc0.u->hid ? Rsrc0.u->hid : bmcv::getCard();
+    int id = bmcv::getId(handle);
+    Rout.create(height, width, CV_32FC1, id);
+    Iout.create(height, width, CV_32FC1, id);
+    cpu_cmulp((float*)Rsrc0.data, (float*)Isrc0.data,
+        (float*)Rsrc1.data, (float*)Isrc1.data,
+        (float*)Rout.data, (float*)Iout.data, height, width);
+    bmcv::uploadMat(Rout);
+    bmcv::uploadMat(Iout);
+}
+
+static void bm_crossCorr( const Mat& img, const Mat& templ, Mat& corr)
+{
+    Size dftsize;
+    dftsize.width = std::max(getOptimalDFTSize(img.cols), 2);
+    dftsize.height = getOptimalDFTSize(img.rows);
+
+    Mat dftTempl( dftsize.height, dftsize.width, CV_32F );
+    dftTempl.setTo(0);
+    Mat templ_rect(dftTempl, Rect(0, 0, templ.cols, templ.rows));
+    templ.convertTo(templ_rect, templ_rect.depth());
+
+    Mat dftTemplout[2];
+    hwDFT(dftTempl, dftTemplout[0], dftTemplout[1]);
+
+    Mat dftImg( dftsize.height, dftsize.width, CV_32F );
+    dftImg.setTo(0);
+    Mat Img_rect(dftImg, Rect(0, 0, img.cols, img.rows));
+    img.convertTo(Img_rect, Img_rect.depth());
+
+    Mat dftImgout[2];
+    hwDFT(dftImg, dftImgout[0], dftImgout[1]);
+
+    Mat mul[2];
+    c_cmulp(dftImgout[0], dftImgout[1], dftTemplout[0],
+        dftTemplout[1], mul[0], mul[1]);
+
+    Mat outm;
+    hwDFT_R(mul[0], mul[1], outm);
+
+    Mat outCrop = outm(Rect(0, 0, corr.cols, corr.rows));
+    outCrop.convertTo(corr, corr.depth());
+    return;
+}
+
 static void matchTemplateMask( InputArray _img, InputArray _templ, OutputArray _result, int method, InputArray _mask )
 {
     CV_Assert(_mask.depth() == CV_8U || _mask.depth() == CV_32F);
@@ -1188,7 +1353,21 @@ void cv::matchTemplate( InputArray _img, InputArray _templ, OutputArray _result,
 
     CV_IPP_RUN_FAST(ipp_matchTemplate(img, templ, result, method))
 
-    crossCorr( img, templ, result, Point(0,0), 0, 0);
+    static int softMTInt = 0;
+    static char firstCall = true;
+    if (firstCall) {
+        char *softMT = getenv("SOFT_MT");
+        if (softMT)
+            softMTInt = atoi(softMT);
+    }
+    if (softMTInt || img.channels() != 1 || templ.channels() != 1) {
+        crossCorr( img, templ, result, Point(0,0), 0, 0);
+    } else {
+        bm_crossCorr( img, templ, result);
+        if (firstCall)
+            printf("bm_crossCorr call completed\n");
+    }
+    firstCall = false;
 
     common_matchTemplate(img, templ, result, method, cn);
 }

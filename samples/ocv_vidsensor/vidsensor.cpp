@@ -1,0 +1,1 @@
+../../bm_opencv/apps/vidsensor/vidsensor.cpp

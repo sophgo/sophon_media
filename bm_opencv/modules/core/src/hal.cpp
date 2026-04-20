@@ -173,7 +173,7 @@ public:
   {
     if (!u) return;
 
-    ionInvalidate(u->data, size ? size : u->size);
+    ionInvalidate(u->data, size ? size : u->size, u->addr);
   }
 private:
   int queryHeapID(ion_heap_type type, int id) const
@@ -303,7 +303,7 @@ private:
       CV_Error(CV_HalMemErr, "ion ION_IOC_CUSTOM failed");
     }
   }
-  void ionInvalidate(void* vaddr, size_t size) const
+  void ionInvalidate(void* vaddr, size_t size, bm_uint64 paddr) const
   {
     int ret;
     struct cv_ion_custom_data custom_data;
@@ -311,8 +311,12 @@ private:
 
     cache_range.start = vaddr;
     cache_range.size = size;
-
-    custom_data.cmd = ION_IOC_BITMAIN_INVALIDATE_RANGE;
+    if (paddr) {
+      cache_range.paddr = paddr;
+      custom_data.cmd = ION_IOC_BITMAIN_INVALIDATE_PHY_RANGE;
+    } else {
+      custom_data.cmd = ION_IOC_BITMAIN_INVALIDATE_RANGE;
+    }
     custom_data.arg = (ulong)&cache_range;
 
     ret = ioctl(dev, ION_IOC_CUSTOM, &custom_data);

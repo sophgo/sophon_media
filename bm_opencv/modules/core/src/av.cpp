@@ -81,6 +81,7 @@ int get_scale_and_plane(int color_format, int wscale[], int hscale[])
             plane = 1;
             break;
         case AV_PIX_FMT_NV12:
+        case AV_PIX_FMT_NV21:
             wscale[0] = 1;
             hscale[0] = 1;
             wscale[1] = 1;
