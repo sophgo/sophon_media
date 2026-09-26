@@ -644,7 +644,7 @@ static void test_quantify(const char *f) {
     bool update = true;
 
     bmcv::quantify(tmp, output, update);
-    imwrite("dst.png", output);
+    imwrite("bmcv_quantify.png", output);
     return;
 }
 
@@ -660,10 +660,10 @@ static void test_warp_affine(const char* f0, int is_bilinear, int borderMode, in
     Mat trans_mat1 = Mat(data).reshape(1, 2);
 
     cv::bmcv::warpAffine(mat_src, mat_dst, trans_mat1, Size(dst_w, dst_h), is_bilinear, borderMode);
-    imwrite("dst.png", mat_dst);
+    imwrite("bmcv_warpAffine.png", mat_dst);
 
     warpAffine(mat_src, mat_dst, trans_mat1, Size(dst_w, dst_h), is_bilinear, borderMode, Scalar(0, 0, 0));
-    imwrite("cv_dst.png", mat_dst);
+    imwrite("cv_warpAffine.png", mat_dst);
     return;
 }
 
@@ -673,9 +673,9 @@ static void test_bitwise_and(const char *f0, const char *f1) {
     Mat output(frame0.size(), frame0.type());
     bool update = true;
     bmcv::bitwise_and(frame0, frame1, output, update);
-    imwrite("dst.png", output);
-    bitwise_and(frame0, frame1, output);
-    imwrite("cv_dst.png", output);
+    imwrite("bmcv_bitwise_and.png", output);
+    cv::bitwise_and(frame0, frame1, output);
+    imwrite("cv_bitwise_and.png", output);
     return;
 }
 
@@ -685,9 +685,9 @@ static void test_bitwise_or(const char *f0, const char *f1) {
     Mat output(frame0.size(), frame0.type());
     bool update = false;
     bmcv::bitwise_or(frame0, frame1, output, update);
-    imwrite("dst.png", output);
-    bitwise_or(frame0, frame1, output);
-    imwrite("cv_dst.png", output);
+    imwrite("bmcv_bitwise_or.png", output);
+    cv::bitwise_or(frame0, frame1, output);
+    imwrite("cv_bitwise_or.png", output);
     return;
 }
 
@@ -697,76 +697,96 @@ static void test_bitwise_xor(const char *f0, const char *f1) {
     Mat output(frame0.size(), frame0.type());
     bool update = false;
     bmcv::bitwise_xor(frame0, frame1, output, update);
-    imwrite("dst.png", output);
-    bitwise_xor(frame0, frame1, output);
-    imwrite("cv_dst.png", output);
+    imwrite("bmcv_bitwise_xor.png", output);
+    cv::bitwise_xor(frame0, frame1, output);
+    imwrite("cv_bitwise_xor.png", output);
     return;
 }
 
 static void test_absdiff(const char *f0, const char *f1) {
     Mat frame0 = imread(f0, 1, g_device_id);
     Mat frame1 = imread(f1, 1, g_device_id);
-    Mat output(frame0.size(), frame0.type());
+    Mat output_0(frame0.size(), frame0.type());
+    Mat output_1(frame0.size(), frame0.type());
     bool update = true;
-    bmcv::absdiff(frame0, frame1, output, update);
-    imwrite("dst.png", output);
-    absdiff(frame0, frame1, output);
-    // imwrite("cv_dst.png", output);
+    bmcv::absdiff(frame0, frame1, output_0, update);
+    imwrite("bmcv_absdiff.png", output_0);
+    cv::absdiff(frame0, frame1, output_1);
+    imwrite("cv_absdiff.png", output_1);
     return;
 }
 
 static void test_rotate(const char *f, int rotateCode) {
     Mat frame = imread(f, 1, g_device_id);
-    Mat output;
+    Mat output_1, output_2;
 
     bool update = true;
-    rotate(frame, output, rotateCode);
-    imwrite("cv_dst.png", output);
-    bmcv::rotate(frame, output, rotateCode, update);
-    imwrite("dst.png", output);
+    cv::rotate(frame, output_1, rotateCode);
+    imwrite("bmcv_rotate.png", output_1);
+    bmcv::rotate(frame, output_2, rotateCode, update);
+    imwrite("cv_rotate.png", output_2);
     return;
 }
 
 static void test_draw_rectangle(const char *f0, bool default_draw, int rect_num,
     int start_x, int start_y, int crop_x, int crop_y, int line_width,
     unsigned char r, unsigned char g, unsigned char b) {
+
+    int sx = start_x, sy = start_y, cx = crop_x, cy = crop_y;
+    int lw = line_width;
+    unsigned char cr = r, cg = g, cb = b;
+    if (default_draw) {
+        sx = 300; sy = 200; cx = 200; cy = 200; lw = 2;
+        cr = 255; cg = 0; cb = 0;
+    }
+
     // one input, method 1:
+    Mat frame0 = imread(f0, 1, g_device_id);
     Mat frame1 = imread(f0, 1, g_device_id);
-    bmcv::rectangle(frame1, Point(start_x, start_y), Point(start_x + crop_x, start_y + crop_y), Scalar(b, g, r), line_width);
-    imwrite("dst1.png", frame1);
-    rectangle(frame1, Point(start_x, start_y), Point(start_x + crop_x, start_y + crop_y), Scalar(b, g, r), line_width);
-    imwrite("cv_dst1.png", frame1);
+
+    bmcv::rectangle(frame0, Point(sx, sy), Point(sx + cx, sy + cy), Scalar(cb, cg, cr), lw);
+    cv::rectangle(frame1, Point(sx, sy), Point(sx + cx, sy + cy), Scalar(cb, cg, cr), lw);
+    imwrite("bmcv_rectangle_v1.png", frame0);
+    imwrite("cv_rectangle_v1.png", frame1);
 
     // one input, method 2:
     Mat frame2 = imread(f0, 1, g_device_id);
-    bmcv::rectangle(frame2, Rect(start_x, start_y, crop_x, crop_y), Scalar(b, g, r), line_width);
-    imwrite("dst2.png", frame2);
-    rectangle(frame2, Rect(start_x, start_y, crop_x, crop_y), Scalar(b, g, r), line_width);
-    imwrite("cv_dst2.png", frame2);
+    Mat frame3 = imread(f0, 1, g_device_id);
+
+    bmcv::rectangle(frame2, Rect(sx, sy, cx, cy), Scalar(cb, cg, cr), lw);
+    cv::rectangle(frame3, Rect(sx, sy, cx, cy), Scalar(cb, cg, cr), lw);
+    imwrite("bmcv_rectangle_v2.png", frame2);
+    imwrite("cv_rectangle_v2.png", frame3);
 
     // multi inputs, method 3;
-    Mat frame3 = imread(f0, 1, g_device_id);
+    Mat frame4 = imread(f0, 1, g_device_id);
     std::vector<Rect> vrt;
     if (default_draw) {
         Rect rt(300, 200, 500, 200);
         Rect rt1(100, 200, 300, 400);
         Rect rt2(50, 100, 100, 500);
-        vrt= { rt, rt1, rt2 };
+        vrt = { rt, rt1, rt2 };
     } else {
-        Rect rt(start_x, start_y, crop_x, crop_y);
+        Rect rt(sx, sy, cx, cy);
         vrt = { rt };
     }
-    bmcv::rectangle(frame3, vrt, Scalar(b, g, r), line_width);
-    imwrite("dst3.png", frame3);
+
+    bmcv::rectangle(frame4, vrt, Scalar(cb, cg, cr), lw);
+    imwrite("bmcv_rectangle_v3.png", frame4);
     return;
 }
 
 static void test_circle(const char *f0, int center_x, int center_y, int radius,
     int line_width, unsigned char r, unsigned char g, unsigned char b) {
+
     Mat frame0 = imread(f0, 1, g_device_id);
+    Mat frame1 = imread(f0, 1, g_device_id);
     bool update = true;
+
     bmcv::circle(frame0, Point(center_x, center_y), radius, Scalar(b, g, r), line_width, update);
-    imwrite("circle.png", frame0);
+    cv::circle(frame1, Point(center_x, center_y), radius, Scalar(b, g, r), line_width);
+    imwrite("bmcv_circle.png", frame0);
+    imwrite("cv_circle.png", frame1);
 }
 
 static void test_flip(const char *f, int flipCode) {
@@ -775,9 +795,9 @@ static void test_flip(const char *f, int flipCode) {
 
     bool update = true;
     bmcv::flip(frame, output, flipCode, update);
-    imwrite("flip.png", output);
+    imwrite("bmcv_flip.png", output);
 
-    flip(frame, cv_output, flipCode);
+    cv::flip(frame, cv_output, flipCode);
     imwrite("cv_flip.png", cv_output);
     return;
 }
@@ -807,25 +827,27 @@ static void test_convert_to(const char *f, int type, float alpha0,
 }
 
 static void test_threshold(const char *f, unsigned char thresh, unsigned char max_value, int type) {
-    Mat frame = imread(f, 0, g_device_id);
-    Mat output(frame.size(), frame.type());
+    Mat frame = imread(f, 1, g_device_id);
+    Mat output_0(frame.size(), frame.type());
+    Mat output_1(frame.size(), frame.type());
     bool update = true;
-    bmcv::threshold(frame, output, thresh, max_value, type, update);
-    imwrite("dst.png", output);
-    threshold(frame, output, thresh, max_value, type);
-    imwrite("cv_dst.png", output);
+    bmcv::threshold(frame, output_0, thresh, max_value, type, update);
+    imwrite("bmcv_threshold.png", output_0);
+    cv::threshold(frame, output_1, thresh, max_value, type);
+    imwrite("cv_threshold.png", output_1);
     return;
 }
 
 static void test_addWeighted(const char *f0, const char *f1, double alpha, double beta, double gamma) {
     Mat frame0 = imread(f0, 1, g_device_id);
     Mat frame1 = imread(f1, 1, g_device_id);
-    Mat output(frame0.size(), frame0.type());
+    Mat output_0(frame0.size(), frame0.type());
+    Mat output_1(frame0.size(), frame0.type());
     bool update = true;
-    bmcv::addWeighted(frame0, alpha, frame1, beta, gamma, output, update);
-    imwrite("dst.png", output);
-    addWeighted(frame0, alpha, frame1, beta, gamma, output);
-    imwrite("cv_dst.png", output);
+    bmcv::addWeighted(frame0, alpha, frame1, beta, gamma, output_0, update);
+    imwrite("bmcv_addWeighted.png", output_0);
+    cv::addWeighted(frame0, alpha, frame1, beta, gamma, output_1);
+    imwrite("cv_addWeighted.png", output_1);
     return;
 }
 
@@ -835,9 +857,9 @@ static void test_transpose(const char *f) {
 
     bool update = true;
     bmcv::transpose(frame, output, update);
-    imwrite("dst.png", output);
-    transpose(frame, output);
-    imwrite("cv_dst.png", output);
+    imwrite("bmcv_transpose.png", output);
+    cv::transpose(frame, output);
+    imwrite("cv_transpose.png", output);
     return;
 }
 
@@ -997,7 +1019,7 @@ int main(int argc, const char** argv)
             int crop_x = atoi(argv[7]);
             int crop_y = atoi(argv[8]);
             int line_width = atoi(argv[9]);
-            int r = atoi(argv[10]);
+            unsigned char r = atoi(argv[10]);
             unsigned char g = atoi(argv[11]);
             unsigned char b = atoi(argv[12]);
             test_draw_rectangle(argv[2], default_, rect_num, start_x, start_y, crop_x, crop_y, line_width, r, g, b);

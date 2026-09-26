@@ -515,6 +515,8 @@ static av_cold int bm_decode_init(AVCodecContext *avctx)
     bmctx->pkt_flag = 0;
     bmctx->first_frame_get = 0;
     bmctx->dts_offset = 0;
+    bmctx->last_dts = LONG_MIN;
+    bmctx->last_pts = 0;
 
     BMHandleBuffer *bm_handle_buffer = (BMHandleBuffer*)av_mallocz(sizeof(BMHandleBuffer));
     ff_mutex_init(&(bm_handle_buffer->av_mutex), NULL);
@@ -1413,11 +1415,16 @@ SEND_PKG:
                 send_pkg = 1;
                 bmctx->pkg_num_inbuf += 1;
                 bmctx->pkt_flag = 0;
+                if(bmctx->last_dts != LONG_MIN)
+                    bmctx->dts_offset = stream.dts - bmctx->last_dts;
+                bmctx->last_dts = stream.dts;
                 ret = avpkt->size;
-#if 0
-                av_log(avctx, AV_LOG_INFO,"pkg num: %d, empty size: %d, pkt size: %d, pts: %ld, dts: %ld\n",
-                        bmctx->pkg_num_inbuf, bmvpu_dec_get_all_empty_input_buf_cnt(handle), stream.length, avpkt->pts, avpkt->dts);
-#endif
+
+                av_log(avctx, AV_LOG_TRACE,
+                    "pkg num: %d, empty size: %d, pkt size: %d, pts: %ld, dts: %ld, dts offset:%d\n",
+                    bmctx->pkg_num_inbuf, bmvpu_dec_get_all_empty_input_buf_cnt(handle),
+                    stream.length, avpkt->pts, avpkt->dts, bmctx->dts_offset);
+
                 if (get_frame == 1) {
                     goto DEC_END;
                 }
@@ -1470,18 +1477,14 @@ GET_FRAME:
     if(get_frame_state == BM_SUCCESS) {
         if(bmctx->first_frame_get == 0) {
             bmctx->first_frame_get = 1;
-            int dts = bmframe->dts;
-            if(dts < 0) {
-                bmctx->dts_offset = 0 - dts;
-                bmctx->last_dts = dts;
+            if(avpkt->pts == AV_NOPTS_VALUE && bmframe->pts == AV_NOPTS_VALUE) {
+                bmframe->pts = 0;
+                bmctx->last_pts = 0;
             }
         }
-        if((long)bmframe->dts < 0 || (long)(bmframe->dts - bmctx->last_dts) < bmctx->dts_offset) {
-            bmframe->dts = bmctx->last_dts + bmctx->dts_offset;
-        }
-        bmctx->last_dts =  bmframe->dts;
-        if(avpkt->pts == AV_NOPTS_VALUE && bmframe->pts == AV_NOPTS_VALUE) {
-            bmframe->pts = bmframe->dts;
+        else if(avpkt->pts == AV_NOPTS_VALUE && bmframe->pts == AV_NOPTS_VALUE) {
+            bmframe->pts = bmctx->last_pts + bmctx->dts_offset;
+            bmctx->last_pts = bmframe->pts;
         }
         overtime_cnt = 0;
         get_frame = 1;

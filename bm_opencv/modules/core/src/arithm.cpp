@@ -361,6 +361,12 @@ void cv::bitwise_and(InputArray a, InputArray b, OutputArray c, InputArray mask)
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure or if mask is set
+    if (mask.empty() && cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::bitwise_and(a, b, c, true) == BM_SUCCESS)
+            return;
+    }
+    // cpu
     BinaryFuncC f = (BinaryFuncC)GET_OPTIMIZED(cv::hal::and8u);
     binary_op(a, b, c, mask, &f, true, OCL_OP_AND);
 }
@@ -369,6 +375,11 @@ void cv::bitwise_or(InputArray a, InputArray b, OutputArray c, InputArray mask)
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure or if mask is set
+    if (mask.empty() && cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::bitwise_or(a, b, c, true) == BM_SUCCESS)
+            return;
+    }
     BinaryFuncC f = (BinaryFuncC)GET_OPTIMIZED(cv::hal::or8u);
     binary_op(a, b, c, mask, &f, true, OCL_OP_OR);
 }
@@ -377,6 +388,11 @@ void cv::bitwise_xor(InputArray a, InputArray b, OutputArray c, InputArray mask)
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure or if mask is set
+    if (mask.empty() && cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::bitwise_xor(a, b, c, true) == BM_SUCCESS)
+            return;
+    }
     BinaryFuncC f = (BinaryFuncC)GET_OPTIMIZED(cv::hal::xor8u);
     binary_op(a, b, c, mask, &f, true, OCL_OP_XOR);
 }
@@ -930,6 +946,11 @@ void cv::absdiff( InputArray src1, InputArray src2, OutputArray dst )
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure
+    if (cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::absdiff(src1, src2, dst, true) == BM_SUCCESS)
+            return;
+    }
     arithm_op(src1, src2, dst, noArray(), -1, getAbsDiffTab(), false, 0, OCL_OP_ABSDIFF);
 }
 
@@ -1038,6 +1059,12 @@ void cv::addWeighted( InputArray src1, double alpha, InputArray src2,
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure or if dtype is specified
+    if (dtype == -1 && cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::addWeighted(src1, alpha, src2, beta, gamma, dst, true) == BM_SUCCESS)
+            return;
+    }
+    // cpu
     double scalars[] = {alpha, beta, gamma};
     arithm_op(src1, src2, dst, noArray(), dtype, getAddWeightedTab(), true, scalars, OCL_OP_ADDW);
 }

@@ -49,6 +49,22 @@ else() #"Linux"
     endif()
 endif()
 set(FFMPEG_LIBRARIES avcodec avformat avutil swscale swresample ${CMAKE_IMPORT_LIBRARY_PREFIX}bmcv ${CMAKE_IMPORT_LIBRARY_PREFIX}cmodel ${CMAKE_IMPORT_LIBRARY_PREFIX}bmlib ${CMAKE_IMPORT_LIBRARY_PREFIX}bmjpeg ${CMAKE_IMPORT_LIBRARY_PREFIX}yuv ${CMAKE_IMPORT_LIBRARY_PREFIX}bmvd ${CMAKE_IMPORT_LIBRARY_PREFIX}bmvenc)
+
+# libisp for CVI_ISP_V4L2_Init/Exit static calls -- only when the ISP/V4L2
+# pipeline is enabled (bm1688 soc). cv84x6 / pcie have no VI/ISP, so the
+# libisp headers/libs must not be pulled into those builds.
+if(NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND ENABLE_ISP)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/libisp/include)
+    if("${GCC_VERSION}" STREQUAL "930")
+        list(APPEND FFMPEG_LIBRARY_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/libisp/lib930/soc")
+    elseif("${GCC_VERSION}" STREQUAL "1131")
+        list(APPEND FFMPEG_LIBRARY_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/libisp/lib1131/soc")
+    else()
+        list(APPEND FFMPEG_LIBRARY_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/libisp/lib/soc")
+    endif()
+    # ISP libraries moved to videoio module PUBLIC link (see videoio/CMakeLists.txt)
+    # list(APPEND FFMPEG_LIBRARIES ispv4l2_helper ae af awb cvi_bin cvi_bin_isp isp isp_algo ispv4l2_adapter sns_full)
+endif()
 #list(APPEND FFMPEG_LIBRARIES
 #${CMAKE_IMPORT_LIBRARY_PREFIX}bmion
 #)

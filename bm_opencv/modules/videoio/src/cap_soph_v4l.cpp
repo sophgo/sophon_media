@@ -217,7 +217,6 @@ make & enjoy!
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-#include <dlfcn.h>  // dll needs dlopen, dlsym, dlclose
 
 #include <string.h>
 #include <stdlib.h>
@@ -304,110 +303,6 @@ static pthread_mutex_t isp_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  isp_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t wdr_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  wdr_cond = PTHREAD_COND_INITIALIZER;
-
-namespace IspV4L2 {
-
-using InitFunc = int (*)(int pipe, int fd);
-using ExitFunc = int (*)(int pipe);
-
-static std::vector<void*> handles;
-// static void* handle = nullptr;
-static InitFunc init_func = nullptr;
-static ExitFunc exit_func = nullptr;
-
-void UnloadLibrary();
-bool LoadLibrary(const std::vector<std::string>& lib_paths);
-bool LoadLibrary(const std::string& lib_path);
-
-void UnloadLibrary() {
-    for (auto it = handles.rbegin(); it != handles.rend(); ++it) {
-        dlclose(*it);
-    }
-    handles.clear();
-    init_func = nullptr;
-    exit_func = nullptr;
-}
-
-bool LoadLibrary(const std::vector<std::string>& lib_paths) {
-    handles.clear();
-
-    for (const auto& lib_path : lib_paths) {
-        void* handle = dlopen(lib_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
-        if (!handle) {
-            std::cerr << "Failed to open library: " << lib_path << " - " << dlerror() << std::endl;
-            UnloadLibrary();
-            return false;
-        }
-        handles.push_back(handle);
-    }
-
-    // from last dll
-    if (!handles.empty()) {
-        *(void**)(&init_func) = dlsym(handles.back(), "CVI_ISP_V4L2_Init");
-        *(void**)(&exit_func) = dlsym(handles.back(), "CVI_ISP_V4L2_Exit");
-
-        const char* error = dlerror();
-        if (error) {
-            std::cerr << "Symbol error: " << error << std::endl;
-            UnloadLibrary();
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool LoadLibrary(const std::string& lib_path) {
-    return LoadLibrary(std::vector<std::string>{lib_path});
-}
-
-// dynamic call func
-int CVI_ISP_V4L2_Init(int pipe, int fd) {
-    if (!init_func) {
-        // from last loaded library
-        if (!handles.empty()) {
-            *(void**)(&init_func) = dlsym(handles.back(), "CVI_ISP_V4L2_Init");
-
-            const char* error = dlerror();
-            if (error) {
-                std::cerr << "Symbol CVI_ISP_V4L2_Init error: " << error << std::endl;
-                return -1;
-            }
-        }
-    }
-
-    if (init_func) {
-        return init_func(pipe, fd);
-    } else {
-        std::cerr << "CVI_ISP_V4L2_Init not loaded or failed to load." << std::endl;
-        return -1;
-    }
-}
-
-// dynamic call func
-int CVI_ISP_V4L2_Exit(int pipe) {
-    if (!exit_func) {
-        // from last loaded library
-        if (!handles.empty()) {
-            *(void**)(&exit_func) = dlsym(handles.back(), "CVI_ISP_V4L2_Exit");
-
-            const char* error = dlerror();
-            if (error) {
-                std::cerr << "Symbol CVI_ISP_V4L2_Exit error: " << error << std::endl;
-                return -1;
-            }
-        }
-    }
-
-    if (exit_func) {
-        return exit_func(pipe);
-    } else {
-        std::cerr << "CVI_ISP_V4L2_Exit not loaded or failed to load." << std::endl;
-        return -1;
-    }
-}
-
-} // namespace IspV4L2
 
 // types of memory in 'special' buffer
 enum {
@@ -743,24 +638,7 @@ bool SophCvCaptureCAM_V4L::try_init_v4l2()
     pthread_mutex_unlock(&wdr_mutex);
 
     if(use_isp) {
-        std::vector<std::string> lib_paths = {
-            "libisp.so",
-            "libispv4l2_adapter.so",
-            "libsns_full.so",
-            "libae.so",
-            "libawb.so",
-            "libaf.so",
-            "libisp_algo.so",
-            "libcvi_bin_isp.so",
-            "libteaisp.so",
-            "libispv4l2_helper.so"
-        };
-
-        if (!IspV4L2::LoadLibrary(lib_paths)) {
-            std::cerr << "Failed to load libraries." << std::endl;
-            return -1;
-        }
-        IspV4L2::CVI_ISP_V4L2_Init(channelNumber, deviceHandle);  // CVI_ISP_V4L2_Init
+        CVI_ISP_V4L2_Init(channelNumber, deviceHandle);
         pthread_mutex_lock(&isp_mutex);
         isp_init_time++;
 
@@ -2615,8 +2493,7 @@ bool SophCvCaptureCAM_V4L::streaming(bool startStream)
             else
             {
                 if(use_isp) {
-                    IspV4L2::CVI_ISP_V4L2_Exit(channelNumber);  // CVI_ISP_V4L2_Exit
-                    IspV4L2::UnloadLibrary();                   // release dll
+                    CVI_ISP_V4L2_Exit(channelNumber);
                     }
                 }
             return true;

@@ -29,8 +29,8 @@ project("sophon-media" VERSION ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION
 # subdirectories may depend on former settings
 
 # options
-set(CHIP_LIST bm1686)
-set(CHIP_NAME bm1686 CACHE STRING "chip: bm1686")
+set(CHIP_LIST bm1688 cv84x6)
+set(CHIP_NAME bm1688 CACHE STRING "chip: bm1688 cv84x6")
 set_property(CACHE CHIP_NAME PROPERTY STRINGS ${CHIP_LIST})
 
 set(PLATFORM_LIST soc pcie pcie_arm64 pcie_loongarch64)
@@ -44,6 +44,15 @@ set_property(CACHE SUBTYPE PROPERTY STRINGS ${SUBTYPE_LIST})
 set(DEBUG_LIST off on)
 set(DEBUG off CACHE STRING "debug: off on")
 set_property(CACHE DEBUG PROPERTY STRINGS ${DEBUG_LIST})
+
+# ISP / V4L2 sensor-capture pipeline is only available on the bm1688 SoC.
+# cv84x6 has no VI/ISP pipeline; pcie/pcie_arm64 are accelerator modes without it.
+# Gate all ISP/V4L2 module builds and the libisp deb dependency on this flag.
+if("${PLATFORM}" STREQUAL "soc" AND "${CHIP_NAME}" STREQUAL "bm1688")
+    set(ENABLE_ISP ON)
+else()
+    set(ENABLE_ISP OFF)
+endif()
 
 if("${DEBUG}" STREQUAL "on")
     add_compile_options(-O0 -Wall -g -ggdb)
@@ -69,6 +78,7 @@ message(STATUS "CMAKE_TOOLCHAIN_FILE........ " ${CMAKE_TOOLCHAIN_FILE})
 message(STATUS "CMAKE_SYSTEM_PROCESSOR...... " ${CMAKE_SYSTEM_PROCESSOR})
 message(STATUS "CHIP NAME................... " ${CHIP_NAME})
 message(STATUS "PLATFORM.................... " ${PLATFORM})
+message(STATUS "ENABLE_ISP.................. " ${ENABLE_ISP})
 message(STATUS "SUBTYPE..................... " ${SUBTYPE})
 message(STATUS "CMAKE_INSTALL_PREFIX........ " ${CMAKE_INSTALL_PREFIX})
 message(STATUS "LIBSOPHAV_OUT_PATH.......... " ${LIBSOPHAV_OUT_PATH})

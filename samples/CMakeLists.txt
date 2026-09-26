@@ -9,6 +9,23 @@ elseif(CMAKE_HOST_UNIX)
 endif()
 cmake_policy(SET CMP0046 NEW)
 ########################
+#  ISP libraries needed transitively by libopencv_videoio.so
+# link_libraries() injects these into ALL targets in this directory scope.
+# ISP libraries are only available when the ISP/V4L2 pipeline is enabled
+# (bm1688 soc). cv84x6 (even on soc) and all pcie modes have no VI/ISP.
+if(NOT CMAKE_SYSTEM_NAME MATCHES "Windows")
+  if(ENABLE_ISP)
+    if("${GCC_VERSION}" STREQUAL "930")
+      link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/libisp/lib930/soc)
+    elseif("${GCC_VERSION}" STREQUAL "1131")
+      link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/libisp/lib1131/soc)
+    else()
+      link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/libisp/lib/soc)
+    endif()
+    link_libraries(ispv4l2_helper ae af awb cvi_bin cvi_bin_isp isp isp_algo ispv4l2_adapter sns_full)
+  endif()
+endif()
+########################
 #  Target
 set(CHIP_LIST bm1684 bm1686)
 set(CHIP_NAME bm1684 CACHE STRING "chip: bm1686, bm1684")
@@ -39,14 +56,15 @@ set(SAMPLE_TARGETS test_bm_restart test_ff_video_encode
                 test_ocv_vidbasic
                 test_ocv_video_xcode
                 test_ocv_vidmulti
-                test_ocv_vidsensor
                 test_gst_vcmulti
                 test_gst_transcode
                 test_gst_xcode
                 test_gst_bmcv_transcode
                 )
-if("${PLATFORM}" STREQUAL "soc")
-    list(APPEND SAMPLE_TARGETS test_ff_sns_xcode)
+# test_ocv_vidsensor / test_ff_sns_xcode use the ISP/sensor capture backend;
+# only build when the ISP/V4L2 pipeline is enabled (bm1688 soc).
+if(ENABLE_ISP)
+    list(APPEND SAMPLE_TARGETS test_ff_sns_xcode test_ocv_vidsensor)
 endif()
 
 # add sub-modules
@@ -66,13 +84,13 @@ add_subdirectory(ocv_jpumulti)
 add_subdirectory(ocv_vidbasic)
 add_subdirectory(ocv_video_xcode)
 add_subdirectory(ocv_vidmulti)
-add_subdirectory(ocv_vidsensor)
 add_subdirectory(gst/gst_bm_vcmulti)
 add_subdirectory(gst/gst_bm_transcode)
 add_subdirectory(gst/gst_bm_v4l2xcode)
 add_subdirectory(gst/gst_bm_bmcv_transcode)
-if("${PLATFORM}" STREQUAL "soc")
+if(ENABLE_ISP)
     add_subdirectory(ff_sns_xcode)
+    add_subdirectory(ocv_vidsensor)
 endif()
 
 
@@ -99,7 +117,6 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ff_bmcv_transcode/water.bin
 
 set(BMMW_SAMPLES_SOURCE
     ocv_vidmulti
-    ocv_vidsensor
     ocv_jpumulti
     ocv_vidbasic
     ocv_jpubasic
@@ -116,8 +133,8 @@ set(BMMW_SAMPLES_SOURCE
     gst/gst_bm_v4l2xcode
     gst/gst_bm_bmcv_transcode
     )
-if("${PLATFORM}" STREQUAL "soc")
-    list(APPEND BMMW_SAMPLES_SOURCE ff_sns_xcode)
+if(ENABLE_ISP)
+    list(APPEND BMMW_SAMPLES_SOURCE ff_sns_xcode ocv_vidsensor)
 endif()
 
 set(BMMW_SAMPLES_SOURCE_DIR ${BMMW_SAMPLES_SOURCE})

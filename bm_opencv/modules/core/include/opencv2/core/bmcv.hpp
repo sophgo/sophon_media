@@ -10,7 +10,39 @@ extern "C"{
 #include "bmcv_api_ext.h"
 }
 
+static bool isSupportedAvFormat(AVPixelFormat fmt)
+{
+    return fmt == AV_PIX_FMT_GRAY8   || fmt == AV_PIX_FMT_GBRP    ||
+           fmt == AV_PIX_FMT_YUV420P || fmt == AV_PIX_FMT_YUV422P ||
+           fmt == AV_PIX_FMT_YUV444P || fmt == AV_PIX_FMT_NV12    ||
+           fmt == AV_PIX_FMT_NV16;
+}
+
 namespace cv { namespace bmcv {
+
+// Check if BMCV hardware acceleration is enabled via environment variable OPENCV_USE_BMCV.
+// When env var is set to "1"/"true"/"TRUE", force enable all (including defaultEnabled=false ones).
+// When env var is set to "0"/"false"/"FALSE", force disable all.
+// When env var is not set, use the defaultEnabled parameter.
+inline bool isBmcvEnabled(bool defaultEnabled = true)
+{
+    static int env_state = -1; // -1=unchecked, 0=explicitly off, 1=explicitly on, 2=not set
+    if (env_state == -1) {
+        const char* env_val = getenv("OPENCV_USE_BMCV");
+        if (env_val) {
+            if (strcmp(env_val, "0") == 0 ||
+                strcmp(env_val, "false") == 0 ||
+                strcmp(env_val, "FALSE") == 0)
+                env_state = 0;
+            else
+                env_state = 1;
+        } else {
+            env_state = 2;
+        }
+    }
+    if (env_state == 2) return defaultEnabled;
+    return env_state == 1;
+}
 
 CV_EXPORTS bm_handle_t getCard(int id = 0);
 CV_EXPORTS int getId(bm_handle_t handle);

@@ -133,23 +133,23 @@ int bmFrame_to_bmImage(BMVidFrame *in, bm_image *out) {
         break;
     }
 
-    if (in->pixel_format == BM_VPU_DEC_PIX_FORMAT_COMPRESSED) {
+    if (in->pixel_format == BM_VPU_DEC_PIX_FORMAT_COMPRESSED || in->stride[7] != 0) {
         if ((0 == in->width) || (0 == in->height) || \
-            (0 == in->stride[0]) || (0 == in->stride[1]) || (0 == in->stride[2]) || (0 == in->stride[3]) || \
-            (0 == in->buf[0]) || (0 == in->buf[1]) || (0 == in->buf[2]) || (0 == in->buf[3])) {
+            (0 == in->stride[4]) || (0 == in->stride[5]) || (0 == in->stride[6]) || (0 == in->stride[7]) || \
+            (0 == in->buf[4]) || (0 == in->buf[5]) || (0 == in->buf[6]) || (0 == in->buf[7])) {
                 VLOG(ERR, "bm_image_from_frame: get yuv failed\n");
                 return BM_ERR_PARAM;
             }
         bm_image cmp_bmImg;
-        bm_image_create(g_bmHandle, in->height, in->width, FORMAT_COMPRESSED, DATA_TYPE_EXT_1N_BYTE, &cmp_bmImg, NULL);
+        bm_image_create(g_bmHandle, in->coded_height, in->coded_width, FORMAT_COMPRESSED, DATA_TYPE_EXT_1N_BYTE, &cmp_bmImg, NULL);
         bm_device_mem_t input_addr[4];
-        int size = in->height * in->stride[4];
+        int size = in->stride[6];
         input_addr[0] = bm_mem_from_device((unsigned long long)in->buf[6], size);
-        size = (in->height / 2) * in->stride[5];
+        size = in->coded_height * in->stride[4];
         input_addr[1] = bm_mem_from_device((unsigned long long)in->buf[4], size);
-        size = in->stride[6];
-        input_addr[2] = bm_mem_from_device((unsigned long long)in->buf[7], size);
         size = in->stride[7];
+        input_addr[2] = bm_mem_from_device((unsigned long long)in->buf[7], size);
+        size = (in->coded_height / 2) * in->stride[5];
         input_addr[3] = bm_mem_from_device((unsigned long long)in->buf[5], size);
         bm_image_attach(cmp_bmImg, input_addr);
         bm_image_create(g_bmHandle, in->height, in->width, FORMAT_YUV420P, DATA_TYPE_EXT_1N_BYTE, out, NULL);
@@ -268,9 +268,10 @@ void *dec_get_process(void* arg)
                     free(bmImageout);
                     break;
                 }
-                int ret = bmcv_image_rotate(g_bmHandle, *bmImagein, *bmImageout, 180);
+                bmcv_rect_t rect = {0, 0, (unsigned int)pFrame->width, (unsigned int)pFrame->height};
+                int ret = bmcv_image_vpp_convert(g_bmHandle, 1, *bmImagein, bmImageout, &rect, BMCV_INTER_LINEAR);
                 if (ret != BM_SUCCESS){
-                    VLOG(ERR, "bm_image rotate failed !\n");
+                    VLOG(ERR, "bm_image vpp_convert failed !\n");
                     global_ret = -1;
                     bm_image_destroy(bmImagein);
                     bm_image_destroy(bmImageout);

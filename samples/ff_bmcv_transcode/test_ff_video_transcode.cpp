@@ -239,29 +239,39 @@ int main(int argc, char **argv)
     }
 
     int td_index = 0;
+    /* Give each channel its OWN THREAD_ARG copy with a stable thread_index.
+     * The original code passed ONE shared thread_arg to all channels' threads
+     * while mutating thread_arg->thread_index in this loop, fenced only by
+     * usleep(100000). Under 16-ch load a freshly-created thread could read
+     * thread_index AFTER main advanced it -> two channels share the same index
+     * -> shared g_reader[idx] / g_image_{vpp,enc}_queue[idx] -> double openDec /
+     * double-free of the same AVFrame -> wild-pointer SIGSEGV with a drifting
+     * crash site. A per-channel copy removes the shared-mutable-state race. */
+    static THREAD_ARG ch_arg[MAX_THREAD_NUM];
     /* Initialize multiple threads */
     while( thread_arg->thread_num ){
-        thread_arg->thread_index = td_index;
-        ret = pthread_create(&(dec_thread[td_index]), NULL, video_decoder_pthread, thread_arg);
+        ch_arg[td_index] = *thread_arg;
+        ch_arg[td_index].thread_index = td_index;
+        THREAD_ARG *arg_for_ch = &ch_arg[td_index];
+        ret = pthread_create(&(dec_thread[td_index]), NULL, video_decoder_pthread, arg_for_ch);
         if (ret != 0) {
             av_log(NULL, AV_LOG_ERROR, "video_decoder pthread[%d] create failed \n", td_index);
             return -1;
         }
 
-        ret = pthread_create(&(vpp_thread[td_index]), NULL, video_process_pthread, thread_arg);
+        ret = pthread_create(&(vpp_thread[td_index]), NULL, video_process_pthread, arg_for_ch);
         if (ret != 0) {
             av_log(NULL, AV_LOG_ERROR, "video_process pthread[%d] create failed \n", td_index);
             return -1;
         }
 
-        ret = pthread_create(&(enc_thread[td_index]), NULL, video_encoder_pthread, thread_arg);
+        ret = pthread_create(&(enc_thread[td_index]), NULL, video_encoder_pthread, arg_for_ch);
         if (ret != 0) {
             av_log(NULL, AV_LOG_ERROR, "video_encoder pthread[%d] create failed \n", td_index);
             return -1;
         }
         usleep(100000);
         td_index++;
-        thread_arg->thread_index = td_index;
         thread_arg->thread_num--;
     }
 
@@ -416,7 +426,8 @@ void *video_process_pthread(void *arg){
 
         if(encode_pixel_format == AV_PIX_FMT_YUV420P){
             out_frame = av_frame_alloc();
-            AVFrameConvert(g_bmHandle, in_frame, out_frame, height, width, encode_pixel_format, g_enable_mosaic, g_enable_watermark, g_watermark);
+            AVFrameConvert(g_bmHandle, in_frame, out_frame, height, width, encode_pixel_format, g_enable_mosaic, g_enable_watermark, g_watermark,
+                           g_reader[index].getCodedWidth(), g_reader[index].getCodedHeight());
             if(!(&out_frame)){
                 av_log(NULL, AV_LOG_ERROR, "no frame ! \n");
                 av_frame_unref(out_frame);

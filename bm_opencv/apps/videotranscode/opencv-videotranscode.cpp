@@ -47,7 +47,6 @@ pthread_t displayfps_thread;
 #endif
 
 std::mutex imageQueue_lock[MAX_THREAD_NUM];
-std::mutex cap_read_lock[MAX_THREAD_NUM];
 std::mutex g_thread_num_lock;
 
 unsigned int count_load[MAX_THREAD_NUM];
@@ -56,7 +55,6 @@ float fps_load[MAX_THREAD_NUM];
 float fps_write[MAX_THREAD_NUM];
 int queue_pop[MAX_THREAD_NUM] = {0};
 
-VideoWriter g_writer[MAX_THREAD_NUM];
 
 #define BM_ALIGN16(_x)             (((_x)+0x0f)&~0x0f)
 #define BM_ALIGN32(_x)             (((_x)+0x1f)&~0x1f)
@@ -147,7 +145,6 @@ DWORD WINAPI videoLoadThread(void* arg){
     count_load[index]               = 0;
     int is_stream                   = 0;
     Mat *toEncImage                 = NULL;
-    threadPara->imageQueue          = new queue<Mat*>;
     int read_times                  = MAX_READ_TIMEOUT;
 
 
@@ -205,14 +202,14 @@ DWORD WINAPI videoLoadThread(void* arg){
             break;
         }
 
-        cap_read_lock[index].lock();
         Mat *image = new Mat;
         cap.read(*image);
-        cap_read_lock[index].unlock();
 
         if (image->empty()) {
             if ((int)cap.get(CAP_PROP_STATUS) == 2) {     // eof
-                cap.release();
+                delete image;
+                if(cap.isOpened())
+                    cap.release();
                 cap.open(threadPara->inputUrl, CAP_FFMPEG, threadPara->deviceId);
                 if(threadPara->yuvEnable == 1){
                     cap.set(cv::CAP_PROP_OUTPUT_YUV, PROP_TRUE);
@@ -224,18 +221,16 @@ DWORD WINAPI videoLoadThread(void* arg){
             read_times = MAX_READ_TIMEOUT;
             imageQueue_lock[index].lock();
             threadPara->imageQueue->push(image);
-            imageQueue_lock[index].unlock();
             count_load[index]++;
 
             if (threadPara->imageQueue->size() >= g_imagequeue_nums && is_stream)
             {
-                imageQueue_lock[index].lock();
                 toEncImage = threadPara->imageQueue->front();
                 threadPara->imageQueue->pop();
                 delete toEncImage;
                 queue_pop[index]++;
-                imageQueue_lock[index].unlock();
             }
+            imageQueue_lock[index].unlock();
 
             if(threadPara->startWrite){
                 while(threadPara->imageQueue->size() >= g_imagequeue_nums){
@@ -271,7 +266,8 @@ cleanup_load:
     printf("End of file. \n Decode thread[%d] exit. Decode %d frames. dropped %d frames. \n",
                             index, count_load[index] - queue_pop[index], queue_pop[index]);
     eof[index] = 1;
-    cap.release();
+    if(cap.isOpened())
+        cap.release();
     g_thread_num_lock.lock();
     g_thread_num--;
     g_thread_num_lock.unlock();
@@ -295,7 +291,7 @@ DWORD WINAPI videoWriteThread(void* arg){
     char *out_buf          = NULL;
     int is_stream          = 0;
     int quit_times         = 0;
-    VideoWriter *writer    = &g_writer[index];
+    VideoWriter writer;
     Mat                    image;
     string outfile         = "";
     string encodeparms     = "";
@@ -335,7 +331,7 @@ DWORD WINAPI videoWriteThread(void* arg){
         is_stream = 1;
     if(strcmp(threadPara->codecType,"H264enc") ==0)
     {
-        writer->open(outfile, VideoWriter::fourcc('H', '2', '6', '4'),
+        writer.open(outfile, VideoWriter::fourcc('H', '2', '6', '4'),
         threadPara->fps,
         Size(threadPara->imageCols, threadPara->imageRows),
         encodeparms,
@@ -344,7 +340,7 @@ DWORD WINAPI videoWriteThread(void* arg){
     }
     else if(strcmp(threadPara->codecType,"H265enc") ==0)
     {
-       writer->open(outfile, VideoWriter::fourcc('h', 'v', 'c', '1'),
+       writer.open(outfile, VideoWriter::fourcc('h', 'v', 'c', '1'),
         threadPara->fps,
         Size(threadPara->imageCols, threadPara->imageRows),
         encodeparms,
@@ -353,14 +349,14 @@ DWORD WINAPI videoWriteThread(void* arg){
     }
     else if(strcmp(threadPara->codecType,"MPEG2enc") ==0)
     {
-       writer->open(outfile, VideoWriter::fourcc('M', 'P', 'G', '2'),
+       writer.open(outfile, VideoWriter::fourcc('M', 'P', 'G', '2'),
         threadPara->fps,
         Size(threadPara->imageCols, threadPara->imageRows),
         true,
         threadPara->deviceId);
     }
 
-    if(!writer->isOpened())
+    if(!writer.isOpened())
     {
 #ifdef __linux__
         return (void *)-1;
@@ -400,13 +396,13 @@ DWORD WINAPI videoWriteThread(void* arg){
                     threadPara->imageQueue->pop();
                     takeoutcount[index]++;
                     imageQueue_lock[index].unlock();
-                    writer->write(*toEncImage);
+                    writer.write(*toEncImage);
                     delete toEncImage;
                     count_write[index]++;
                 }else{
                     if( eof[index] ){   // Currently queue is empty while end of file, start to flush.
                         Mat flushMat;
-                        writer->write(flushMat);
+                        writer.write(flushMat);
                         flush_status = 1;
                         break;
                     }
@@ -486,21 +482,21 @@ DWORD WINAPI videoWriteThread(void* arg){
                             }
                         }
 
-                        writer->write(*toEncImage, out_buf, &out_buf_len, &roiinfo);
+                        writer.write(*toEncImage, out_buf, &out_buf_len, &roiinfo);
                         delete toEncImage;
                         if (roiinfo.field != NULL) {
                             free(roiinfo.field);
                             roiinfo.field = NULL;
                         }
                     } else {   // roienable = 0
-                        writer->write(*toEncImage, out_buf, &out_buf_len);
+                        writer.write(*toEncImage, out_buf, &out_buf_len);
                         delete toEncImage;
                     }
                 }else{ // queue is empty
                     if( eof[index] ){  //end of file while queue is empty,start to flush
                         Mat flushMat;
                         while(1){
-                            writer->write(flushMat, out_buf, &out_buf_len);
+                            writer.write(flushMat, out_buf, &out_buf_len);
                             if(out_buf_len > 0){
                                 fwrite(out_buf, 1, out_buf_len, fp_out);
                                 out_buf_len = 0; //reset out_buf_len
@@ -591,8 +587,8 @@ cleanup_write:
 
     printf("encode thread[%d] exit. \n", index);
     exit_flag[index] = 1;
-    if (writer->isOpened())
-        writer->release();
+    if (writer.isOpened())
+        writer.release();
     g_thread_num_lock.lock();
     g_thread_num--;
     g_thread_num_lock.unlock();
@@ -705,8 +701,6 @@ void usage(char *argv_0){
 
 int main(int argc, char* argv[])
 {
-    //--- INITIALIZE VIDEOCAPTURE
-    VideoCapture cap;
     int ret = 0;
     int deviceId = 0;
     int thread_num = 0;
@@ -770,10 +764,6 @@ int main(int argc, char* argv[])
       || strcmp(threadParas->codecType,"H265enc") == 0
       || strcmp(threadParas->codecType,"MPEG2enc") == 0)
     {
-        for (int i = 0; i < thread_num; i++) {
-            delete threadParas[i].imageQueue;
-            threadParas[i].imageQueue = NULL;
-        }
         threadParas->startWrite = 1;
     } else {
         if(threadParas){
@@ -807,6 +797,10 @@ int main(int argc, char* argv[])
 
     for (int i = 1; i < threadParas->thread_num; i++) {
         memcpy(&threadParas[i], &threadParas[0], sizeof(THREAD_ARG));
+    }
+
+    for (int i = 0; i < thread_num; i++) {
+        threadParas[i].imageQueue = new queue<Mat*>;
     }
 
     int td_index = 0;
@@ -857,8 +851,6 @@ int main(int argc, char* argv[])
 
     for (int i = 0; i < threadParas->thread_num; i++) {
         exit_flag[i] = 1;
-        if (g_writer[i].isOpened())
-            g_writer[i].release();
         if(threadParas[i].imageQueue){
             delete threadParas[i].imageQueue;
             threadParas[i].imageQueue = NULL;

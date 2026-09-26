@@ -775,25 +775,25 @@ LineAA( Mat& img, Point2l pt1, Point2l pt2, const void* color )
             {
 
                 int x = (int)(pt1.x >> XY_SHIFT);
-    
+
                 for( ; ecount >= 0; x++, pt1.y += y_step, scount++, ecount-- )
                 {
                     if( (unsigned)x >= (unsigned)size0.width )
                         continue;
                     int y = (int)((pt1.y >> XY_SHIFT) - 1);
-    
+
                     int ep_corr = ep_table[(((scount >= 2) + 1) & (scount | 2)) * 3 +
                                            (((ecount >= 2) + 1) & (ecount | 2))];
                     int a, dist = (pt1.y >> (XY_SHIFT - 5)) & 31;
-    
+
                     a = (ep_corr * FilterTable[dist + 32] >> 8) & 0xff;
                     if( (unsigned)y < (unsigned)size0.height )
                         ICV_PUT_POINT(x, y)
-    
+
                     a = (ep_corr * FilterTable[dist] >> 8) & 0xff;
                     if( (unsigned)(y+1) < (unsigned)size0.height )
                         ICV_PUT_POINT(x, y+1)
-    
+
                     a = (ep_corr * FilterTable[63 - dist] >> 8) & 0xff;
                     if( (unsigned)(y+2) < (unsigned)size0.height )
                         ICV_PUT_POINT(x, y+2)
@@ -843,7 +843,7 @@ LineAA( Mat& img, Point2l pt1, Point2l pt2, const void* color )
             else
             {
                 int y = (int)(pt1.y >> XY_SHIFT);
-    
+
                 for( ; ecount >= 0; y++, pt1.x += x_step, scount++, ecount-- )
                 {
                     if( (unsigned)y >= (unsigned)size0.height )
@@ -852,15 +852,15 @@ LineAA( Mat& img, Point2l pt1, Point2l pt2, const void* color )
                     int ep_corr = ep_table[(((scount >= 2) + 1) & (scount | 2)) * 3 +
                                            (((ecount >= 2) + 1) & (ecount | 2))];
                     int a, dist = (pt1.x >> (XY_SHIFT - 5)) & 31;
-    
+
                     a = (ep_corr * FilterTable[dist + 32] >> 8) & 0xff;
                     if( (unsigned)x < (unsigned)size0.width )
                         ICV_PUT_POINT(x, y)
-    
+
                     a = (ep_corr * FilterTable[dist] >> 8) & 0xff;
                     if( (unsigned)(x+1) < (unsigned)size0.width )
                         ICV_PUT_POINT(x+1, y)
-    
+
                     a = (ep_corr * FilterTable[63 - dist] >> 8) & 0xff;
                     if( (unsigned)(x+2) < (unsigned)size0.width )
                         ICV_PUT_POINT(x+2, y)
@@ -2669,6 +2669,12 @@ void rectangle( InputOutputArray _img, Point pt1, Point pt2,
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration (default off); fallback to CPU on failure
+    if (cv::bmcv::isBmcvEnabled(false)) {
+        if (cv::bmcv::rectangle(_img, pt1, pt2, color, thickness) == BM_SUCCESS)
+            return;
+    }
+
     Mat img = _img.getMat();
     if(img.avOK())
     {
@@ -2886,13 +2892,19 @@ void rectangle( InputOutputArray img, Rect rec,
 
     CV_Assert( 0 <= shift && shift <= XY_SHIFT );
 
+    // Try bmcv hardware acceleration (default off); fallback to CPU on failure
+    if (cv::bmcv::isBmcvEnabled(false)) {
+        if (cv::bmcv::rectangle(img, rec, color, thickness) == BM_SUCCESS)
+            return;
+    }
+
     // Crop the rectangle to right around the mat.
     rec &= Rect(-(1 << shift), -(1 << shift), ((img.cols() + 2) << shift),
                 ((img.rows() + 2) << shift));
 
     if( !rec.empty() )
         rectangle( img, rec.tl(), rec.br() - Point(1<<shift,1<<shift),
-                   color, thickness, lineType, shift );
+                color, thickness, lineType, shift );
 }
 
 void bmcpu_circle( InputOutputArray _img, Point center, int radius,
@@ -2944,6 +2956,12 @@ void circle( InputOutputArray _img, Point center, int radius,
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration (default off); fallback to CPU on failure
+    if (cv::bmcv::isBmcvEnabled(false)) {
+        if (cv::bmcv::circle(_img, center, radius, color, thickness) == BM_SUCCESS)
+            return;
+    }
+
     Mat img = _img.getMat();
     if(img.avOK())
     {
@@ -2969,7 +2987,7 @@ void circle( InputOutputArray _img, Point center, int radius,
         _center.y <<= XY_SHIFT - shift;
         _radius <<= XY_SHIFT - shift;
         EllipseEx( img, _center, Size2l(_radius, _radius),
-                   0, 0, 360, buf, thickness, line_type );
+                0, 0, 360, buf, thickness, line_type );
     }
     else
         Circle( img, center, radius, buf, thickness < 0 );

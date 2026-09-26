@@ -188,11 +188,15 @@ typedef struct MultiInstTest {
     int          frame_rate;
     int          bitrate;
     int          is_dma_buffer;
-    int          thread_index;
     int          thread_num;
     int          zero_copy;
     // unsigned int frame_nums[MAX_INST_NUM];
 } THREAD_ARG;
+
+typedef struct ThreadContext {
+    THREAD_ARG *thread_arg;
+    int thread_index;
+} THREAD_CONTEXT;
 
 static void usage(char *program_name);
 void handler(int sig);
@@ -201,8 +205,10 @@ void handler(int sig);
 int main(int argc, char **argv)
 {
     int arg_index = 0;
+    int td_index = 0;
     unsigned int chipid = 0;
     int ret = 0;
+    THREAD_CONTEXT thread_ctx[MAX_THREAD_NUM];
 
     if(argc < 13){
         usage(argv[0]);
@@ -229,46 +235,46 @@ int main(int argc, char **argv)
 
     thread_arg->width                   = 1920;
     thread_arg->height                  = 1080;
-    g_thread_num = 16+16+1+1; /* dec+vpp+enc threads + stat thread */
+    g_thread_num = thread_arg->thread_num * 2 + 1 + 1; /* dec+vpp+enc threads + stat thread */
     if (strcmp(platform, "pcie") == 0)
         thread_arg->pcie_mode = 1;
     else if (strcmp(platform, "soc") == 0)
         thread_arg->pcie_mode = 0;
     else {
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
 
     if(!thread_arg->src_filename || !ch_encode_pixel_format \
         || !thread_arg->output_filename || !thread_arg->codecer_name){
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
 
     if(thread_arg->height < 0 || thread_arg->width > 4096){
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
 
     if(thread_arg->width < 0 || thread_arg->width > 4096){
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
 
     if(thread_arg->frame_rate < 0 ){
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
 
     if(thread_arg->bitrate > 500 && thread_arg->bitrate <10000 ){
         thread_arg->bitrate = thread_arg->bitrate * 1000;
     }else{
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
     if(thread_arg->thread_num <= 0 ||  thread_arg->thread_num > MAX_THREAD_NUM){
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
     if (strcmp(ch_encode_pixel_format, "I420") == 0)
         thread_arg->encode_pixel_format = AV_PIX_FMT_YUV420P;
@@ -276,7 +282,7 @@ int main(int argc, char **argv)
         thread_arg->encode_pixel_format = AV_PIX_FMT_NV12;
     else {
         usage(argv[0]);
-        return -1;
+        goto err_clean;
     }
 
     thread_arg->sophon_idx         = atoi(argv[++arg_index]);
@@ -284,7 +290,7 @@ int main(int argc, char **argv)
         if(thread_arg->sophon_idx < 0 && thread_arg->sophon_idx > 64){
             av_log(NULL, AV_LOG_ERROR, "ERROR Pcie mode: Invalid sophon_idx=%d \n", thread_arg->sophon_idx);
             usage(argv[0]);
-            return -1;
+            goto err_clean;
         }
     }
     else{
@@ -301,36 +307,35 @@ int main(int argc, char **argv)
     ret = bm_dev_request(&g_bmHandle, thread_arg->sophon_idx);
     if (ret != BM_SUCCESS){
         av_log(NULL, AV_LOG_DEBUG, "bm_dev_request failed !\n");
-        return -1;
+        goto err_clean;
     }
     bm_get_chipid(g_bmHandle, &chipid);
 
-    int td_index = 0;
     ret = pthread_create(&(enc_thread[0]), NULL, video_encoder_pthread, thread_arg);
     if (ret != 0) {
         av_log(NULL, AV_LOG_ERROR, "video_encoder pthread[%d] create failed \n", td_index);
-        return -1;
+        goto err_clean;
     }
     usleep(100);
     /* Initialize multiple threads */
     while( thread_arg->thread_num ){
-        thread_arg->thread_index = td_index;
-        ret = pthread_create(&(dec_thread[td_index]), NULL, video_decoder_pthread, thread_arg);
+        thread_ctx[td_index].thread_arg = thread_arg;
+        thread_ctx[td_index].thread_index = td_index;
+        ret = pthread_create(&(dec_thread[td_index]), NULL, video_decoder_pthread, &thread_ctx[td_index]);
         if (ret != 0) {
             av_log(NULL, AV_LOG_ERROR, "video_decoder pthread[%d] create failed \n", td_index);
-            return -1;
+            goto err_clean;
         }
         usleep(100);
-        ret = pthread_create(&(vpp_thread[td_index]), NULL, video_process_pthread, thread_arg);
+
+        ret = pthread_create(&(vpp_thread[td_index]), NULL, video_process_pthread, &thread_ctx[td_index]);
         if (ret != 0) {
             av_log(NULL, AV_LOG_ERROR, "video_process pthread[%d] create failed \n", td_index);
-            return -1;
+            goto err_clean;
         }
+        usleep(100);
 
-
-        usleep(10000);
         td_index++;
-        thread_arg->thread_index = td_index;
         thread_arg->thread_num--;
     }
 
@@ -340,7 +345,7 @@ int main(int argc, char **argv)
     ret = pthread_create(&(stat_thread), NULL, stat_pthread, thread_arg);
     if (ret != 0) {
         av_log(NULL, AV_LOG_ERROR, "stat pthread create failed \n");
-        return -1;
+        goto err_clean;
     }
 
     while(1){
@@ -360,11 +365,18 @@ int main(int argc, char **argv)
     }
 
     return 0;
+
+err_clean:
+
+    free(thread_arg);
+    thread_arg = NULL;
+    return -1;
 }
 
 void *video_decoder_pthread(void *arg){
-    THREAD_ARG *thread_arg      = (THREAD_ARG *)arg;
-    int index                   = thread_arg->thread_index;
+    THREAD_CONTEXT *thread_ctx  = (THREAD_CONTEXT *)arg;
+    THREAD_ARG *thread_arg      = thread_ctx->thread_arg;
+    int index                   = thread_ctx->thread_index;
     const char *src_filename    = thread_arg->src_filename;
     int zero_copy               = thread_arg->zero_copy;
     int sophon_idx              = thread_arg->sophon_idx;
@@ -445,13 +457,14 @@ void *video_decoder_pthread(void *arg){
     if (!(reader->isClosed()))
         reader->closeDec();
 
-    av_log(NULL, AV_LOG_INFO, "video decode finish!\n");
+    av_log(NULL, AV_LOG_INFO, "video decode chn: %d finish!\n", index);
     return (void *)0;
 }
 
 void *video_process_pthread(void *arg){
-    THREAD_ARG *thread_arg      = (THREAD_ARG *)arg;
-    int index                   = thread_arg->thread_index;
+    THREAD_CONTEXT *thread_ctx  = (THREAD_CONTEXT *)arg;
+    THREAD_ARG *thread_arg      = thread_ctx->thread_arg;
+    int index                   = thread_ctx->thread_index;
     int height                  = thread_arg->height;
     int width                   = thread_arg->width;
     int encode_pixel_format     = thread_arg->encode_pixel_format;
@@ -567,7 +580,7 @@ void *video_encoder_pthread(void *arg){
     while(!g_exit_flag){
         while(g_image_enc_queue[index].empty())
         {
-            if (g_enc_stop_flag == 16){
+            if (g_enc_stop_flag == thread_arg->thread_num){
                 goto cleanup;
             }
             if (g_exit_flag) break;
@@ -733,4 +746,3 @@ void* stat_pthread(void *arg)
     g_thread_num_lock.unlock();
     return NULL;
 }
-

@@ -85,7 +85,9 @@ set(GST_LOCATION_PREFIX ${GST_COMPONENT}_${PROJECT_VERSION})
 add_subdirectory(gst/bm_allocator)
 add_subdirectory(gst/bmcodec)
 add_subdirectory(gst/bmvpss)
-if("${PLATFORM}" STREQUAL "soc")
+# bmv4l2src is the V4L2 ISP/sensor source plugin; only build it when the
+# ISP/V4L2 pipeline is enabled (bm1688 soc). cv84x6 / pcie have no VI/ISP.
+if(ENABLE_ISP)
     add_subdirectory(gst/bmv4l2src)
 endif()
 add_subdirectory(gst/bmive)

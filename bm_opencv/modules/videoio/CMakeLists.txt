@@ -139,7 +139,10 @@ if(TARGET ocv.3rdparty.v4l)
   list(APPEND tgts ocv.3rdparty.v4l)
 endif()
 
-if(TARGET ocv.3rdparty.v4l)
+# cap_soph_v4l.cpp requires ISP libs (CVI_ISP_V4L2_Init/Exit) which are
+# only available on soc. Guarded by HAVE_SOPH_V4L macro
+# (set in detect_v4l.cmake only for the soc platform)
+if(HAVE_SOPH_V4L)
   list(APPEND videoio_srcs ${CMAKE_CURRENT_LIST_DIR}/src/cap_soph_v4l.cpp)
   list(APPEND tgts ocv.3rdparty.v4l)
 endif()
@@ -282,6 +285,13 @@ if(VIDEOIO_ENABLE_PLUGINS)
 endif()
 
 ocv_target_link_libraries(${the_module} LINK_PRIVATE ${tgts})
+
+# ISP libraries needed by cap_soph_v4l.cpp (CVI_ISP_V4L2_Init/Exit)
+# PUBLIC so downstream samples inherit them via videoio
+# Only linked when HAVE_SOPH_V4L is defined (soc only, not pcie/pcie_arm64)
+if(HAVE_SOPH_V4L)
+  ocv_target_link_libraries(${the_module} PUBLIC ispv4l2_helper ae af awb cvi_bin cvi_bin_isp isp isp_algo ispv4l2_adapter sns_full)
+endif()
 
 # copy FFmpeg dll to the output folder
 if(WIN32 AND HAVE_FFMPEG_WRAPPER)

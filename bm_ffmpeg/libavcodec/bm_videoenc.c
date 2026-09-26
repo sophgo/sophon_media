@@ -122,6 +122,16 @@ typedef struct {
     BmVpuRawFrame input_frame;
     BmVpuEncodedFrame output_frame;
 
+    /* Wraps the current input frame's external DMA buffer. Lives in the
+     * context (not on the stack) because src_fb->dma_buffer points at it and
+     * must stay valid from fill_input() until the frame is sent. */
+    BmVpuEncDMABuffer wrapped_dmem;
+
+    /* Per-plane wrapper for the zero-copy path when the user's Y/U/V planes
+     * live in physically discontiguous memory. Same lifetime reasoning as
+     * wrapped_dmem: src_fb->dma_buffer_{y,u,v} point into it. */
+    BmEncDmaBufferYUV wrapped_yuv;
+
     struct timeval ps;   /* encoding start time */
     struct timeval pe;   /* encoding end time */
 
@@ -1243,33 +1253,21 @@ static int SetMapData(AVCodecContext *avctx, BmCustomMapOpt **roi_map, int picWi
     return 0;
 }
 
-static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
-                                    const AVFrame *frame, int *got_packet)
+/* Build ctx->input_frame (framebuffer, context, pts/dts) from an AVFrame.
+ * Handles the three input paths: hw_accel, non-zero-copy CPU copy, and
+ * user-provided zero-copy DMA memory. Returns 0 or a negative AVERROR. */
+static int bm_videoenc_fill_input(AVCodecContext *avctx, AVPacket *avpkt,
+                                  const AVFrame *frame)
 {
     BmVpuEncContext* ctx = (BmVpuEncContext *)(avctx->priv_data);
     AVFrame* pic = NULL;
-    // bm_device_mem_t wrapped_dmem;
-    BmVpuEncDMABuffer wrapped_dmem;
-    BmVpuEncReturnCodes enc_ret = -1;
-    unsigned int output_code = 0; // TODO
+    const int width  = frame->width;
+    const int height = frame->height;
+    int sw_format;
     int i, ret = 0;
-    int pict_type;
-    int send_frame_status = 0;
-    int get_stream_times  = 0;
+    char buf[128];
 
-    av_log(avctx, AV_LOG_TRACE, "Enter %s\n", __func__);
-
-    if (ctx->perf && ctx->total_frame == 0) {
-        gettimeofday(&ctx->ps, NULL);
-    }
-
-    *got_packet = 0;
-    if (frame) {
-        const int width  = frame->width;
-        const int height = frame->height;
-        int sw_format;
-        char buf[128];
-
+    {
         if (frame->format != avctx->pix_fmt) {
             av_log(avctx, AV_LOG_ERROR,
                    "The frame pixel format(%s) is different from that(%s) of encoder context.\n",
@@ -1385,10 +1383,10 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             }
 
             // /* The EXTERNAL DMA buffer filled with frame data */
-            wrapped_dmem.phys_addr = (unsigned long)(pic->data[0]);
+            ctx->wrapped_dmem.phys_addr = (unsigned long)(pic->data[0]);
             // /* The size of EXTERNAL DMA buffer */
-            wrapped_dmem.size = total_size;
-            wrapped_dmem.enable_cache = 0;
+            ctx->wrapped_dmem.size = total_size;
+            ctx->wrapped_dmem.enable_cache = 0;
 
             ctx->src_fb->y_stride    = pic->linesize[0];
             ctx->src_fb->cbcr_stride = pic->linesize[1];
@@ -1400,7 +1398,7 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             ctx->src_fb->cb_offset   = y_size;
             ctx->src_fb->cr_offset   = y_size + c_size;
 
-            ctx->src_fb->dma_buffer  = (BmVpuEncDMABuffer *)&wrapped_dmem;
+            ctx->src_fb->dma_buffer  = (BmVpuEncDMABuffer *)&ctx->wrapped_dmem;
 
         } else if (!ctx->zero_copy) {
             /* The input frames come in Non-DMA memory */
@@ -1495,8 +1493,6 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
 #endif
         } else { /* The input frames come from DMA memory defined by user */
-            int y_size, c_size, total_size;
-
             if (pic->data[4] == NULL || pic->data[5] == NULL ||
                ((pic->format == AV_PIX_FMT_YUV420P ||(pic->format == AV_PIX_FMT_YUVJ420P)) && pic->data[6] == NULL)) {
                 av_log(avctx, AV_LOG_ERROR, "ERROR! Invalid pic data!\n");
@@ -1511,38 +1507,45 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 return AVERROR_EXTERNAL;
             }
 
-            if ((pic->format == AV_PIX_FMT_YUV420P) ||
-                (pic->format == AV_PIX_FMT_YUVJ420P)) {
-                y_size = pic->data[5] - pic->data[4];
-                c_size = pic->data[6] - pic->data[5];
-                total_size = y_size + c_size*2;
-            } else {
-                y_size = pic->data[5] - pic->data[4];
-                c_size = y_size/2; // TODO
-                total_size = y_size + c_size;
-            }
-
-            // wrapped_dmem.u.device.dmabuf_fd = 1;
-            // /* The EXTERNAL DMA buffer filled with frame data */
-            // wrapped_dmem.u.device.device_addr = (unsigned long)(pic->data[4]);
-            // /* The size of EXTERNAL DMA buffer */
-            // wrapped_dmem.size = total_size;
-
-            wrapped_dmem.phys_addr = (unsigned long)(pic->data[4]);
-            // wrapped_dmem.virt_addr = ;
-            wrapped_dmem.size = total_size;
-            // wrapped_dmem.enable_cache = 0;
+            /* The user provides one physical address per plane
+             * (data[4]=Y, data[5]=U/UV, data[6]=V). These planes may live in
+             * physically discontiguous memory, so wrap each plane in its own
+             * DMA buffer and leave the single dma_buffer NULL. The driver
+             * (bmvpu_enc_send_frame) then takes the per-plane phys_addr path.
+             * For contiguous input this yields the exact same phyaddr[] as the
+             * old base+offset scheme. */
+            int chroma_height = AV_CEIL_RSHIFT(pic->height, 1);
 
             ctx->src_fb->y_stride    = pic->linesize[4];
             ctx->src_fb->cbcr_stride = pic->linesize[5];
-
             ctx->src_fb->width       = pic->width;
             ctx->src_fb->height      = pic->height;
 
-            ctx->src_fb->y_offset    = 0;
-            ctx->src_fb->cb_offset   = y_size;
-            ctx->src_fb->cr_offset   = y_size + c_size;
-            ctx->src_fb->dma_buffer  = (BmVpuEncDMABuffer *)&wrapped_dmem;
+            ctx->wrapped_yuv.dmabuffers_y.phys_addr    = (unsigned long)(pic->data[4]);
+            ctx->wrapped_yuv.dmabuffers_y.size         = pic->linesize[4] * pic->height;
+            ctx->wrapped_yuv.dmabuffers_y.enable_cache = 0;
+
+            ctx->wrapped_yuv.dmabuffers_u.phys_addr    = (unsigned long)(pic->data[5]);
+            ctx->wrapped_yuv.dmabuffers_u.size         = pic->linesize[5] * chroma_height;
+            ctx->wrapped_yuv.dmabuffers_u.enable_cache = 0;
+
+            if ((pic->format == AV_PIX_FMT_YUV420P) ||
+                (pic->format == AV_PIX_FMT_YUVJ420P)) {
+                ctx->wrapped_yuv.dmabuffers_v.phys_addr    = (unsigned long)(pic->data[6]);
+                ctx->wrapped_yuv.dmabuffers_v.size         = pic->linesize[6] * chroma_height;
+                ctx->wrapped_yuv.dmabuffers_v.enable_cache = 0;
+                ctx->src_fb->dma_buffer_v = &ctx->wrapped_yuv.dmabuffers_v;
+            } else {
+                ctx->src_fb->dma_buffer_v = NULL;
+            }
+
+            ctx->src_fb->dma_buffer   = NULL;
+            ctx->src_fb->dma_buffer_y = &ctx->wrapped_yuv.dmabuffers_y;
+            ctx->src_fb->dma_buffer_u = &ctx->wrapped_yuv.dmabuffers_u;
+
+            ctx->src_fb->y_offset  = 0;
+            ctx->src_fb->cb_offset = 0;
+            ctx->src_fb->cr_offset = 0;
         }
 
         ctx->enc_params.skip_frame = 0; // TODO
@@ -1564,45 +1567,37 @@ static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
          * dma buffer of encoder. So unref and free the input frame now. */
         if (!ctx->zero_copy)
             av_frame_free(&pic);
-    } else {
-        if (ctx->is_end)
-            return  0;
-
-        ctx->input_frame.framebuffer = NULL;
-        ctx->input_frame.context = NULL;
-        ctx->input_frame.pts = 0L;
-        ctx->input_frame.dts = 0L;
     }
 
-    ctx->bs_buffer.avpkt = avpkt;
-    ctx->enc_params.output_buffer_context = (void*)(&(ctx->bs_buffer));
+    return 0;
+}
 
-    if (frame != NULL) {
-        AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_BM_ROI_INFO);
-        if (sd) {
-            AVBMRoiInfo *roi = (AVBMRoiInfo*)sd->data;
-            if (SetMapData(avctx, &(ctx->enc_params.customMapOpt), frame->width, frame->height, roi) != 0) {
-                return AVERROR_INVALIDDATA;
-            }
-        }
-    }
-re_send:
-    if (ctx->input_frame.framebuffer == NULL) {
-        send_frame_status = bmvpu_enc_send_frame(ctx->video_encoder, &(ctx->input_frame), &(ctx->enc_params));
-    } else {
-        send_frame_status = bmvpu_enc_send_frame(ctx->video_encoder, &(ctx->input_frame), &(ctx->enc_params));
-    }
-    if (enc_ret == 0) {
-        av_usleep(1000);
-        goto enc_end;
-    }
+/* Submit ctx->input_frame to the driver. A non-OK return (RESEND_FRAME) means
+ * the driver's YUV input queue is full and the caller must drain a packet
+ * before resending. */
+static int bm_videoenc_send_input(AVCodecContext *avctx)
+{
+    BmVpuEncContext* ctx = (BmVpuEncContext *)(avctx->priv_data);
+    return bmvpu_enc_send_frame(ctx->video_encoder, &(ctx->input_frame),
+                                &(ctx->enc_params));
+}
 
-get_stream:
+/* Pull one encoded packet from the driver. On success fills avpkt, recycles
+ * the finished input YUV framebuffer (via src_idx) and ROI map, and sets
+ * *got_packet. Returns the bmvpu_enc_get_stream() code (>=0, including
+ * ENC_END), or a negative AVERROR on a fatal internal error. */
+static int bm_videoenc_receive_packet(AVCodecContext *avctx, AVPacket *avpkt,
+                                      int *got_packet)
+{
+    BmVpuEncContext* ctx = (BmVpuEncContext *)(avctx->priv_data);
+    int enc_ret;
+    int i, pict_type;
+
     enc_ret = bmvpu_enc_get_stream(ctx->video_encoder, &(ctx->output_frame), &(ctx->enc_params));
     if (enc_ret == BM_VPU_ENC_RETURN_CODE_ENC_END) {
         av_log(avctx, AV_LOG_DEBUG, "encoding end!\n");
         ctx->is_end = true;
-        return 0;
+        return enc_ret;
     }
     if ((ctx->output_frame.data_size > 0) && (enc_ret >= 0)) {
         // 1. Collect the input frames released
@@ -1639,13 +1634,6 @@ get_stream:
             break;
         }
 
-        // // 3. save pkt data
-        // ret = ff_alloc_packet(avctx, avpkt, ctx->output_frame.data_size);
-        // if (ret < 0) {
-        //     av_log(avctx, AV_LOG_ERROR, "Error! Failed ff_alloc_packet()!\n");
-        //     return NULL;
-        // }
-        // memcpy(avpkt->data, ctx->output_frame.data, ctx->output_frame.data_size);
         av_log(avctx, AV_LOG_DEBUG, "output frame: context=%p, pts=%ld, dts=%ld\n",
                ctx->output_frame.context,
                ctx->output_frame.pts,
@@ -1679,35 +1667,118 @@ get_stream:
 
         if (ctx->perf)
             ctx->total_frame++;
+    }
+
+    return enc_ret;
+}
+
+static int bm_videoenc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
+                                    const AVFrame *frame, int *got_packet)
+{
+    BmVpuEncContext* ctx = (BmVpuEncContext *)(avctx->priv_data);
+    enum { ST_SEND, ST_GET_STREAM, ST_END } state = ST_SEND;
+    int send_frame_status = 0;
+    int enc_ret = -1;              /* last bm_videoenc_receive_packet() result */
+    int get_stream_times = 0;
+    int done = 0;
+    int ret;
+
+    av_log(avctx, AV_LOG_TRACE, "Enter %s\n", __func__);
+
+    if (ctx->perf && ctx->total_frame == 0) {
+        gettimeofday(&ctx->ps, NULL);
+    }
+
+    *got_packet = 0;
+    if (frame) {
+        ret = bm_videoenc_fill_input(avctx, avpkt, frame);
+        if (ret < 0)
+            return ret;
     } else {
-        av_packet_unref(avpkt);
-        if (ctx->first_pkt_recevie_flag == 1) {
-            if (get_stream_times < GET_STREAM_TIMEOUT) {
-                av_usleep(1000*5);
-                get_stream_times++;
-                goto get_stream;
+        if (ctx->is_end)
+            return  0;
+
+        ctx->input_frame.framebuffer = NULL;
+        ctx->input_frame.context = NULL;
+        ctx->input_frame.pts = 0L;
+        ctx->input_frame.dts = 0L;
+    }
+
+    ctx->bs_buffer.avpkt = avpkt;
+    ctx->enc_params.output_buffer_context = (void*)(&(ctx->bs_buffer));
+
+    if (frame != NULL) {
+        AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_BM_ROI_INFO);
+        if (sd) {
+            AVBMRoiInfo *roi = (AVBMRoiInfo*)sd->data;
+            if (SetMapData(avctx, &(ctx->enc_params.customMapOpt), frame->width, frame->height, roi) != 0) {
+                return AVERROR_INVALIDDATA;
             }
         }
     }
+    /* Submit the frame and drain packets, driven by an explicit state machine
+     * that mirrors the former re_send / get_stream / enc_end goto flow:
+     *   - When the driver's YUV input queue is full, send returns non-OK; we
+     *     drain one packet (which frees a YUV slot) and then resend, until the
+     *     submit is accepted.
+     *   - enc_ret==OK on a resend pass means we already hold a fresh packet, so
+     *     we skip re-draining to avoid clobbering it.
+     *   - On flush (framebuffer==NULL) we poll get_stream until ENC_END, a
+     *     packet, or the drain times out. */
+    while (!done) {
+        switch (state) {
+        case ST_SEND:
+            send_frame_status = bm_videoenc_send_input(avctx);
+            if (enc_ret == BM_VPU_ENC_RETURN_CODE_OK) {
+                av_usleep(1000);
+                state = ST_END;
+            } else {
+                state = ST_GET_STREAM;
+            }
+            break;
 
-enc_end:
-    if ((ctx->input_frame.framebuffer != NULL) && (send_frame_status != BM_VPU_ENC_RETURN_CODE_OK)) {
-        av_usleep(10);
-        goto re_send;
-    }
+        case ST_GET_STREAM:
+            enc_ret = bm_videoenc_receive_packet(avctx, avpkt, got_packet);
+            if (enc_ret == BM_VPU_ENC_RETURN_CODE_ENC_END)
+                return 0;
+            if (enc_ret < 0)
+                return enc_ret;
+            if (*got_packet) {
+                state = ST_END;
+            } else {
+                av_packet_unref(avpkt);
+                if (ctx->first_pkt_recevie_flag == 1 &&
+                    get_stream_times < GET_STREAM_TIMEOUT) {
+                    av_usleep(1000*5);
+                    get_stream_times++;
+                    /* stay in ST_GET_STREAM */
+                } else {
+                    state = ST_END;
+                }
+            }
+            break;
 
-    // the last frame need wait 3s.
-    if ((ctx->input_frame.framebuffer == NULL) && (*got_packet == 0) && (ctx->is_end == 0)) {
-        if (get_stream_times < GET_STREAM_TIMEOUT) {
-            av_packet_unref(avpkt);
-            av_usleep(100);
-            get_stream_times++;
-            goto get_stream;
+        case ST_END:
+            if ((ctx->input_frame.framebuffer != NULL) &&
+                (send_frame_status != BM_VPU_ENC_RETURN_CODE_OK)) {
+                av_usleep(10);
+                state = ST_SEND;
+            } else if ((ctx->input_frame.framebuffer == NULL) &&
+                       (*got_packet == 0) && (ctx->is_end == 0) &&
+                       (get_stream_times < GET_STREAM_TIMEOUT)) {
+                av_packet_unref(avpkt);
+                av_usleep(100);
+                get_stream_times++;
+                state = ST_GET_STREAM;
+            } else {
+                done = 1;
+            }
+            break;
         }
     }
 
     av_log(avctx, AV_LOG_TRACE, "Leave %s\n", __func__);
-    return ret;
+    return 0;
 }
 
 #define OFFSET(x) offsetof(BmVpuEncContext, x)

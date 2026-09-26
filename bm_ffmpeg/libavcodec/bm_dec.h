@@ -117,7 +117,8 @@ typedef struct _BMDecContext{
     int core_idx;
     int first_frame_get;
     int dts_offset;
-    int last_dts;
+    int64_t last_dts;
+    int64_t last_pts;
     int dec_cmd_queue;
     int timeout;
 } BMDecContext;

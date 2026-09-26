@@ -25,6 +25,12 @@ public:
     int flushFrame(AVFrame *frame);
     int isClosed();
 
+    /* coded(aligned) size of the decoded frame buffer, only AVCodecContext
+       carries it, AVFrame always reports the display size. 0 before the
+       first frame is decoded. */
+    int getCodedWidth();
+    int getCodedHeight();
+
 private:
     AVFormatContext   *ifmt_ctx;
     const AVCodec     *decoder;
@@ -34,6 +40,8 @@ private:
     int width;
     int height;
     int pix_fmt;
+    int coded_width;
+    int coded_height;
 
     int video_stream_idx;
     AVPacket pkt;
