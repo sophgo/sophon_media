@@ -551,10 +551,12 @@ bool VideoCapture::waitAny(const std::vector<VideoCapture>& streams,
     {
         return VideoCapture_V4L_waitAny(streams, readyIndex, timeoutNs);
     }
+#if defined HAVE_SOPH_V4L
      if (backend == CAP_SOPH_V4L)
     {
         return VideoCapture_SOPH_V4L_waitAny(streams, readyIndex, timeoutNs);
     }
+#endif
 #else
     CV_UNUSED(readyIndex);
     CV_UNUSED(timeoutNs);

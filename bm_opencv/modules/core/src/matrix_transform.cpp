@@ -243,11 +243,17 @@ void transpose( InputArray _src, OutputArray _dst )
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure
+    if (cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::transpose(_src, _dst, true) == BM_SUCCESS)
+            return;
+    }
+
     int type = _src.type(), esz = CV_ELEM_SIZE(type);
     CV_Assert( _src.dims() <= 2 && esz <= 32 );
 
     CV_OCL_RUN(_dst.isUMat(),
-               ocl_transpose(_src, _dst))
+            ocl_transpose(_src, _dst))
 
     Mat src = _src.getMat();
     if( src.empty() )
@@ -777,6 +783,12 @@ void flip( InputArray _src, OutputArray _dst, int flip_mode )
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure
+    if (cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::flip(_src, _dst, flip_mode, true) == BM_SUCCESS)
+            return;
+    }
+
     CV_Assert( _src.dims() <= 2 );
     Size size = _src.size();
 
@@ -860,6 +872,12 @@ void flipND(InputArray _src, OutputArray _dst, int _axis)
 void rotate(InputArray _src, OutputArray _dst, int rotateMode)
 {
     CV_Assert(_src.dims() <= 2);
+
+    // Try bmcv hardware acceleration; fallback to CPU on failure
+    if (cv::bmcv::isBmcvEnabled()) {
+        if (cv::bmcv::rotate(_src, _dst, rotateMode, true) == BM_SUCCESS)
+            return;
+    }
 
     switch (rotateMode)
     {

@@ -166,7 +166,7 @@ public:
   {
     if (!u) return;
 
-    ionFlush(u->data, sz ? sz : u->size);
+    ionFlush(u->data, sz ? sz : u->size, u->addr);
   }
 
   void invalidate(UMatData* u, size_t size) const
@@ -286,7 +286,7 @@ private:
     close(fd);
   }
 
-  void ionFlush(void* vddr, size_t size) const
+  void ionFlush(void* vddr, size_t size, bm_uint64 paddr) const
   {
     int ret;
     struct cv_ion_custom_data custom_data;
@@ -294,8 +294,17 @@ private:
 
     cache_range.start = vddr;
     cache_range.size = size;
-
-    custom_data.cmd = ION_IOC_BITMAIN_FLUSH_RANGE;
+    if (paddr) {
+      /* CV84X6 (A55 + shared L3): dc cvau only cleans to the PoU, dirty lines
+       * can stay in L2/L3 and never reach DDR before a non-coherent master
+       * (VPSS/JPU/CDMA) reads them. Clean by physical address instead, which
+       * the ion driver turns into __dma_map_area(DMA_TO_DEVICE) == dc cvac,
+       * i.e. clean to the PoC (DDR). Harmless on chips without an L3. */
+      cache_range.paddr = paddr;
+      custom_data.cmd = ION_IOC_BITMAIN_FLUSH_PHY_RANGE;
+    } else {
+      custom_data.cmd = ION_IOC_BITMAIN_FLUSH_RANGE;
+    }
     custom_data.arg = (ulong)&cache_range;
 
     ret = ioctl(dev, ION_IOC_CUSTOM, &custom_data);

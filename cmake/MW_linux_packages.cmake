@@ -13,6 +13,14 @@ elseif (${PLATFORM} STREQUAL "pcie_arm64")
    set(ARCH "arm64")
    set(MW_POSTFIX "")
 endif()
+
+# libisp is only required when the ISP/V4L2 pipeline is enabled (bm1688 soc);
+# cv84x6 (and all pcie modes) have no VI/ISP, so must not depend on it.
+if(ENABLE_ISP)
+    set(LIBISP_DEPENDS ", libisp (>= 1.0.0)")
+else()
+    set(LIBISP_DEPENDS "")
+endif()
 #elseif (${PLATFORM} STREQUAL "pcie_mips64")
 #    set(CMAKE_SYSTEM_PROCESSOR mips64)
 #    set(ARCH "mips64")
@@ -130,11 +138,11 @@ else()
     # DEB dependency
     SET(CPACK_DEBIAN_SOPHON-FFMPEG_PACKAGE_DEPENDS          "sophon${MW_POSTFIX}-libsophon (>= ${COMPATIBLE_VERSION}), libc6 (>= 2.19)")
     SET(CPACK_DEBIAN_SOPHON-FFMPEG-DEV_PACKAGE_DEPENDS      "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (= ${CPACK_DEBIAN_PACKAGE_VERSION})")
-    SET(CPACK_DEBIAN_SOPHON-OPENCV_PACKAGE_DEPENDS          "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (>= ${CPACK_DEBIAN_PACKAGE_VERSION}), libatomic1(>= 4.8), libc6 (>= 2.23), libstdc++6 (>= 5.4.0-6), zlib1g (>= 1:1.1.4)")
+    SET(CPACK_DEBIAN_SOPHON-OPENCV_PACKAGE_DEPENDS          "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (>= ${CPACK_DEBIAN_PACKAGE_VERSION})${LIBISP_DEPENDS}, libatomic1(>= 4.8), libc6 (>= 2.23), libstdc++6 (>= 5.4.0-6), zlib1g (>= 1:1.1.4)")
     SET(CPACK_DEBIAN_SOPHON-OPENCV-DEV_PACKAGE_DEPENDS      "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-opencv (= ${CPACK_DEBIAN_PACKAGE_VERSION})")
     SET(CPACK_DEBIAN_SOPHON-GSTREAMER_PACKAGE_DEPENDS       "sophon${MW_POSTFIX}-libsophon (>= ${COMPATIBLE_VERSION})")
     SET(CPACK_DEBIAN_SOPHON-GSTREAMER-DEV_PACKAGE_DEPENDS   "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-gstreamer (= ${CPACK_DEBIAN_PACKAGE_VERSION})")
-    SET(CPACK_DEBIAN_SOPHON-SAMPLE_PACKAGE_DEPENDS          "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (>= ${CPACK_DEBIAN_PACKAGE_VERSION}), ${CPACK_DEBIAN_PACKAGE_NAME}-sophon-opencv (>= ${CPACK_DEBIAN_PACKAGE_VERSION})")
+    SET(CPACK_DEBIAN_SOPHON-SAMPLE_PACKAGE_DEPENDS          "${CPACK_DEBIAN_PACKAGE_NAME}-sophon-ffmpeg (>= ${CPACK_DEBIAN_PACKAGE_VERSION}), ${CPACK_DEBIAN_PACKAGE_NAME}-sophon-opencv (>= ${CPACK_DEBIAN_PACKAGE_VERSION})${LIBISP_DEPENDS}")
 
     SET(CPACK_DEBIAN_SOPHON-FFMPEG_PACKAGE_CONTROL_EXTRA
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian_script/sophon-ffmpeg/postinst

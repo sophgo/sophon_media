@@ -72,7 +72,7 @@ static void bmBufferDeviceMemFree2(void *opaque, uint8_t *data)
     return ;
 }
 
-int avframe_to_bm_image(bm_handle_t &bm_handle,AVFrame &in, bm_image &out){
+int avframe_to_bm_image(bm_handle_t &bm_handle,AVFrame &in, bm_image &out, int coded_width, int coded_height){
 
     int plane                 = 0;
     int data_five_denominator = -1;
@@ -118,7 +118,15 @@ int avframe_to_bm_image(bm_handle_t &bm_handle,AVFrame &in, bm_image &out){
     }
 
     if (in.channel_layout == 101) {/* COMPRESSED NV12 FORMAT */
-        if ((0 == in.height) || (0 == in.width) || \
+        /* The planes of an FBD(FBC) frame are laid out by the coded(aligned)
+           size of the decoder frame buffer, but AVFrame has no such member, the
+           caller has to hand it over; fall back to the display size if it did
+           not (only correct while both happen to be equal). */
+        if (coded_width <= 0 || coded_height <= 0) {
+            coded_width  = in.width;
+            coded_height = in.height;
+        }
+        if ((0 == coded_height) || (0 == coded_width) || \
          (0 == in.linesize[4]) || (0 == in.linesize[5]) || (0 == in.linesize[6]) || (0 == in.linesize[7]) || \
          (0 == in.data[4]) || (0 == in.data[5]) || (0 == in.data[6]) || (0 == in.data[7])) {
           printf("bm_image_from_frame: get yuv failed!!");
@@ -126,22 +134,23 @@ int avframe_to_bm_image(bm_handle_t &bm_handle,AVFrame &in, bm_image &out){
         }
         bm_image cmp_bmimg;
         bm_image_create (bm_handle,
-                  in.height,
-                  in.width,
+                  coded_height,
+                  coded_width,
                   FORMAT_COMPRESSED,
                   DATA_TYPE_EXT_1N_BYTE,
                   &cmp_bmimg,
                   NULL
                   );
 
+        /* plane order of FORMAT_COMPRESSED: Y table, Y data, cbcr table, cbcr data */
         bm_device_mem_t input_addr[4];
-        int size = in.height * in.linesize[4];
+        int size = in.linesize[6];
         input_addr[0] = bm_mem_from_device((unsigned long long)in.data[6], size);
-        size = (in.height / 2) * in.linesize[5];
+        size = coded_height * in.linesize[4];
         input_addr[1] = bm_mem_from_device((unsigned long long)in.data[4], size);
-        size = in.linesize[6];
-        input_addr[2] = bm_mem_from_device((unsigned long long)in.data[7], size);
         size = in.linesize[7];
+        input_addr[2] = bm_mem_from_device((unsigned long long)in.data[7], size);
+        size = (coded_height / 2) * in.linesize[5];
         input_addr[3] = bm_mem_from_device((unsigned long long)in.data[5], size);
         bm_image_attach(cmp_bmimg, input_addr);
         bm_image_create (bm_handle,
@@ -320,7 +329,7 @@ int bm_image_to_avframe(bm_handle_t &bm_handle,bm_image *in,AVFrame *out){
 *    @watermark           bm_device_mem_t* for watermark paddr
 *    convert success return 0 else return -1.
 */
-int AVFrameConvert(bm_handle_t &bmHandle,AVFrame *inPic,AVFrame *outPic,int enc_frame_height,int enc_frame_width,int enc_pix_format,int enable_mosaic,int enable_watermark, bm_device_mem_t* watermark){
+int AVFrameConvert(bm_handle_t &bmHandle,AVFrame *inPic,AVFrame *outPic,int enc_frame_height,int enc_frame_width,int enc_pix_format,int enable_mosaic,int enable_watermark, bm_device_mem_t* watermark, int in_coded_width, int in_coded_height){
 
     static int mem_flags = USEING_MEM_HEAP1;
     if(!inPic){
@@ -338,7 +347,7 @@ int AVFrameConvert(bm_handle_t &bmHandle,AVFrame *inPic,AVFrame *outPic,int enc_
         return -1;
     }
     av_frame_unref(outPic);
-    if(avframe_to_bm_image(bmHandle,*inPic,*bmImagein)!= BM_SUCCESS){
+    if(avframe_to_bm_image(bmHandle,*inPic,*bmImagein,in_coded_width,in_coded_height)!= BM_SUCCESS){
         return -1;
     }
 

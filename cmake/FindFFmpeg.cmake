@@ -120,7 +120,7 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
                         --disable-hwaccel=mjpeg_vaapi --disable-hwaccel=mpeg2_vaapi --disable-hwaccel=mpeg4_vaapi
                         --disable-hwaccel=vc1_vaapi   --disable-hwaccel=vp8_vaapi   --disable-hwaccel=wmv3_vaapi
             --enable-encoder=h264_bm      --enable-encoder=h265_bm      --enable-bmcodec)
-    if("${platform}" STREQUAL "pcie" OR "${platform}" STREQUAL "pcie_arm64")
+    if("${platform}" STREQUAL "pcie" OR "${platform}" STREQUAL "pcie_arm64" OR ("${chip_name}" STREQUAL "cv84x6"))
         list(APPEND EXTRA_OPTIONS --disable-indev=soph_v4l2)
     endif()
     # basic config for different chips
@@ -131,8 +131,12 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
     elseif("${platform}" STREQUAL "pcie_arm64")
         set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel -lbo -ldrm -lkms)
     elseif("${platform}" STREQUAL "soc")
-        set(EXTRA_LIBS ${EXTRA_LIBS} -lispv4l2_helper -lae -laf -lawb -lcvi_bin -lcvi_bin_isp -lisp -lisp_algo -lispv4l2_adapter -lsns_full)#set mw lib
-        set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel -lbo -ldrm -lkms -lopus)
+        set(EXTRA_LIBS ${EXTRA_LIBS} -lbmlib -lbmjpeg -lbmvd -lbmvenc -lbmcv -lcmodel)
+        if("${chip_name}" STREQUAL "bm1688")
+            set(EXTRA_LIBS ${EXTRA_LIBS} -lispv4l2_helper -lae -laf -lawb -lcvi_bin -lcvi_bin_isp -lisp -lisp_algo -lispv4l2_adapter -lsns_full)#set mw lib
+            set(EXTRA_LIBS ${EXTRA_LIBS} -lbo -ldrm -lkms -lopus)
+        endif()
+
     endif()
 
     # TODO: depend on chip name?
@@ -180,7 +184,12 @@ function(ADD_TARGET_FFMPEG target_name chip_name platform enable_sdl jpeg_abs_pa
     endif()
 
     if("${platform}" STREQUAL "soc")
-        set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay  --enable-libopus)
+        # TODO: add ffplay to cv84x6 in future
+        if("${chip_name}" STREQUAL "bm1688")
+            set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --enable-sdl2 --enable-ffplay  --enable-libopus)
+        elseif("${chip_name}" STREQUAL "cv84x6")
+            set(EXTRA_OPTIONS ${EXTRA_OPTIONS} --disable-ffplay)
+        endif()
     endif()
 
     set(FFMPEG_BUILD_TARGETS all)
@@ -325,10 +334,24 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
                                     "${yuv_abs_path}/libyuv/lib"
                                     "${bmcv_abs_path}/bmcv")
 
-    if("${platform}" STREQUAL "pcie" OR "${platform}" STREQUAL "pcie_arm64")
+    if("${platform}" STREQUAL "pcie")
         set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                            "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}")
+    elseif("${platform}" STREQUAL "pcie_arm64")
+        # pcie_arm64 uses aarch64 toolchain, ISP libs are in soc/ subdirectory
+        if("${GCC_VERSION}" STREQUAL "930")
+            set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
                                             "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}"
-                                            "${LIBSOPHAV_TOP}/3rdparty/libisp/lib/${platform}")
+                                            "${LIBSOPHAV_TOP}/3rdparty/libisp/lib930/soc")
+        elseif("${GCC_VERSION}" STREQUAL "1131")
+            set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                            "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}"
+                                            "${LIBSOPHAV_TOP}/3rdparty/libisp/lib1131/soc")
+        else()
+            set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
+                                            "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}"
+                                            "${LIBSOPHAV_TOP}/3rdparty/libisp/lib/soc")
+        endif()
     elseif("${platform}" STREQUAL "soc")
         if("${GCC_VERSION}" STREQUAL "930")
             set(FFMPEG_LIBRARY_DIRS     ${FFMPEG_LIBRARY_DIRS}
@@ -343,6 +366,14 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
                                         "${LIBSOPHAV_TOP}/3rdparty/libbmcv/lib/${platform}"
                                         "${LIBSOPHAV_TOP}/3rdparty/libisp/lib/${platform}")
         endif()
+    endif()
+
+    # Drop libisp include/library search dirs when the ISP/V4L2 pipeline is
+    # disabled (cv84x6 / all pcie). They would otherwise leak into RPATH and
+    # suggest a runtime libisp dependency that does not exist on those chips.
+    if(NOT ENABLE_ISP)
+        list(FILTER FFMPEG_INCLUDE_DIRS EXCLUDE REGEX "3rdparty/libisp")
+        list(FILTER FFMPEG_LIBRARY_DIRS EXCLUDE REGEX "3rdparty/libisp")
     endif()
 
     if (${platform} STREQUAL "pcie_sw64" OR ${platform} STREQUAL "pcie_loongarch64"  OR ${platform} STREQUAL "pcie_riscv64")
@@ -537,7 +568,8 @@ macro(SET_OPENCV_ENV chip_name subtype platform enable_abi0 enable_ocv_contrib v
 
     set(OPTION_LIST WITH_FFMPEG WITH_GSTREAMER WITH_GTK WITH_1394 WITH_V4L WITH_OPENCL WITH_CUDA WITH_LAPACK WITH_TBB
             BUILD_TBB WITH_TIFF BUILD_TIFF WITH_IPP ENABLE_NEON WITH_JPEG BUILD_JPEG CMAKE_MAKE_PROGRAMa OPENCV_GENERATE_PKGCONFIG
-            HAVE_opencv_python3 CHIP SUBTYPE PRODUCTFORM ABI_FLAG OPENCV_EXTRA_MODULES_PATH OPENCV_ENABLE_NONFREE
+            HAVE_opencv_python3 CHIP SUBTYPE PRODUCTFORM PLATFORM ABI_FLAG OPENCV_EXTRA_MODULES_PATH OPENCV_ENABLE_NONFREE
+            ENABLE_ISP
             BUILD_opencv_python3 PYTHON3_INCLUDE_PATH PYTHON3_LIBRARIES PYTHON3_EXECUTABLE PYTHON3_NUMPY_INCLUDE_DIRS
             PYTHON3_PACKAGES_PATH HAVE_opencv_python2 BUILD_opencv_python2 PYTHON2_INCLUDE_PATH PYTHON2_LIBRARIES
             PYTHON2_NUMPY_INCLUDE_DIRS PYTHON2_EXECUTABLE PYTHON2_PACKAGES_PATH PYTHON_DEFAULT_EXECUTABLE

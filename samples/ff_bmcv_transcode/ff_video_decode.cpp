@@ -11,6 +11,8 @@ VideoDec_FFMPEG::VideoDec_FFMPEG()
     width   = 0;
     height  = 0;
     pix_fmt = 0;
+    coded_width  = 0;
+    coded_height = 0;
 
     video_stream_idx = -1;
     refcount = 1;
@@ -29,6 +31,16 @@ VideoDec_FFMPEG::~VideoDec_FFMPEG()
 AVCodecParameters* VideoDec_FFMPEG::getCodecPar()
 {
     return video_dec_par;
+}
+
+int VideoDec_FFMPEG::getCodedWidth()
+{
+    return coded_width;
+}
+
+int VideoDec_FFMPEG::getCodedHeight()
+{
+    return coded_height;
 }
 
 int VideoDec_FFMPEG::openDec(const char* filename,int codec_name_flag,
@@ -239,6 +251,14 @@ int VideoDec_FFMPEG::grabFrame2(AVFrame * frame)
         width   = video_dec_ctx->width;
         height  = video_dec_ctx->height;
         pix_fmt = video_dec_ctx->pix_fmt;
+
+        /* frame->width/height is the display size, the coded size is only kept
+           in the codec context, the FBD(FBC) planes of a compressed frame are
+           laid out by it. */
+        if (video_dec_ctx->coded_width > 0 && video_dec_ctx->coded_height > 0) {
+            coded_width  = video_dec_ctx->coded_width;
+            coded_height = video_dec_ctx->coded_height;
+        }
 
         if (frame->width != width || frame->height != height || frame->format != pix_fmt) {
             av_log(video_dec_ctx, AV_LOG_ERROR,

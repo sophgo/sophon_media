@@ -1541,11 +1541,21 @@ double cv::threshold( InputArray _src, OutputArray _dst, double thresh, double m
 {
     CV_INSTRUMENT_REGION();
 
+    // Try bmcv hardware acceleration; fallback to CPU on failure
+    int automatic_thresh = (type & ~CV_THRESH_MASK);
+    if (!automatic_thresh && cv::bmcv::isBmcvEnabled()) {
+        Mat src = _src.getMat();
+        int ithresh = cvFloor(thresh);
+        if (src.depth() == CV_8U && ithresh >= 0 && ithresh < 255) {
+            if (cv::bmcv::threshold(_src, _dst, (unsigned char)thresh, (unsigned char)maxval, type, true) == BM_SUCCESS)
+                return thresh;
+        }
+    }
+
     CV_OCL_RUN_(_src.dims() <= 2 && _dst.isUMat(),
                 ocl_threshold(_src, _dst, thresh, maxval, type), thresh)
 
     Mat src = _src.getMat();
-    int automatic_thresh = (type & ~CV_THRESH_MASK);
     type &= THRESH_MASK;
 
     CV_Assert( automatic_thresh != (CV_THRESH_OTSU | CV_THRESH_TRIANGLE) );
@@ -1554,7 +1564,7 @@ double cv::threshold( InputArray _src, OutputArray _dst, double thresh, double m
         int src_type = src.type();
         CV_CheckType(src_type, src_type == CV_8UC1 || src_type == CV_16UC1, "THRESH_OTSU mode");
         thresh = src.type() == CV_8UC1 ? getThreshVal_Otsu_8u( src )
-                                       : getThreshVal_Otsu_16u( src );
+                                    : getThreshVal_Otsu_16u( src );
     }
     else if( automatic_thresh == CV_THRESH_TRIANGLE )
     {
@@ -1590,8 +1600,8 @@ double cv::threshold( InputArray _src, OutputArray _dst, double thresh, double m
             return thresh;
         }
 
-       CV_OVX_RUN(!ovx::skipSmallImages<VX_KERNEL_THRESHOLD>(src.cols, src.rows),
-                  openvx_threshold(src, dst, ithresh, imaxval, type), (double)ithresh)
+    CV_OVX_RUN(!ovx::skipSmallImages<VX_KERNEL_THRESHOLD>(src.cols, src.rows),
+                openvx_threshold(src, dst, ithresh, imaxval, type), (double)ithresh)
 
         thresh = ithresh;
         maxval = imaxval;
@@ -1608,8 +1618,8 @@ double cv::threshold( InputArray _src, OutputArray _dst, double thresh, double m
         if( ithresh < SHRT_MIN || ithresh >= SHRT_MAX )
         {
             if( type == THRESH_BINARY || type == THRESH_BINARY_INV ||
-               ((type == THRESH_TRUNC || type == THRESH_TOZERO_INV) && ithresh < SHRT_MIN) ||
-               (type == THRESH_TOZERO && ithresh >= SHRT_MAX) )
+            ((type == THRESH_TRUNC || type == THRESH_TOZERO_INV) && ithresh < SHRT_MIN) ||
+            (type == THRESH_TOZERO && ithresh >= SHRT_MAX) )
             {
                 int v = type == THRESH_BINARY ? (ithresh >= SHRT_MAX ? 0 : imaxval) :
                 type == THRESH_BINARY_INV ? (ithresh >= SHRT_MAX ? imaxval : 0) :
@@ -1636,12 +1646,12 @@ double cv::threshold( InputArray _src, OutputArray _dst, double thresh, double m
         if (ithresh < ushrt_min || ithresh >= (int)USHRT_MAX)
         {
             if (type == THRESH_BINARY || type == THRESH_BINARY_INV ||
-               ((type == THRESH_TRUNC || type == THRESH_TOZERO_INV) && ithresh < ushrt_min) ||
-               (type == THRESH_TOZERO && ithresh >= (int)USHRT_MAX))
+            ((type == THRESH_TRUNC || type == THRESH_TOZERO_INV) && ithresh < ushrt_min) ||
+            (type == THRESH_TOZERO && ithresh >= (int)USHRT_MAX))
             {
                 int v = type == THRESH_BINARY ? (ithresh >= (int)USHRT_MAX ? 0 : imaxval) :
                         type == THRESH_BINARY_INV ? (ithresh >= (int)USHRT_MAX ? imaxval : 0) :
-                  /*type == THRESH_TRUNC ? imaxval :*/ 0;
+                /*type == THRESH_TRUNC ? imaxval :*/ 0;
                 dst.setTo(v);
             }
             else
@@ -1659,8 +1669,8 @@ double cv::threshold( InputArray _src, OutputArray _dst, double thresh, double m
         CV_Error( CV_StsUnsupportedFormat, "" );
 
     parallel_for_(Range(0, dst.rows),
-                  ThresholdRunner(src, dst, thresh, maxval, type),
-                  dst.total()/(double)(1<<16));
+                ThresholdRunner(src, dst, thresh, maxval, type),
+                dst.total()/(double)(1<<16));
     return thresh;
 }
 

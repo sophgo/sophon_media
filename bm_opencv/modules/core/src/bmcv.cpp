@@ -80,14 +80,6 @@ static int map_bmformat_to_avformat(int bmformat)
     return format;
 }
 
-static bool isSupportedAvFormat(AVPixelFormat fmt)
-{
-    return fmt == AV_PIX_FMT_GRAY8   || fmt == AV_PIX_FMT_GBRP    ||
-           fmt == AV_PIX_FMT_YUV420P || fmt == AV_PIX_FMT_YUV422P ||
-           fmt == AV_PIX_FMT_YUV444P || fmt == AV_PIX_FMT_NV12    ||
-           fmt == AV_PIX_FMT_NV16;
-}
-
 static int map_avformat_to_bmformat(int avformat)
 {
     int format;
@@ -1621,15 +1613,21 @@ bm_status_t rotate(InputArray _src, OutputArray _dst, int rotateMode, bool updat
   }
 
   int rotation_angle = 0;
-
   if (!_dst.empty()) {
     output = _dst.getMat();
-    if (!((rotateMode == 0 || rotateMode == 2) && output.cols == m.rows && output.rows == m.cols)) {
-      printf("output size does not match input\n");
-      return BM_ERR_PARAM;
-    } else if (!(rotateMode == 1 && output.rows == m.cols && output.cols == m.rows)) {
-      printf("output size does not match input\n");
-      return BM_ERR_PARAM;
+    if (rotateMode == 0 || rotateMode == 2) {
+      if (output.cols != m.rows || output.rows != m.cols) {
+        printf("output size does not match input!\n");
+        return BM_ERR_PARAM;
+      }
+    } else if (rotateMode == 1) {
+      if (output.rows != m.rows || output.cols != m.cols) {
+        printf("output size does not match input!\n");
+        return BM_ERR_PARAM;
+      }
+    } else {
+      printf("bmcv_rotate not support rotation angle!\n");
+        return BM_ERR_PARAM;
     }
   } else {
     if (rotateMode == 0) {    // Rotate 90 degrees clockwise
@@ -1646,7 +1644,6 @@ bm_status_t rotate(InputArray _src, OutputArray _dst, int rotateMode, bool updat
       return BM_NOT_SUPPORTED;
     }
   }
-
 
   bm_image src;
   bm_image bm_output;
@@ -1998,17 +1995,13 @@ bm_status_t transpose(InputArray src, OutputArray dst, bool update) {
         printf("Memory allocated by user, no device memory assigned. Not support BMCV!\n");
         return BM_NOT_SUPPORTED;
     }
-    if (m.type() != CV_8UC1) {
-        printf("bmcv::transpose only support CV_8UC1 type\n");
-        return BM_NOT_SUPPORTED;
-    }
     bm_status_t ret = BM_SUCCESS;
     bm_handle_t handle = m.u->hid ? m.u->hid : getCard();
 
     if (!dst.empty()) {
         output = dst.getMat();
-        CV_Assert(output.cols == m.rows);
-        CV_Assert(output.rows == m.cols);
+        // CV_Assert(output.cols == m.rows);
+        // CV_Assert(output.rows == m.cols);
     } else {
         int id = getId(handle);
         output.allocator = hal::getAllocator();
@@ -2019,6 +2012,14 @@ bm_status_t transpose(InputArray src, OutputArray dst, bool update) {
     bm_image bm_output;
     toBMI(m, &bm_src, update);
     toBMI(output, &bm_output, update);
+
+    if (bm_src.image_format != FORMAT_RGB_PLANAR &&
+        bm_src.image_format != FORMAT_BGR_PLANAR &&
+        bm_src.image_format != FORMAT_GRAY) {
+        transpose(src, dst);
+        ret = BM_SUCCESS;
+        goto done;
+    }
 #ifdef USING_SOC
     download(handle, output, &bm_output);
 #endif
