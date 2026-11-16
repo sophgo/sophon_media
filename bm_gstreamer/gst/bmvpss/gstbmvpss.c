@@ -2606,14 +2606,28 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
         bmcv_padding_attr_t padding_attr;
         gboolean has_later = gst_bm_vpss_has_later_enabled_op (self, op_idx);
 
-        /* BMCV canvas must fit dst_crop rect; size is independent of negotiated out caps */
-        next_w = self->padding_dst_stx + self->padding_dst_w;
-        next_h = self->padding_dst_sty + self->padding_dst_h;
+        if (!has_later) {
+          next_w = out_width;
+          next_h = out_height;
+        } else {
+          next_w = self->padding_dst_stx + self->padding_dst_w;
+          next_h = self->padding_dst_sty + self->padding_dst_h;
+        }
 
         if (next_w <= 0 || next_h <= 0) {
           GST_ERROR_OBJECT (self, "invalid padding region (%d,%d)+(%d,%d)",
               self->padding_dst_stx, self->padding_dst_sty,
               self->padding_dst_w, self->padding_dst_h);
+          ret = GST_FLOW_ERROR;
+          goto error;
+        }
+
+        if ((unsigned int) self->padding_dst_stx + (unsigned int) self->padding_dst_w > (unsigned int) next_w ||
+            (unsigned int) self->padding_dst_sty + (unsigned int) self->padding_dst_h > (unsigned int) next_h) {
+          GST_ERROR_OBJECT (self,
+              "padding dst_crop (%d,%d)+(%d,%d) out of canvas %dx%d",
+              self->padding_dst_stx, self->padding_dst_sty,
+              self->padding_dst_w, self->padding_dst_h, next_w, next_h);
           ret = GST_FLOW_ERROR;
           goto error;
         }
@@ -2645,16 +2659,22 @@ gst_bm_vpss_transform_frame (GstVideoFilter * filter, GstVideoFrame * inframe,
       }
       case GST_BM_VPSS_OP_CROP:{
         bmcv_rect_t crop_rect;
+        gboolean has_later = gst_bm_vpss_has_later_enabled_op (self, op_idx);
         crop_rect.start_x = self->crop_left;
         crop_rect.start_y = self->crop_top;
         crop_rect.crop_w = self->crop_right - self->crop_left;
         crop_rect.crop_h = self->crop_bottom - self->crop_top;
-        next_w = crop_rect.crop_w;
-        next_h = crop_rect.crop_h;
-        use_dst = !gst_bm_vpss_has_later_enabled_op (self, op_idx) &&
-            next_w == out_width && next_h == out_height;
-        out_img = use_dst ? dst : ((temp_toggle & 1) ? &temp_a : &temp_b);
-        if (!use_dst) {
+
+        if (!has_later) {
+          next_w = out_width;
+          next_h = out_height;
+          use_dst = TRUE;
+          out_img = dst;
+        } else {
+          next_w = crop_rect.crop_w;
+          next_h = crop_rect.crop_h;
+          use_dst = FALSE;
+          out_img = (temp_toggle & 1) ? &temp_a : &temp_b;
           bm_ret = gst_bm_vpss_alloc_temp (bm_handle, out_img,
               (temp_toggle & 1) ? &temp_a_valid : &temp_b_valid,
               next_h, next_w, bmOutFormat);
